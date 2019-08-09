@@ -29,6 +29,7 @@ MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::end
   , client_conn_(owner)
   , io_service_(io_service)
   , loaded_(false)
+  , upstream_nomore_data_(false)
 {
   std::vector<std::string> strs;
   std::string cmd_line(buf, cmd_len); 
@@ -132,7 +133,8 @@ void MemcCommand::HandleWrite(const char * buf,
       LOG_WARN << "MemcCommand::HandleWrite --> null upstream_conn cmd=" << this;
       return;
     }
-    upstream_conn_->pushed_bytes_ = upstream_conn_->popped_bytes_ = 0;
+    upstream_conn_->ResetBuffer();
+    // upstream_conn_->pushed_bytes_ = upstream_conn_->popped_bytes_ = 0;
     //MCE_INFO("MemcCommand::HandleWrite --> AsyncRead cli:" << client_conn_.operator->() << " cmd:" << this);
     AsyncRead();
     //upstream_conn_->socket().async_read_some(boost::asio::buffer(upstream_conn_->buf_, UpstreamConn::BUFFER_SIZE),

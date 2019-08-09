@@ -31,7 +31,7 @@ public:
     popped_bytes_ += bytes;
   }
 
-  void Reset() {
+  void ResetBuffer() {
     popped_bytes_ = pushed_bytes_ = 0;
   }
 

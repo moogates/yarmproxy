@@ -127,7 +127,7 @@ void UpstreamConnPool::Push(const ip::tcp::endpoint & ep, UpstreamConn * conn) {
       conn->socket().close();
       delete conn;
     } else {
-      conn->Reset();
+      conn->ResetBuffer();
       conn_map_[ep].push_back(conn);
       // MCE_DEBUG("conn_pool " << ep << " push. size=" << conn_map_[ep].size());
     }

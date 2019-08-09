@@ -35,6 +35,8 @@ struct ResponseStatus {
   bool complete;
 };
 
+typedef std::function<void(size_t bytes, const boost::system::error_code& error)> ForwardResponseCallback;
+
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> 
 {
 public:
@@ -71,7 +73,18 @@ private:
 protected:
   UpstreamConnPool * upconn_pool_;
 
+public:
+  void ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb);
+  bool IsFirstCommand(std::shared_ptr<MemcCommand> cmd) {
+    return cmd == poly_cmd_queue_.front();
+  }
+  void RemoveFirstCommand() {
+    poly_cmd_queue_.pop();
+  }
+
 private:
+  ForwardResponseCallback forward_resp_callback_;
+
   std::shared_ptr<MemcCommand> current_ready_cmd_;
   std::queue<std::shared_ptr<MemcCommand>> ready_cmd_queue_;
   std::set<std::shared_ptr<MemcCommand>> fetching_cmd_set_;

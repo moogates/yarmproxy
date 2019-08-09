@@ -25,11 +25,20 @@ public:
       std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
 
   virtual ~MemcCommand();
-
+//////////////////////////////////////
   virtual void ForwardData(const char * buf, size_t bytes);
   virtual void OnUpstreamResponse(const char* data, size_t bytes, const boost::system::error_code& error) {
   }
+  virtual void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
+  }
 
+  bool upstream_nomore_data() {
+    return upstream_nomore_data_;
+  }
+  void set_upstream_nomore_data() {
+    upstream_nomore_data_ = true;
+  }
+//////////////////////////////////////
   void AsyncRead();
   void Abort();
 
@@ -121,6 +130,8 @@ private:
 
   timeval time_created_;
   bool loaded_;
+////////////////////////////
+  bool upstream_nomore_data_;
 };
 
 }
