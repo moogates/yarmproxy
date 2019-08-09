@@ -16,6 +16,8 @@ public:
   UpstreamConn(boost::asio::io_service& io_service, const ip::tcp::endpoint& upendpoint);
 
   void ForwardData(const char* buf, size_t bytes);
+  void ForwardRequest(const char* data, size_t bytes);
+
   void HandleWrite(const char * buf, const size_t bytes,
       const boost::system::error_code& error, size_t bytes_transferred);
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
@@ -35,6 +37,7 @@ public:
   size_t popped_bytes_;
   size_t pushed_bytes_;
 private:
+
   ip::tcp::endpoint upstream_endpoint_;
   ip::tcp::socket socket_;
 };

@@ -2,6 +2,7 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include <atomic>
 #include <memory>
 
 #include "base/logging.h"
@@ -14,7 +15,7 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-int g_cc_count = 0;
+std::atomic_int g_cc_count;
 
 // 指向行位的'\n'字符
 static const char * GetLineEnd(const char * buf, size_t len) {
@@ -43,11 +44,11 @@ ClientConnection::ClientConnection(boost::asio::io_service& io_service, Upstream
   , timeout_(60)
   , timer_(io_service)
 {
-  // LOG_S(INFO) << "ClientConnection destroyed." << ++g_cc_count;
+  LOG_INFO << "ClientConnection destroyed." << ++g_cc_count;
 }
 
 ClientConnection::~ClientConnection() {
-  // LOG_S(INFO) << "ClientConnection destroyed." << --g_cc_count;
+  LOG_INFO << "ClientConnection destroyed." << --g_cc_count;
 }
 
 void ClientConnection::Start() {
@@ -90,7 +91,27 @@ public:
           cmd_line_.c_str(), cmd_line_.size(), std::placeholders::_1));
       return;
     }
+
+    LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") write data to upstream";
     
+    async_write(upstream_conn_->socket(),
+        // boost::asio::buffer(buf, bytes),
+        // std::bind(&MemcCommand::HandleWrite, shared_from_this(), buf, bytes,
+        boost::asio::buffer(cmd_line_.c_str(), cmd_line_.size()),
+        std::bind(&MemcCommand::HandleWrite, shared_from_this(), cmd_line_.c_str(), cmd_line_.size(),
+            std::placeholders::_1, std::placeholders::_2));
+  }
+
+  virtual void ForwardData2(const char *, size_t) {
+    if (upstream_conn_ == nullptr) {
+      LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") create upstream conn";
+      // 需要一个上行的 memcache connection
+      upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_);
+      return;
+    }
+    upstream_conn_->ForwardRequest(cmd_line_.c_str(), cmd_line_.size());
+
+
     LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") write data to upstream";
     
     async_write(upstream_conn_->socket(),
@@ -191,7 +212,7 @@ int ClientConnection::MapMemcCommand(char * buf, size_t len) {
 
   size_t cmd_len = p - buf + 1; // 请求的命令行长度
   if(cmd_len < 5) {
-    LOG_WARN << "MapMemcCommand unknown command(" << std::string(buf, p - buf)
+    LOG_WARN << "unknown command(" << std::string(buf, p - buf)
              << ") len=" << cmd_len << " conn=" << this;
     return -1;
   }
