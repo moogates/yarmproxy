@@ -53,10 +53,12 @@ MemcCommand::~MemcCommand() {
   }
 }
 
+UpstreamCallback WrapUpstreamCallback(std::weak_ptr<MemcCommand> cmd_wptr);
+
 void MemcCommand::ForwardData(const char * buf, size_t bytes) {
   if (upstream_conn_ == nullptr) {
     // 需要一个上行的 memcache connection
-    upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_);
+    upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_, WrapUpstreamCallback(shared_from_this()));
     upstream_conn_->socket().async_connect(upstream_endpoint_, std::bind(&MemcCommand::HandleConnect, shared_from_this(), 
         buf, bytes, std::placeholders::_1));
     return;

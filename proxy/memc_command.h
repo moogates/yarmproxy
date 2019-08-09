@@ -27,6 +27,9 @@ public:
   virtual ~MemcCommand();
 
   virtual void ForwardData(const char * buf, size_t bytes);
+  virtual void OnUpstreamResponse(const char* data, size_t bytes, const boost::system::error_code& error) {
+  }
+
   void AsyncRead();
   void Abort();
 

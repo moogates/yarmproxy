@@ -74,6 +74,23 @@ void ClientConnection::AsyncRead()
           std::placeholders::_2));
 }
 
+UpstreamCallback WrapUpstreamCallback(std::weak_ptr<MemcCommand> cmd_wptr) {
+  return [cmd_wptr](const char* data, size_t bytes, const boost::system::error_code& error) {
+                          // if (std::shared_ptr<MemcCommand> cmd = cmd_wptr.lock()) {
+                          if (auto cmd_ptr = cmd_wptr.lock()) {
+                            cmd_ptr->OnUpstreamResponse(data, bytes, error);
+                          } else {
+                            LOG_DEBUG << "OnUpstreamResponse cmd released";
+                          }
+                        };
+
+  // TODO : 梳理资源管理和释放的时机
+  auto cmd_ptr = cmd_wptr.lock();
+  return [cmd_ptr](const char* data, size_t bytes, const boost::system::error_code& error) {
+                          cmd_ptr->OnUpstreamResponse(data, bytes, error);
+                        };
+}
+
 class SingleGetCommand : public MemcCommand {
 public:
   SingleGetCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
@@ -82,11 +99,80 @@ public:
   {
   }
 
-  virtual void ForwardData(const char *, size_t) {
+  virtual void OnUpstreamResponse(const char* data, size_t bytes, const boost::system::error_code& error) {
+    if (error) {
+      // MCE_WARN(cmd_line_ << " upstream read error : " << upstream_endpoint_ << " - "  << error << " " << error.message());
+      LOG_WARN << "SingleGetCommand OnUpstreamResponse error";
+      client_conn_->OnCommandError(shared_from_this(), error);
+      return;
+    }
+    LOG_DEBUG << "SingleGetCommand OnUpstreamResponse data=" << std::string(data, bytes) << " bytes=" << bytes;
+    client_conn_->OnCommandReady(shared_from_this());
+
+/*
+    for(;;) {
+      const char * p = GetLineEnd(conn->buf_ + start_offset, conn->pushed_bytes_ - start_offset);
+
+      if (!p) {
+        //LOG(VERBOSE) <<  "buffer 结尾数据暂时无法解析 : ";
+        //LOG(VERBOSE).write(conn->buf_ + start_offset, conn->pushed_bytes_ - start_offset);
+        //LOG(VERBOSE) << conn->pushed_bytes_ - start_offset;
+
+        // TODO : read for more data
+        response_status_.complete = false;
+        response_status_.unparsed_bytes = conn->pushed_bytes_ - start_offset;
+        response_status_.left_bytes = 0;
+        AsyncWrite();
+        return;
+      }
+
+      std::string status_line(conn->buf_ + start_offset, p - (conn->buf_ + start_offset) - 1);
+      std::vector<std::string> strs;
+      boost::split(strs, status_line, boost::is_any_of(" "), boost::token_compress_on);
+      status_line += "\r\n";
+
+      size_t body_bytes = 0;
+      if (strs.size() == 4) { // VALUE <key> <flag> <bytes>
+        body_bytes = std::stoi(strs[3]);
+        //MCE_DEBUG(memc_cmd->cmd_line() << " 成功从memc 获取key " << strs[1] << " bytes=" << body_bytes);
+        //MCE_INFO("ClientConnection::OnCommandReady --> " << memc_cmd->cmd_line() << " get " << strs[1]);
+        memc_cmd->RemoveMissedKey(strs[1]); // 该key已经获取
+      } else { // "END \r\n", or error
+        //MCE_DEBUG("memcached get 数据完毕 : " << status_line << " missed key count : " 
+        //    << memc_cmd->NeedLoadMissed());
+        response_status_.complete = true;
+        if ((fetching_cmd_set_.size() > 1) || memc_cmd->NeedLoadMissed()) {
+          response_status_.unparsed_bytes = status_line.size(); // 最后一行, 不直接写回
+        } else {
+          response_status_.unparsed_bytes = 0; //最后一个get命令的最后一行, 直接写回
+        }
+        response_status_.left_bytes = 0;
+        //MCE_INFO("ClientConnection::OnCommandReady --> " << memc_cmd->cmd_line() << " get and write end");
+        AsyncWrite();
+        return;
+      }
+
+      size_t end_offset = start_offset + status_line.size() + body_bytes + 2;
+      if (end_offset  >= conn->pushed_bytes_) {
+        //LOG(VERBOSE) <<  "处理buffer 中所有数据. 读取更多.";
+        response_status_.complete = false;
+        response_status_.unparsed_bytes = 0;
+        response_status_.left_bytes = end_offset - conn->pushed_bytes_;
+        AsyncWrite();
+        return;
+      }
+      start_offset = end_offset;
+
+      ++ p;
+    }
+    */
+  }
+
+  void ForwardData2(const char *, size_t) {
     if (upstream_conn_ == nullptr) {
       LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") create upstream conn";
       // 需要一个上行的 memcache connection
-      upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_);
+      upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_, WrapUpstreamCallback(shared_from_this()));
       upstream_conn_->socket().async_connect(upstream_endpoint_, std::bind(&MemcCommand::HandleConnect, shared_from_this(), 
           cmd_line_.c_str(), cmd_line_.size(), std::placeholders::_1));
       return;
@@ -102,24 +188,15 @@ public:
             std::placeholders::_1, std::placeholders::_2));
   }
 
-  virtual void ForwardData2(const char *, size_t) {
+  virtual void ForwardData(const char *, size_t) {
     if (upstream_conn_ == nullptr) {
       LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") create upstream conn";
-      // 需要一个上行的 memcache connection
-      upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_);
-      return;
+      upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_, WrapUpstreamCallback(shared_from_this()));
+    } else {
+      LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") reuse upstream conn";
+      upstream_conn_->set_upstream_callback(WrapUpstreamCallback(shared_from_this()));
     }
-    upstream_conn_->ForwardRequest(cmd_line_.c_str(), cmd_line_.size());
-
-
-    LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") write data to upstream";
-    
-    async_write(upstream_conn_->socket(),
-        // boost::asio::buffer(buf, bytes),
-        // std::bind(&MemcCommand::HandleWrite, shared_from_this(), buf, bytes,
-        boost::asio::buffer(cmd_line_.c_str(), cmd_line_.size()),
-        std::bind(&MemcCommand::HandleWrite, shared_from_this(), cmd_line_.c_str(), cmd_line_.size(),
-            std::placeholders::_1, std::placeholders::_2));
+    upstream_conn_->ForwardRequest(cmd_line_.data(), cmd_line_.size());
   }
 };
 
@@ -324,6 +401,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   }
 
   if (child_cmd != nullptr) {
+    poly_cmd_queue_.push(child_cmd);
     LOG_DEBUG << "child command created";
     child_cmd->ForwardData(nullptr, 0);
   } else {

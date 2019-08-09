@@ -75,6 +75,9 @@ private:
   std::shared_ptr<MemcCommand> current_ready_cmd_;
   std::queue<std::shared_ptr<MemcCommand>> ready_cmd_queue_;
   std::set<std::shared_ptr<MemcCommand>> fetching_cmd_set_;
+
+  std::queue<std::shared_ptr<MemcCommand>> poly_cmd_queue_; // 新版支持多态的cmd
+
   // 当前命令被分拆成的子命令的个数
   size_t mapped_cmd_count_;
 
