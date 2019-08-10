@@ -12,7 +12,7 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-typedef std::function<void(const char* data, size_t bytes, const boost::system::error_code& error)> UpstreamCallback;
+typedef std::function<void(const boost::system::error_code& error)> UpstreamCallback;
 
 class UpstreamConn {
 public:
@@ -40,18 +40,55 @@ public:
   }
 
   void set_upstream_callback(const UpstreamCallback& cb) {
-    uptream_cb_ = cb;
+    upstream_callback_ = cb;
   }
+
+  const char* to_transfer_data() const { // 可以向下游传递的数据
+    return buf_ + popped_bytes_;
+  }
+  size_t to_transfer_bytes() const {
+    return std::min(pushed_bytes_, parsed_bytes_) - popped_bytes_;
+    if (pushed_bytes_ > parsed_bytes_) {
+      return parsed_bytes_ - popped_bytes_;
+    } else {
+      return pushed_bytes_ - popped_bytes_;
+    }
+  }
+  void update_transfered_bytes(size_t transfered) {
+    popped_bytes_ += transfered;
+    // TODO : error checking
+    if (popped_bytes_ == pushed_bytes_) {
+      parsed_bytes_ -= popped_bytes_;
+      popped_bytes_ = pushed_bytes_ = 0;
+    }
+    if (popped_bytes_ > (BUFFER_SIZE - pushed_bytes_)) {
+      // TODO : memmove
+    }
+  }
+
+  void update_parsed_bytes(size_t bytes) {
+    parsed_bytes_ += bytes;
+  }
+//size_t parsed_bytes() const {
+//  return parsed_bytes_;
+//}
+  const char * unparsed_data() const {
+    return buf_ + parsed_bytes_;
+  }
+  size_t unparsed_bytes() const;
 
   enum { BUFFER_SIZE = 64 * 1024};
   char buf_[BUFFER_SIZE];
 
   size_t popped_bytes_;
   size_t pushed_bytes_;
+
 private:
+  size_t parsed_bytes_;
+
   ip::tcp::endpoint upstream_endpoint_;
   ip::tcp::socket socket_;
-  UpstreamCallback uptream_cb_;
+  UpstreamCallback upstream_callback_;
 };
 
 class UpstreamConnPool {

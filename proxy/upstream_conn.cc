@@ -11,10 +11,20 @@ UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
                            const UpstreamCallback& uptream_callback) 
   : popped_bytes_(0)
   , pushed_bytes_(0)
+  , parsed_bytes_(0)
   , upstream_endpoint_(upendpoint)
   , socket_(io_service) 
-  , uptream_cb_(uptream_callback) {
+  , upstream_callback_(uptream_callback) {
 }
+
+  size_t UpstreamConn::unparsed_bytes() const {
+    LOG_DEBUG << "UpstreamConn::unparsed_bytes pushed="
+                << pushed_bytes_ << " parsed=" << parsed_bytes_;
+    if (pushed_bytes_ > parsed_bytes_) {
+      return pushed_bytes_ - parsed_bytes_;
+    }
+    return 0;
+  }
 
   void UpstreamConn::ForwardRequest(const char* data, size_t bytes) {
     if (!socket_.is_open()) {
@@ -56,7 +66,7 @@ UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
             std::placeholders::_1, std::placeholders::_2));
     } else {
       LOG_DEBUG << "UpstreamConn::HandleWrite 转发了当前命令的所有数据, 等待 upstream 的响应.";
-      pushed_bytes_ = popped_bytes_ = 0;
+      pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0;
 
       socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
           std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
@@ -64,8 +74,10 @@ UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
   }
 
   void UpstreamConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
-    pushed_bytes_ += bytes_transferred;
-    uptream_cb_(buf_, bytes_transferred, error);
+    if (!error) {
+      pushed_bytes_ += bytes_transferred;
+    }
+    upstream_callback_(error);
     return;
 
     if (error) {
@@ -79,7 +91,7 @@ UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
     LOG_DEBUG << "HandleRead read from upstream ok, bytes=" << bytes_transferred;
 
     pushed_bytes_ += bytes_transferred;
-    // uptream_cb_(buf_, pushed_bytes_, error);
+    // upstream_callback_(buf_, pushed_bytes_, error);
   }
 
   void UpstreamConn::HandleConnect(const char * data, size_t bytes, const boost::system::error_code& error) {

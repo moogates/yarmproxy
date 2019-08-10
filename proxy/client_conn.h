@@ -3,6 +3,7 @@
 
 // #include "client_conn_fwd.h"
 
+#include <list>
 #include <queue>
 #include <set>
 #include <string>
@@ -78,9 +79,7 @@ public:
   bool IsFirstCommand(std::shared_ptr<MemcCommand> cmd) {
     return cmd == poly_cmd_queue_.front();
   }
-  void RemoveFirstCommand() {
-    poly_cmd_queue_.pop();
-  }
+  void RotateFirstCommand();
 
 private:
   ForwardResponseCallback forward_resp_callback_;
@@ -89,7 +88,7 @@ private:
   std::queue<std::shared_ptr<MemcCommand>> ready_cmd_queue_;
   std::set<std::shared_ptr<MemcCommand>> fetching_cmd_set_;
 
-  std::queue<std::shared_ptr<MemcCommand>> poly_cmd_queue_; // 新版支持多态的cmd
+  std::list<std::shared_ptr<MemcCommand>> poly_cmd_queue_; // 新版支持多态的cmd
 
   // 当前命令被分拆成的子命令的个数
   size_t mapped_cmd_count_;

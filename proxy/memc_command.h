@@ -27,10 +27,11 @@ public:
   virtual ~MemcCommand();
 //////////////////////////////////////
   virtual void ForwardData(const char * buf, size_t bytes);
-  virtual void OnUpstreamResponse(const char* data, size_t bytes, const boost::system::error_code& error) {
+  virtual void OnUpstreamResponse(const boost::system::error_code& error) {
   }
   virtual void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
   }
+  virtual void OnForwardResponseReady() {}
 
   bool upstream_nomore_data() {
     return upstream_nomore_data_;
