@@ -90,7 +90,7 @@ void ClientConnection::AsyncRead()
           std::placeholders::_2));
 }
 
-UpstreamCallback WrapUpstreamCallback(std::weak_ptr<MemcCommand> cmd_wptr) {
+UpstreamCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr) {
   return [cmd_wptr](const boost::system::error_code& error) {
            // if (std::shared_ptr<MemcCommand> cmd = cmd_wptr.lock()) {
            if (auto cmd_ptr = cmd_wptr.lock()) {
@@ -107,7 +107,7 @@ UpstreamCallback WrapUpstreamCallback(std::weak_ptr<MemcCommand> cmd_wptr) {
          };
 }
 
-ForwardResponseCallback WrapForwardResponseCallback(std::weak_ptr<MemcCommand> cmd_wptr) { 
+ForwardResponseCallback WrapOnForwardResponseFinished(std::weak_ptr<MemcCommand> cmd_wptr) { 
     // std::weak_ptr<MemcCommand> cmd_wptr = shared_from_this();
     // typedef std::function<void(size_t bytes, const boost::system::error_code& error)> ForwardResponseCallback;
     return [cmd_wptr](size_t forwardwd_bytes, const boost::system::error_code& error) {
@@ -120,10 +120,13 @@ ForwardResponseCallback WrapForwardResponseCallback(std::weak_ptr<MemcCommand> c
 }
 
 class SingleGetCommand : public MemcCommand {
+private:
+  bool is_forwarding_response_;
 public:
   SingleGetCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
           std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
       : MemcCommand(io_service, ep, owner, buf, cmd_len) 
+      , is_forwarding_response_(false)
   {
   }
 
@@ -178,72 +181,31 @@ public:
       return;
     }
     LOG_DEBUG << "SingleGetCommand OnUpstreamResponse data";
-    // client_conn_->OnCommandReady(shared_from_this());
 
     bool valid = ParseUpstreamResponse();
-  /*
-    while(upstream_conn_->unparsed_bytes() > 0) {
-      const char * entry = upstream_conn_->unparsed_data();
-      const char * p = GetLineEnd(upstream_conn_->unparsed_data(), upstream_conn_->unparsed_bytes());
-      if (p == nullptr) {
-        // TODO : no enough data for parsing, please read more
-        break;
-      }
-
-      if (entry[0] == 'V') {
-          // "VALUE <key> <flag> <bytes>\r\n"
-          size_t body_bytes = GetValueBytes(entry, p);
-          size_t entry_bytes = p - entry + 1 + body_bytes + 2;
-
-          upstream_conn_->update_parsed_bytes(entry_bytes);
-          break; // TODO : 每次转发一条，only for test
-      } else {
-          // "END\r\n"
-          if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-            set_upstream_nomore_data();
-            upstream_conn_->update_parsed_bytes(sizeof("END\r\n") - 1);
-            if (upstream_conn_->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
-              valid = false;
-              LOG_WARN << "SingleGetCommand OnUpstreamResponse END not really end!";
-            } else {
-              LOG_INFO << "SingleGetCommand OnUpstreamResponse END is really end!";
-            }
-            break;
-          } else {
-            // TODO : ERROR
-            valid = false;
-            break;
-          }
-      }
-    }
-  */
     if (!valid) {
       LOG_WARN << "SingleGetCommand parsing error! valid=false";
+      // TODO : error handling
     }
-
-//  std::weak_ptr<MemcCommand> cmd_wptr = shared_from_this();
-//  // typedef std::function<void(size_t bytes, const boost::system::error_code& error)> ForwardResponseCallback;
-//  auto cb_wrap = [cmd_wptr](size_t forwardwd_bytes, const boost::system::error_code& error) {
-//                        if (auto cmd_ptr = cmd_wptr.lock()) {
-//                          cmd_ptr->OnForwardResponseFinished(forwardwd_bytes, error);
-//                        } else {
-//                          LOG_DEBUG << "OnForwardResponseFinished cmd released";
-//                        }
-//                      };
-
     if (client_conn_->IsFirstCommand(shared_from_this())) {
-      auto cb_wrap = WrapForwardResponseCallback(shared_from_this());
-      client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
-                  upstream_conn_->to_transfer_bytes(), cb_wrap);
-      LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, to_transfer_bytes="
-                << upstream_conn_->to_transfer_bytes();
+      if (!is_forwarding_response_) {
+        is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
+        auto cb_wrap = WrapOnForwardResponseFinished(shared_from_this());
+        client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
+                    upstream_conn_->to_transfer_bytes(), cb_wrap);
+        LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, to_transfer_bytes="
+                  << upstream_conn_->to_transfer_bytes();
+      } else {
+        LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
+      }
     } else {
+      // TODO : do nothing, just wait
       LOG_WARN << "SingleGetCommand IsFirstCommand false! to_transfer_bytes="
                << upstream_conn_->to_transfer_bytes();
-      // TODO : 排队
-    //on_foward_response_ready_ = [data, parsed_bytes, cb_wrap]() {
-    //  client_conn_->ForwardResponse(data, parsed_bytes, cb_wrap);
-    //}
+    }
+
+    if (!upstream_nomore_data()) {
+      upstream_conn_->TryReadMoreData(); // upstream 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
     }
   }
 
@@ -260,7 +222,10 @@ public:
       upstream_conn_->update_transfered_bytes(bytes);
       LOG_DEBUG << "OnForwardResponseFinished upstream transfered_bytes=" << bytes
                 << " ready_to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
-      OnForwardResponseReady();
+      upstream_conn_->TryReadMoreData(); // 这里必须继续try
+      is_forwarding_response_ = false;
+
+      OnForwardResponseReady(); // 可能已经有新读到的数据，因而要尝试转发更多
     }
   }
 
@@ -270,24 +235,24 @@ public:
     }
  
     if (upstream_conn_->to_transfer_bytes() > 0) {
-      auto cb_wrap = WrapForwardResponseCallback(shared_from_this());
+      auto cb_wrap = WrapOnForwardResponseFinished(shared_from_this());
       client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
                                     upstream_conn_->to_transfer_bytes(),
                                     cb_wrap);
       LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, to_transfer_bytes="
           << upstream_conn_->to_transfer_bytes();
     } else {
-      LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, no data ready to_transfer";
+      LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, upstream no data ready to_transfer, waiting to read more data then write down";
     }
   }
 
   virtual void ForwardData(const char *, size_t) {
     if (upstream_conn_ == nullptr) {
       LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") create upstream conn";
-      upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_, WrapUpstreamCallback(shared_from_this()));
+      upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_, WrapOnUpstreamResponse(shared_from_this()));
     } else {
       LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") reuse upstream conn";
-      upstream_conn_->set_upstream_callback(WrapUpstreamCallback(shared_from_this()));
+      upstream_conn_->set_upstream_callback(WrapOnUpstreamResponse(shared_from_this()));
     }
     upstream_conn_->ForwardRequest(cmd_line_.data(), cmd_line_.size());
   }

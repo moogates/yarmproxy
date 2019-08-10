@@ -26,6 +26,7 @@ public:
       const boost::system::error_code& error, size_t bytes_transferred);
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
+  void TryReadMoreData();
 
   void OnResponseProcessed(size_t bytes) {
     popped_bytes_ += bytes;
@@ -54,17 +55,7 @@ public:
       return pushed_bytes_ - popped_bytes_;
     }
   }
-  void update_transfered_bytes(size_t transfered) {
-    popped_bytes_ += transfered;
-    // TODO : error checking
-    if (popped_bytes_ == pushed_bytes_) {
-      parsed_bytes_ -= popped_bytes_;
-      popped_bytes_ = pushed_bytes_ = 0;
-    }
-    if (popped_bytes_ > (BUFFER_SIZE - pushed_bytes_)) {
-      // TODO : memmove
-    }
-  }
+  void update_transfered_bytes(size_t transfered);
 
   void update_parsed_bytes(size_t bytes) {
     parsed_bytes_ += bytes;
@@ -77,7 +68,8 @@ public:
   }
   size_t unparsed_bytes() const;
 
-  enum { BUFFER_SIZE = 64 * 1024};
+  // enum { BUFFER_SIZE = 64 * 1024};
+  enum { BUFFER_SIZE = 1024}; // TODO : use c++11 enum
   char buf_[BUFFER_SIZE];
 
   size_t popped_bytes_;
@@ -89,6 +81,8 @@ private:
   ip::tcp::endpoint upstream_endpoint_;
   ip::tcp::socket socket_;
   UpstreamCallback upstream_callback_;
+
+  bool is_reading_more_;
 };
 
 class UpstreamConnPool {

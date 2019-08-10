@@ -14,7 +14,8 @@ UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
   , parsed_bytes_(0)
   , upstream_endpoint_(upendpoint)
   , socket_(io_service) 
-  , upstream_callback_(uptream_callback) {
+  , upstream_callback_(uptream_callback)
+  , is_reading_more_(false) {
 }
 
   size_t UpstreamConn::unparsed_bytes() const {
@@ -24,6 +25,38 @@ UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
       return pushed_bytes_ - parsed_bytes_;
     }
     return 0;
+  }
+
+  void UpstreamConn::update_transfered_bytes(size_t transfered) {
+    popped_bytes_ += transfered;
+    if (!is_reading_more_) {
+      // TODO : error checking
+      if (popped_bytes_ == pushed_bytes_) {
+        LOG_WARN << "UpstreamConn::update_transfered_bytes, all data pushed, "
+                << " popped_bytes_=" << popped_bytes_ << " parsed=" << parsed_bytes_
+                << " parsed-popped=" << parsed_bytes_ - popped_bytes_;
+        parsed_bytes_ -= popped_bytes_;
+        popped_bytes_ = pushed_bytes_ = 0;
+      } else if (popped_bytes_ > (BUFFER_SIZE - pushed_bytes_)) {
+        // TODO : memmove
+        memmove(buf_, buf_ + popped_bytes_, pushed_bytes_ - popped_bytes_);
+        parsed_bytes_ -= popped_bytes_;
+        pushed_bytes_ -= popped_bytes_;
+        popped_bytes_ = 0;
+      }
+    }
+  }
+
+  void UpstreamConn::TryReadMoreData() {
+    if (!is_reading_more_  // not reading more
+        && pushed_bytes_ * 3 <  BUFFER_SIZE * 2) {// there is still more than 1/3 buffer space free
+      is_reading_more_ = true; // memmove cause read data offset drift
+      socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
+          std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
+      LOG_WARN << "TryReadMoreData";
+    } else {
+      LOG_WARN << "No TryReadMoreData";
+    }
   }
 
   void UpstreamConn::ForwardRequest(const char* data, size_t bytes) {
@@ -77,6 +110,7 @@ UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
     if (!error) {
       pushed_bytes_ += bytes_transferred;
     }
+    is_reading_more_ = false;  // finish reading, you could memmove now
     upstream_callback_(error);
     return;
 
