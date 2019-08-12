@@ -55,7 +55,9 @@ UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
           std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
       LOG_WARN << "TryReadMoreData";
     } else {
-      LOG_WARN << "No TryReadMoreData";
+      LOG_WARN << "No TryReadMoreData, is_reading_more_=" << is_reading_more_
+               << " pushed_bytes_=" << pushed_bytes_
+               << " BUFFER_SIZE=" << BUFFER_SIZE;
     }
   }
 

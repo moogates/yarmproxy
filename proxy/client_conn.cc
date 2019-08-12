@@ -18,7 +18,7 @@ namespace mcproxy {
 
 std::atomic_int g_cc_count;
 
-// 指向行位的'\n'字符
+// 指向行尾的'\n'字符
 static const char * GetLineEnd(const char * buf, size_t len) {
   const char * p = buf + 1; // 首字符肯定不是'\n'
   for(;;) {
@@ -57,7 +57,7 @@ ClientConnection::ClientConnection(boost::asio::io_service& io_service, Upstream
   , up_buf_end_(0)
   , upconn_pool_(pool)
   //, current_ready_cmd_(NULL)
-  , timeout_(60)
+  , timeout_(100)
   , timer_(io_service)
 {
   LOG_INFO << "ClientConnection destroyed." << ++g_cc_count;
@@ -107,12 +107,13 @@ UpstreamCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr) {
          };
 }
 
-ForwardResponseCallback WrapOnForwardResponseFinished(std::weak_ptr<MemcCommand> cmd_wptr) { 
+ForwardResponseCallback WrapOnForwardResponseFinished(size_t to_transfer_bytes, std::weak_ptr<MemcCommand> cmd_wptr) { 
     // std::weak_ptr<MemcCommand> cmd_wptr = shared_from_this();
     // typedef std::function<void(size_t bytes, const boost::system::error_code& error)> ForwardResponseCallback;
-    return [cmd_wptr](size_t forwardwd_bytes, const boost::system::error_code& error) {
+    return [to_transfer_bytes, cmd_wptr](const boost::system::error_code& error) {
                           if (auto cmd_ptr = cmd_wptr.lock()) {
-                            cmd_ptr->OnForwardResponseFinished(forwardwd_bytes, error);
+                            LOG_DEBUG << "OnForwardResponseFinished cmd valid";
+                            cmd_ptr->OnForwardResponseFinished(to_transfer_bytes, error);
                           } else {
                             LOG_DEBUG << "OnForwardResponseFinished cmd released";
                           }
@@ -190,7 +191,7 @@ public:
     if (client_conn_->IsFirstCommand(shared_from_this())) {
       if (!is_forwarding_response_) {
         is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-        auto cb_wrap = WrapOnForwardResponseFinished(shared_from_this());
+        auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->to_transfer_bytes(), shared_from_this());
         client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
                     upstream_conn_->to_transfer_bytes(), cb_wrap);
         LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, to_transfer_bytes="
@@ -215,15 +216,19 @@ public:
       LOG_DEBUG << "OnForwardResponseFinished (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") error=" << error;
       return;
     }
-    if (upstream_nomore_data()) {
+
+    upstream_conn_->update_transfered_bytes(bytes);
+
+    if (upstream_nomore_data() && upstream_conn_->to_transfer_bytes() == 0) {
       client_conn_->RotateFirstCommand();
-      LOG_DEBUG << "OnForwardResponseFinished upstream_nomore_data";
+      LOG_DEBUG << "OnForwardResponseFinished upstream_nomore_data, and all data forwarded to client";
     } else {
-      upstream_conn_->update_transfered_bytes(bytes);
       LOG_DEBUG << "OnForwardResponseFinished upstream transfered_bytes=" << bytes
                 << " ready_to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
-      upstream_conn_->TryReadMoreData(); // 这里必须继续try
       is_forwarding_response_ = false;
+      if (!upstream_nomore_data()) {
+        upstream_conn_->TryReadMoreData(); // 这里必须继续try
+      }
 
       OnForwardResponseReady(); // 可能已经有新读到的数据，因而要尝试转发更多
     }
@@ -234,8 +239,9 @@ public:
        ParseUpstreamResponse();
     }
  
-    if (upstream_conn_->to_transfer_bytes() > 0) {
-      auto cb_wrap = WrapOnForwardResponseFinished(shared_from_this());
+    if (!is_forwarding_response_ && upstream_conn_->to_transfer_bytes() > 0) {
+      is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
+      auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->to_transfer_bytes(), shared_from_this());
       client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
                                     upstream_conn_->to_transfer_bytes(),
                                     cb_wrap);
@@ -352,14 +358,25 @@ void ClientConnection::ForwardResponse(const char* data, size_t bytes, const For
   std::weak_ptr<ClientConnection> wptr = shared_from_this();
   auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
     if (!error && bytes_transferred < bytes) {
+      LOG_WARN << "ClientConnection::ForwardResponse callback, bytes_transferred=" << bytes_transferred
+               << " error=" << error << ", try_to_forward_more";
       if (auto ptr = wptr.lock()) {
+        LOG_WARN << "ClientConnection::ForwardResponse try write more, bytes_transferred=" << bytes_transferred
+                 << " left_bytes=" << bytes - bytes_transferred << " conn=" << ptr.get();
         ptr->ForwardResponse(data + bytes_transferred, bytes - bytes_transferred, cb);
+      } else {
+        LOG_WARN << "ClientConnection::ForwardResponse try write more, but conn released";
       }
+    } else {
+      LOG_WARN << "ClientConnection::ForwardResponse callback, bytes_transferred=" << bytes_transferred
+               << " total_bytes=" << bytes << " error=" << error << ", all current data forwarded";
+      cb(error);  // 发完了，或出错了，才告知MemcCommand
     }
-    cb(bytes_transferred, error);  // 发完了，或出错了，才告知MemcCommand
+
     return;
   };
 
+  LOG_WARN << "ClientConnection::ForwardResponse write bytes=" << bytes << " conn=" << this;
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 

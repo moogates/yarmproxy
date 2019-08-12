@@ -69,7 +69,7 @@ public:
   size_t unparsed_bytes() const;
 
   // enum { BUFFER_SIZE = 64 * 1024};
-  enum { BUFFER_SIZE = 1024}; // TODO : use c++11 enum
+  enum { BUFFER_SIZE = 32 * 1024}; // TODO : use c++11 enum
   char buf_[BUFFER_SIZE];
 
   size_t popped_bytes_;

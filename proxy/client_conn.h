@@ -36,7 +36,7 @@ struct ResponseStatus {
   bool complete;
 };
 
-typedef std::function<void(size_t bytes, const boost::system::error_code& error)> ForwardResponseCallback;
+typedef std::function<void(const boost::system::error_code& error)> ForwardResponseCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> 
 {
