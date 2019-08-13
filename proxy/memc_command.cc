@@ -49,6 +49,9 @@ MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::end
 };
 
 MemcCommand::~MemcCommand() {
+  if (upstream_conn_) {
+    delete upstream_conn_; // TODO : 需要连接池。暂时直接销毁
+  }
   if (missed_timer_) {
     delete missed_timer_;
   }

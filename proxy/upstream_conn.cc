@@ -6,6 +6,8 @@ const static size_t kMaxConnPerEndpoint = 64;
 
 namespace mcproxy {
 
+std::atomic_int upstream_conn_count;
+
 UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
                            const ip::tcp::endpoint& upendpoint,
                            const UpstreamCallback& uptream_callback) 
@@ -16,6 +18,11 @@ UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
   , socket_(io_service) 
   , upstream_callback_(uptream_callback)
   , is_reading_more_(false) {
+  LOG_DEBUG << "UpstreamConn ctor, upstream_conn_count=" << ++upstream_conn_count;
+}
+
+UpstreamConn::~UpstreamConn() {
+  LOG_DEBUG << "UpstreamConn dtor, upstream_conn_count=" << --upstream_conn_count;
 }
 
   size_t UpstreamConn::unparsed_bytes() const {

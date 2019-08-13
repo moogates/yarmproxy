@@ -57,13 +57,19 @@ ClientConnection::ClientConnection(boost::asio::io_service& io_service, Upstream
   , up_buf_end_(0)
   , upconn_pool_(pool)
   //, current_ready_cmd_(NULL)
-  , timeout_(100)
+  , timeout_(0) // TODO : timeout timer 
   , timer_(io_service)
 {
   LOG_INFO << "ClientConnection destroyed." << ++g_cc_count;
 }
 
 ClientConnection::~ClientConnection() {
+  if (socket_.is_open()) {
+    LOG_INFO << "ClientConnection destroyed close socket."; 
+    socket_.close();
+  } else {
+    LOG_INFO << "ClientConnection destroyed need not close socket.";
+  }
   LOG_INFO << "ClientConnection destroyed." << --g_cc_count;
 }
 
@@ -120,6 +126,7 @@ ForwardResponseCallback WrapOnForwardResponseFinished(size_t to_transfer_bytes, 
                         };
 }
 
+std::atomic_int single_get_cmd_count;
 class SingleGetCommand : public MemcCommand {
 private:
   bool is_forwarding_response_;
@@ -129,6 +136,11 @@ public:
       : MemcCommand(io_service, ep, owner, buf, cmd_len) 
       , is_forwarding_response_(false)
   {
+    LOG_DEBUG << "SingleGetCommand ctor " << ++single_get_cmd_count;
+  }
+
+  ~SingleGetCommand() {
+    LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
   }
 
   bool ParseUpstreamResponse() {

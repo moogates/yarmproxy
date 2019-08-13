@@ -19,6 +19,7 @@ public:
   UpstreamConn(boost::asio::io_service& io_service, 
       const ip::tcp::endpoint& upendpoint,
       const UpstreamCallback& uptream_callback);
+  ~UpstreamConn();
 
   void ForwardRequest(const char* data, size_t bytes);
 
