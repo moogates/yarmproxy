@@ -59,7 +59,7 @@ MemcCommand::~MemcCommand() {
 
 UpstreamCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr);
 
-void MemcCommand::ForwardData(const char * buf, size_t bytes) {
+void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
   if (upstream_conn_ == nullptr) {
     // 需要一个上行的 memcache connection
     upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_, WrapOnUpstreamResponse(shared_from_this()));
@@ -176,7 +176,7 @@ void MemcCommand::HandleConnect(const char * buf, size_t bytes, const boost::sys
   //boost::asio::socket_base::send_buffer_size send_buf_size;
   //upstream_conn_->socket().get_option(send_buf_size);
 
-  ForwardData(buf, bytes);
+  ForwardRequest(buf, bytes);
 }
 
 bool MemcCommand::NeedLoadMissed() {

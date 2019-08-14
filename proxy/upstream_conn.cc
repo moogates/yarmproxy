@@ -60,9 +60,9 @@ UpstreamConn::~UpstreamConn() {
       is_reading_more_ = true; // memmove cause read data offset drift
       socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
           std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
-      LOG_WARN << "TryReadMoreData";
+      LOG_DEBUG << "TryReadMoreData";
     } else {
-      LOG_WARN << "No TryReadMoreData, is_reading_more_=" << is_reading_more_
+      LOG_DEBUG << "No TryReadMoreData, is_reading_more_=" << is_reading_more_
                << " pushed_bytes_=" << pushed_bytes_
                << " BUFFER_SIZE=" << BUFFER_SIZE;
     }

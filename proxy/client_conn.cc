@@ -186,6 +186,11 @@ public:
     return valid;
   }
 
+  virtual bool IsFormostCommand() {
+    // SubCommand 检察是否是第一个 command
+    return client_conn_->IsFirstCommand(shared_from_this());
+  }
+
   virtual void OnUpstreamResponse(const boost::system::error_code& error) {
     if (error) {
       // MCE_WARN(cmd_line_ << " upstream read error : " << upstream_endpoint_ << " - "  << error << " " << error.message());
@@ -200,7 +205,7 @@ public:
       LOG_WARN << "SingleGetCommand parsing error! valid=false";
       // TODO : error handling
     }
-    if (client_conn_->IsFirstCommand(shared_from_this())) {
+    if (IsFormostCommand()) {
       if (!is_forwarding_response_) {
         is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
         auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->to_transfer_bytes(), shared_from_this());
@@ -257,14 +262,14 @@ public:
       client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
                                     upstream_conn_->to_transfer_bytes(),
                                     cb_wrap);
-      LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, to_transfer_bytes="
-          << upstream_conn_->to_transfer_bytes();
+      LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, data=" << std::string(upstream_conn_->to_transfer_data(), upstream_conn_->to_transfer_bytes() - 2)
+                << " to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
     } else {
       LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, upstream no data ready to_transfer, waiting to read more data then write down";
     }
   }
 
-  virtual void ForwardData(const char *, size_t) {
+  virtual void ForwardRequest(const char *, size_t) {
     if (upstream_conn_ == nullptr) {
       LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") create upstream conn";
       upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_, WrapOnUpstreamResponse(shared_from_this()));
@@ -278,12 +283,12 @@ public:
 
 class ParallelGetCommand : public MemcCommand {
 public:
-  ParallelGetCommand(boost::asio::io_service& io_service, std::shared_ptr<ClientConnection> owner, const char* buf, size_t size)
+  ParallelGetCommand(boost::asio::io_service& io_service, std::shared_ptr<ClientConnection> owner, const char* cmd_line_buf, size_t cmd_line_size)
     : MemcCommand(io_service,
         MemcachedLocator::Instance().GetEndpointByKey("1"), // FIXME
-        owner, buf, size) {
+        owner, cmd_line_buf, cmd_line_size) {
   }
-  std::vector<std::shared_ptr<MemcCommand>> single_get_commands_;
+  std::vector<std::shared_ptr<MemcCommand>> subcommands_;
 
   // TODO : refinement
   bool GroupGetKeys() {
@@ -312,24 +317,56 @@ public:
       it->second += "\r\n";
       std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(io_service_, it->first, client_conn_, it->second.c_str(), it->second.size()));
       // fetching_cmd_set_.insert(cmd);
-      single_get_commands_.push_back(cmd);
+      subcommands_.push_back(cmd);
     }
     return true;
   }
 
-  virtual void ForwardData(const char *, size_t) {
-    for(auto cmd : single_get_commands_) {
-      cmd->ForwardData(nullptr, 0);
+  virtual void ForwardRequest(const char *, size_t) {
+    for(auto cmd : subcommands_) {
+      cmd->ForwardRequest(nullptr, 0);
     }
   }
 };
 
-int MemcCommand::CreateCommand(boost::asio::io_service& asio_service,
-          std::shared_ptr<ClientConnection> owner, const char* buf, size_t size, std::shared_ptr<MemcCommand>* cmd) {
+bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
+  LOG_DEBUG << "GroupKeysByEndpoint enter, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
+  for(const char* p = cmd_line + 4/*strlen("get ")*/; p < cmd_line + cmd_line_size - 2/*strlen("\r\n")*/; ++p) {
+    const char* q = p;
+    while(*q != ' ' && *q != '\r') {
+      ++q;
+    }
+    ip::tcp::endpoint ep = MemcachedLocator::Instance().GetEndpointByKey(p, q - p);
 
+    auto it = endpoint_key_map->find(ep);
+    if (it == endpoint_key_map->end()) {
+      it = endpoint_key_map->insert(std::make_pair(ep, std::string("get"))).first;
+    }
+
+    it->second.append(p - 1, 1 + q - p);
+    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first << " key=[" << std::string(p-1, 1+q-p) << "]"
+              << " current=" << it->second;
+
+    p = q;
+  }
+  LOG_DEBUG << "GroupKeysByEndpoint exit, endpoint_key_map.size=" << endpoint_key_map->size();
+
+//for (auto it = cmd_line_map.begin(); it != cmd_line_map.end(); ++it) {
+//  LOG_DEBUG << "GroupGetKeys " << it->first << " get_keys=" << it->second;
+//  it->second += "\r\n";
+//  std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(io_service_, it->first, client_conn_, it->second.c_str(), it->second.size()));
+//  // fetching_cmd_set_.insert(cmd);
+//  subcommands.push_back(cmd);
+//}
+  return true;
+}
+
+int MemcCommand::CreateCommand(boost::asio::io_service& asio_service,
+          std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
+          std::list<std::shared_ptr<MemcCommand>>* grouped_commands) {
   const char * p = GetLineEnd(buf, size);
   if (p == nullptr) {
-    *cmd = nullptr;
+    LOG_DEBUG << "CreateCommand no complete cmd line found";
     return 0;
   }
 
@@ -340,19 +377,32 @@ int MemcCommand::CreateCommand(boost::asio::io_service& asio_service,
     return -1;
   }
 
-#define DONT_USE_MAP 1
-  if(strncmp(buf, "get ", 4) == 0) {
+  if (strncmp(buf, "get ", 4) == 0) {
+#define DONT_USE_MAP 0
 #if DONT_USE_MAP
-    (*cmd).reset(new SingleGetCommand(asio_service,
-                     MemcachedLocator::Instance().GetEndpointByKey("1"),
-                     owner, buf, cmd_len));
+    auto ep = MemcachedLocator::Instance().GetEndpointByKey("1");
+    std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(asio_service,
+                     ep, owner, buf, cmd_len));
+    grouped_commands->push_back(cmd);
+    LOG_DEBUG << "DONT_USE_MAP ep=" << ep << " keys=" << std::string(buf, cmd_len - 2);
     return cmd_len;
 #endif
-
-    ParallelGetCommand* parallel_cmd = new ParallelGetCommand(asio_service, owner, buf, cmd_len);
-    parallel_cmd ->GroupGetKeys();
-    (*cmd).reset(parallel_cmd);
+    std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
+    GroupKeysByEndpoint(buf, cmd_len, &endpoint_key_map);
+    for (auto it = endpoint_key_map.begin(); it != endpoint_key_map.end(); ++it) {
+      LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first << " keys=" << it->second;
+      it->second += "\r\n";
+      std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(asio_service, it->first, owner, it->second.c_str(), it->second.size()));
+      // fetching_cmd_set_.insert(cmd);
+      // subcommands.push_back(cmd);
+      grouped_commands->push_back(cmd);
+    }
     return cmd_len;
+
+  //ParallelGetCommand* parallel_cmd = new ParallelGetCommand(asio_service, owner, buf, cmd_len);
+  //parallel_cmd ->GroupGetKeys();
+  //(*cmd).reset(parallel_cmd);
+  //return cmd_len;
   }
   return 0;
 }
@@ -366,9 +416,11 @@ void ClientConnection::RotateFirstCommand() {
 
 void ClientConnection::ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb) {
   forward_resp_callback_ = cb;
+  LOG_WARN << "ClientConnection::ForwardResponse write begin, bytes=" << bytes << " conn=" << this;
 
   std::weak_ptr<ClientConnection> wptr = shared_from_this();
   auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
+    LOG_WARN << "ClientConnection::ForwardResponse callback begin, bytes_transferred=" << bytes_transferred;
     if (!error && bytes_transferred < bytes) {
       LOG_WARN << "ClientConnection::ForwardResponse callback, bytes_transferred=" << bytes_transferred
                << " error=" << error << ", try_to_forward_more";
@@ -384,11 +436,12 @@ void ClientConnection::ForwardResponse(const char* data, size_t bytes, const For
                << " total_bytes=" << bytes << " error=" << error << ", all current data forwarded";
       cb(error);  // 发完了，或出错了，才告知MemcCommand
     }
+    LOG_WARN << "ClientConnection::ForwardResponse callback end, bytes_transferred=" << bytes_transferred;
 
     return;
   };
 
-  LOG_WARN << "ClientConnection::ForwardResponse write bytes=" << bytes << " conn=" << this;
+  LOG_WARN << "ClientConnection::ForwardResponse end, write bytes=" << bytes << " conn=" << this;
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
@@ -487,13 +540,22 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   up_buf_end_ += bytes_transferred;
 
   int cmd_line_bytes = 0;
-  std::shared_ptr<MemcCommand> poly_cmd;
+  bool is_new_version = false;
+
   while(up_buf_begin_ < up_buf_end_) {
+    std::list<std::shared_ptr<MemcCommand>> grouped_commands;
     cmd_line_bytes = MemcCommand::CreateCommand(io_service_,
-          shared_from_this(), (const char*)(up_buf_ + up_buf_begin_), up_buf_end_ - up_buf_begin_, &poly_cmd);
+          shared_from_this(), (const char*)(up_buf_ + up_buf_begin_), up_buf_end_ - up_buf_begin_, &grouped_commands);
     if (cmd_line_bytes > 0) {
-      LOG_DEBUG << "ClientConnection::HandleRead CreateCommand ok, size=" << cmd_line_bytes;
-      poly_cmd_queue_.push_back(poly_cmd);
+      is_new_version = true;
+      LOG_DEBUG << "ClientConnection::HandleRead CreateCommand ok, cmd_line_size=" << cmd_line_bytes
+                << " grouped_commands.size=" << grouped_commands.size();
+      // poly_cmd_queue_.splice(poly_cmd_queue_.end(), grouped_commands);
+      for(auto subcommand : grouped_commands) {
+        poly_cmd_queue_.push_back(subcommand);
+      }
+      LOG_DEBUG << "ClientConnection::HandleRead CreateCommand post, grouped_commands.size=" << grouped_commands.size()
+                << " poly_cmd_queue_.size=" << poly_cmd_queue_.size();
       up_buf_begin_ += cmd_line_bytes;
     } else if (cmd_line_bytes == 0) {
       break; // TODO : read more data
@@ -505,7 +567,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   // 一次只处理一组命令! 这个条件非常关键. 
   // TODO : 上一行注释是老代码的逻辑，新代码要支持pipeline
   LOG_DEBUG << "ClientConnection::HandleRead fetching_cmd_set_.size() : " << fetching_cmd_set_.size();
-  if (!poly_cmd && fetching_cmd_set_.empty()) {
+  if (!is_new_version && fetching_cmd_set_.empty()) {
     cmd_line_bytes = MapMemcCommand(up_buf_ + up_buf_begin_, up_buf_end_ - up_buf_begin_);
   }
 
@@ -523,8 +585,8 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   if (!poly_cmd_queue_.empty()) {
     for(auto entry : poly_cmd_queue_) {
-      LOG_DEBUG << "child command created";
-      entry->ForwardData(nullptr, 0);
+      LOG_DEBUG << "new version command created";
+      entry->ForwardRequest(nullptr, 0);   // TODO : 1. 可能重复调用ForwardResponse, 2. 要控制单client的并发数
     }
   } else {
     //LOG(VERBOSE) << "fetching_cmd_set_.size() : " << fetching_cmd_set_.size();
@@ -541,7 +603,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
         to_write_body_bytes = up_buf_end_ - up_buf_begin_;
       }
     
-      cmd->ForwardData(up_buf_ + up_buf_begin_, to_write_body_bytes);
+      cmd->ForwardRequest(up_buf_ + up_buf_begin_, to_write_body_bytes);
     }
   }
 

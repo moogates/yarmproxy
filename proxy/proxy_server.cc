@@ -80,11 +80,11 @@ void ProxyServer::Run() {
 void ProxyServer::StartAccept() {
   std::shared_ptr<ClientConnection> conn(new ClientConnection(dispatchers_[dispatch_round_]->asio_service(),
                                                               dispatchers_[dispatch_round_]->upconn_pool()));
+  LOG_DEBUG << "ClientConnection created, dispatcher=" << dispatch_round_;
+
   if(++dispatch_round_ >= dispatch_threads_) {
     dispatch_round_ = 0;
   }
-
-  LOG_DEBUG << "ClientConnection created, dispatcher=";
 
   acceptor_.async_accept(conn->socket(),
       std::bind(&ProxyServer::HandleAccept, this, conn,

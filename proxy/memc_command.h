@@ -3,6 +3,7 @@
 
 // #include "memc_command_fwd.h"
 
+#include <list>
 #include <vector>
 #include <string>
 #include <boost/asio.hpp>
@@ -19,19 +20,24 @@ class MemcCommand : public std::enable_shared_from_this<MemcCommand> {
 public:
   static int CreateCommand(boost::asio::io_service& io_service,
           std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
-          std::shared_ptr<MemcCommand>* cmd);
+          std::list<std::shared_ptr<MemcCommand>>* cmd);
 
   MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
       std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
 
   virtual ~MemcCommand();
 //////////////////////////////////////
-  virtual void ForwardData(const char * buf, size_t bytes);
+  virtual void ForwardRequest(const char * buf, size_t bytes);
   virtual void OnUpstreamResponse(const boost::system::error_code& error) {
   }
   virtual void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
   }
   virtual void OnForwardResponseReady() {}
+
+  // 判断是否最靠前的command, 是才可以转发
+  virtual bool IsFormostCommand() {
+    return false;
+  }
 
   bool upstream_nomore_data() {
     return upstream_nomore_data_;
