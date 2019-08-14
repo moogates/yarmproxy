@@ -116,11 +116,16 @@ UpstreamConn::~UpstreamConn() {
   }
 
   void UpstreamConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
-    if (!error) {
+    if (error) {
+      LOG_WARN << "HandleRead upstream read error, upconn=" << this
+               << " ep=" << upstream_endpoint_ << " err=" << error.message();
+      // socket_.close();
+      // TODO : 如何通知给外界?
+    } else {
       pushed_bytes_ += bytes_transferred;
+      is_reading_more_ = false;  // finish reading, you could memmove now
+      upstream_callback_(error);
     }
-    is_reading_more_ = false;  // finish reading, you could memmove now
-    upstream_callback_(error);
     return;
 
     if (error) {
