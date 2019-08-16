@@ -19,8 +19,8 @@ class ClientConnection;
 class MemcCommand : public std::enable_shared_from_this<MemcCommand> {
 public:
   static int CreateCommand(boost::asio::io_service& io_service,
-          std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
-          std::list<std::shared_ptr<MemcCommand>>* cmd);
+                           std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
+                           size_t* cmd_line_bytes, size_t* body_bytes, bool* lock_buffer, std::list<std::shared_ptr<MemcCommand>>* sub_cmds);
 
   MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
       std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
@@ -30,6 +30,9 @@ public:
   virtual void ForwardRequest(const char * buf, size_t bytes);
   virtual void OnUpstreamResponse(const boost::system::error_code& error) {
   }
+  virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
+  }
+
   virtual void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
   }
   virtual void OnForwardResponseReady() {}
@@ -39,6 +42,9 @@ public:
     return false;
   }
 
+  virtual size_t upcoming_bytes() const {
+    return 0;
+  }
   bool upstream_nomore_data() {
     return upstream_nomore_data_;
   }

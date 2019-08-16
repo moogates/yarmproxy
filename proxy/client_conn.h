@@ -60,6 +60,12 @@ public:
   void OnCommandReady(std::shared_ptr<MemcCommand> memc_cmd);
   void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
 
+  void update_processed_bytes(size_t transfered);
+  void recursive_lock_buffer();
+  void recursive_unlock_buffer();
+private:
+  void try_free_buffer_space();
+
 private:
   ResponseStatus response_status_;
 protected:
@@ -68,8 +74,12 @@ private:
   ip::tcp::socket socket_;
 
   enum {kBufLength = 64 * 1024};
-  char up_buf_[kBufLength];
+  char buf_[kBufLength];
+  size_t buf_lock_;
   size_t up_buf_begin_, up_buf_end_;
+  size_t parsed_bytes_;
+
+  std::shared_ptr<MemcCommand> cmd_need_more_data_; // use weak ptr
 
 protected:
   UpstreamConnPool * upconn_pool_;
@@ -80,6 +90,7 @@ public:
     return cmd == poly_cmd_queue_.front();
   }
   void RotateFirstCommand();
+  void TryReadMoreRequest();
 
 private:
   ForwardResponseCallback forward_resp_callback_;

@@ -5,18 +5,22 @@
 const static size_t kMaxConnPerEndpoint = 64;
 
 namespace mcproxy {
+// TODO: 更好的容错，以及错误返回信息, 例如
+//   客户端格式错误时候，memcached返回错误信息: "CLIENT_ERROR bad data chunk\r\n"
 
 std::atomic_int upstream_conn_count;
 
 UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
                            const ip::tcp::endpoint& upendpoint,
-                           const UpstreamCallback& uptream_callback) 
+                           const UpstreamReadCallback& uptream_read_callback,
+                           const UpstreamWriteCallback& uptream_write_callback)
   : popped_bytes_(0)
   , pushed_bytes_(0)
   , parsed_bytes_(0)
   , upstream_endpoint_(upendpoint)
   , socket_(io_service) 
-  , upstream_callback_(uptream_callback)
+  , upstream_read_callback_(uptream_read_callback)
+  , uptream_write_callback_(uptream_write_callback)
   , is_reading_more_(false) {
   LOG_DEBUG << "UpstreamConn ctor, upstream_conn_count=" << ++upstream_conn_count;
 }
@@ -39,9 +43,9 @@ UpstreamConn::~UpstreamConn() {
     if (!is_reading_more_) {
       // TODO : error checking
       if (popped_bytes_ == pushed_bytes_) {
-        LOG_WARN << "UpstreamConn::update_transfered_bytes, all data pushed, "
-                << " popped_bytes_=" << popped_bytes_ << " parsed=" << parsed_bytes_
-                << " parsed-popped=" << parsed_bytes_ - popped_bytes_;
+      //LOG_DEBUG << "UpstreamConn::update_transfered_bytes, all data pushed, "
+      //        << " popped_bytes_=" << popped_bytes_ << " parsed=" << parsed_bytes_
+      //        << " parsed-popped=" << parsed_bytes_ - popped_bytes_;
         parsed_bytes_ -= popped_bytes_;
         popped_bytes_ = pushed_bytes_ = 0;
       } else if (popped_bytes_ > (BUFFER_SIZE - pushed_bytes_)) {
@@ -52,6 +56,11 @@ UpstreamConn::~UpstreamConn() {
         popped_bytes_ = 0;
       }
     }
+  }
+
+  void UpstreamConn::ReadResponse() {
+    socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
+        std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
   }
 
   void UpstreamConn::TryReadMoreData() {
@@ -68,24 +77,24 @@ UpstreamConn::~UpstreamConn() {
     }
   }
 
-  void UpstreamConn::ForwardRequest(const char* data, size_t bytes) {
+  void UpstreamConn::ForwardRequest(const char* data, size_t bytes, bool has_more_data) {
     if (!socket_.is_open()) {
       LOG_DEBUG << "UpstreamConn::ForwardRequest open socket, req="
                 << std::string(data, bytes - 2) << " conn=" << this;
       socket_.async_connect(upstream_endpoint_, std::bind(&UpstreamConn::HandleConnect, this, 
-          data, bytes, std::placeholders::_1));
+          data, bytes, has_more_data, std::placeholders::_1));
       return;
     }
 
     LOG_DEBUG << "UpstreamConn::ForwardRequest write data, req="
               << std::string(data, bytes - 2) << " conn=" << this;
     async_write(socket_, boost::asio::buffer(data, bytes),
-        std::bind(&UpstreamConn::HandleWrite, this, data, bytes,
+        std::bind(&UpstreamConn::HandleWrite, this, data, bytes, has_more_data,
             std::placeholders::_1, std::placeholders::_2));
   }
 
 
-  void UpstreamConn::HandleWrite(const char * data, const size_t bytes,
+  void UpstreamConn::HandleWrite(const char * data, const size_t bytes, bool request_has_more_data,
       const boost::system::error_code& error, size_t bytes_transferred)
   {
     if (error) {
@@ -103,28 +112,37 @@ UpstreamConn::~UpstreamConn() {
       LOG_DEBUG << "HandleWrite 向 upstream 没写完, 继续写.";
       boost::asio::async_write(socket_,
           boost::asio::buffer(data + bytes_transferred, bytes - bytes_transferred),
-          std::bind(&UpstreamConn::HandleWrite, this, data + bytes_transferred,
+          std::bind(&UpstreamConn::HandleWrite, this, data + bytes_transferred, request_has_more_data,
             bytes - bytes_transferred,
             std::placeholders::_1, std::placeholders::_2));
-    } else {
-      LOG_DEBUG << "UpstreamConn::HandleWrite 转发了当前命令的所有数据, 等待 upstream 的响应.";
-      pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0;
+      return;
+    }
 
-      socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
-          std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
+    {
+      if (request_has_more_data) {
+        LOG_WARN << "UpstreamConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
+        uptream_write_callback_(bytes, error);
+      } else {
+        LOG_DEBUG << "UpstreamConn::HandleWrite 转发了当前命令的所有数据, 等待 upstream 的响应.";
+        pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
+      
+        socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
+            std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
+      }
     }
   }
 
   void UpstreamConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
     if (error) {
-      LOG_WARN << "HandleRead upstream read error, upconn=" << this
+      LOG_WARN << "UpstreamConn::HandleRead upstream read error, upconn=" << this
                << " ep=" << upstream_endpoint_ << " err=" << error.message();
       // socket_.close();
       // TODO : 如何通知给外界?
     } else {
+      LOG_WARN << "UpstreamConn::HandleRead upstream read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
       pushed_bytes_ += bytes_transferred;
       is_reading_more_ = false;  // finish reading, you could memmove now
-      upstream_callback_(error);
+      upstream_read_callback_(error); // TODO : error总是false，所以这个参数应当去掉
     }
     return;
 
@@ -139,10 +157,10 @@ UpstreamConn::~UpstreamConn() {
     LOG_DEBUG << "HandleRead read from upstream ok, bytes=" << bytes_transferred;
 
     pushed_bytes_ += bytes_transferred;
-    // upstream_callback_(buf_, pushed_bytes_, error);
+    // upstream_read_callback_(buf_, pushed_bytes_, error);
   }
 
-  void UpstreamConn::HandleConnect(const char * data, size_t bytes, const boost::system::error_code& error) {
+  void UpstreamConn::HandleConnect(const char * data, size_t bytes, bool request_has_more_data, const boost::system::error_code& error) {
     if (error) {
       socket_.close();
       // TODO : 如何通知给外界?
@@ -161,7 +179,7 @@ UpstreamConn::~UpstreamConn() {
     
     // ForwardData(data, bytes);
     async_write(socket_, boost::asio::buffer(data, bytes),
-        std::bind(&UpstreamConn::HandleWrite, this, data, bytes,
+        std::bind(&UpstreamConn::HandleWrite, this, data, bytes, request_has_more_data,
             std::placeholders::_1, std::placeholders::_2));
   }
 

@@ -12,22 +12,27 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-typedef std::function<void(const boost::system::error_code& error)> UpstreamCallback;
+typedef std::function<void(const boost::system::error_code& error)> UpstreamReadCallback;
+typedef std::function<void(size_t written_bytes, const boost::system::error_code& error)> UpstreamWriteCallback;
 
 class UpstreamConn {
 public:
   UpstreamConn(boost::asio::io_service& io_service, 
       const ip::tcp::endpoint& upendpoint,
-      const UpstreamCallback& uptream_callback);
+      const UpstreamReadCallback& uptream_read_callback,
+      const UpstreamWriteCallback& uptream_write_callback);
   ~UpstreamConn();
 
-  void ForwardRequest(const char* data, size_t bytes);
+  void ForwardRequest(const char* data, size_t bytes, bool has_more_data);
 
-  void HandleWrite(const char * buf, const size_t bytes,
+  void ReadResponse();
+  void TryReadMoreData();
+private:
+  void HandleWrite(const char * buf, const size_t bytes, bool has_more_data,
       const boost::system::error_code& error, size_t bytes_transferred);
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
-  void TryReadMoreData();
+  void HandleConnect(const char * buf, size_t bytes, bool has_more_data, const boost::system::error_code& error);
+public:
 
   void OnResponseProcessed(size_t bytes) {
     popped_bytes_ += bytes;
@@ -41,8 +46,9 @@ public:
     return socket_;
   }
 
-  void set_upstream_callback(const UpstreamCallback& cb) {
-    upstream_callback_ = cb;
+  void set_upstream_read_callback(const UpstreamReadCallback& read_callback, const UpstreamWriteCallback& write_callback) {
+    upstream_read_callback_ = read_callback;
+    uptream_write_callback_ = write_callback;
   }
 
   const char* to_transfer_data() const { // 可以向下游传递的数据
@@ -81,7 +87,8 @@ private:
 
   ip::tcp::endpoint upstream_endpoint_;
   ip::tcp::socket socket_;
-  UpstreamCallback upstream_callback_;
+  UpstreamReadCallback upstream_read_callback_;
+  UpstreamWriteCallback uptream_write_callback_;
 
   bool is_reading_more_;
 };
