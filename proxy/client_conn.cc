@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 
+#include "get_command.h"
 #include "write_command.h"
 #include "memcached_locator.h"
 #include "upstream_conn.h"
@@ -37,21 +38,6 @@ const char * GetLineEnd(const char * buf, size_t len) {
   }
 
   return p;
-}
-
-size_t GetValueBytes(const char * data, const char * end) {
-  // "VALUE <key> <flag> <bytes>\r\n"
-  const char * p = data + sizeof("VALUE ");
-  int count = 0;
-  while(p != end) {
-    if (*p == ' ') {
-      if (++count == 2) {
-        return std::stoi(p + 1);
-      }
-    }
-    ++p;
-  }
-  return 0;
 }
 
 ClientConnection::ClientConnection(boost::asio::io_service& io_service, UpstreamConnPool * pool)
@@ -150,209 +136,6 @@ ForwardResponseCallback WrapOnForwardResponseFinished(size_t to_transfer_bytes, 
                         };
 }
 
-std::atomic_int single_get_cmd_count;
-class SingleGetCommand : public MemcCommand {
-private:
-  bool is_forwarding_response_;
-public:
-  SingleGetCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
-          std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
-      : MemcCommand(io_service, ep, owner, buf, cmd_len) 
-      , is_forwarding_response_(false)
-  {
-    LOG_DEBUG << "SingleGetCommand ctor " << ++single_get_cmd_count;
-  }
-
-  virtual ~SingleGetCommand() {
-    LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
-  }
-
-  bool ParseUpstreamResponse() {
-    bool valid = true;
-    while(upstream_conn_->unparsed_bytes() > 0) {
-      const char * entry = upstream_conn_->unparsed_data();
-      const char * p = GetLineEnd(entry, upstream_conn_->unparsed_bytes());
-      if (p == nullptr) {
-        // TODO : no enough data for parsing, please read more
-        LOG_DEBUG << "ParseUpstreamResponse no enough data for parsing, please read more"
-                  << " data=" << std::string(entry, upstream_conn_->unparsed_bytes())
-                  << " bytes=" << upstream_conn_->unparsed_bytes();
-        return true;
-      }
-
-      if (entry[0] == 'V') {
-        // "VALUE <key> <flag> <bytes>\r\n"
-        size_t body_bytes = GetValueBytes(entry, p);
-        size_t entry_bytes = p - entry + 1 + body_bytes + 2;
-
-        upstream_conn_->update_parsed_bytes(entry_bytes);
-        break; // TODO : 每次转发一条，only for test
-      } else {
-        // "END\r\n"
-        if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-          set_upstream_nomore_data();
-          upstream_conn_->update_parsed_bytes(sizeof("END\r\n") - 1);
-          if (upstream_conn_->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
-            valid = false;
-            LOG_WARN << "ParseUpstreamResponse END not really end!";
-          } else {
-            LOG_INFO << "ParseUpstreamResponse END is really end!";
-          }
-          break;
-        } else {
-          LOG_WARN << "ParseUpstreamResponse BAD DATA";
-          // TODO : ERROR
-          valid = false;
-          break;
-        }
-      }
-    }
-    return valid;
-  }
-
-  virtual bool IsFormostCommand() {
-    // SubCommand 检察是否是第一个 command
-    return client_conn_->IsFirstCommand(shared_from_this());
-  }
-
-  virtual void OnUpstreamResponse(const boost::system::error_code& error) {
-    if (error) {
-      // MCE_WARN(cmd_line_ << " upstream read error : " << upstream_endpoint_ << " - "  << error << " " << error.message());
-      LOG_WARN << "SingleGetCommand OnUpstreamResponse error";
-      client_conn_->OnCommandError(shared_from_this(), error);
-      return;
-    }
-    LOG_DEBUG << "SingleGetCommand OnUpstreamResponse data";
-
-    bool valid = ParseUpstreamResponse();
-    if (!valid) {
-      LOG_WARN << "SingleGetCommand parsing error! valid=false";
-      // TODO : error handling
-    }
-    if (IsFormostCommand()) {
-      if (!is_forwarding_response_) {
-        is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-        auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->to_transfer_bytes(), shared_from_this());
-        client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
-                    upstream_conn_->to_transfer_bytes(), cb_wrap);
-        LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, to_transfer_bytes="
-                  << upstream_conn_->to_transfer_bytes();
-      } else {
-        LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
-      }
-    } else {
-      // TODO : do nothing, just wait
-      LOG_WARN << "SingleGetCommand IsFirstCommand false! to_transfer_bytes="
-               << upstream_conn_->to_transfer_bytes();
-    }
-
-    if (!upstream_nomore_data()) {
-      upstream_conn_->TryReadMoreData(); // upstream 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
-    }
-  }
-
-  virtual void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
-    if (error) {
-      // TODO
-      LOG_DEBUG << "OnForwardResponseFinished (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") error=" << error;
-      return;
-    }
-
-    upstream_conn_->update_transfered_bytes(bytes);
-
-    if (upstream_nomore_data() && upstream_conn_->to_transfer_bytes() == 0) {
-      client_conn_->RotateFirstCommand();
-      LOG_DEBUG << "OnForwardResponseFinished upstream_nomore_data, and all data forwarded to client";
-    } else {
-      LOG_DEBUG << "OnForwardResponseFinished upstream transfered_bytes=" << bytes
-                << " ready_to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
-      is_forwarding_response_ = false;
-      if (!upstream_nomore_data()) {
-        upstream_conn_->TryReadMoreData(); // 这里必须继续try
-      }
-
-      OnForwardResponseReady(); // 可能已经有新读到的数据，因而要尝试转发更多
-    }
-  }
-
-  virtual void OnForwardResponseReady() {
-    if (upstream_conn_->to_transfer_bytes() == 0) { // TODO : for test only, 正常这里不触发解析, 在收到数据时候触发的解析，会一次解析所有可解析的
-       ParseUpstreamResponse();
-    }
- 
-    if (!is_forwarding_response_ && upstream_conn_->to_transfer_bytes() > 0) {
-      is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-      auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->to_transfer_bytes(), shared_from_this());
-      client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
-                                    upstream_conn_->to_transfer_bytes(),
-                                    cb_wrap);
-      // LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, data=" << std::string(upstream_conn_->to_transfer_data(), upstream_conn_->to_transfer_bytes() - 2)
-      //           << " to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
-    } else {
-      LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, upstream no data ready to_transfer, waiting to read more data then write down";
-    }
-  }
-
-  virtual void ForwardRequest(const char *, size_t) {
-    if (upstream_conn_ == nullptr) {
-      LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") create upstream conn";
-      upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_,
-                                        WrapOnUpstreamResponse(shared_from_this()),
-                                        WrapOnUpstreamRequestWritten(shared_from_this()));
-    } else {
-      LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") reuse upstream conn";
-      upstream_conn_->set_upstream_read_callback(WrapOnUpstreamResponse(shared_from_this()),
-                                                 WrapOnUpstreamRequestWritten(shared_from_this()));
-    }
-    upstream_conn_->ForwardRequest(cmd_line_.data(), cmd_line_.size(), false);
-  }
-
-  virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
-    // 不需要再通知Client Conn
-  }
-};
-
-class ParallelGetCommand : public MemcCommand {
-public:
-  ParallelGetCommand(boost::asio::io_service& io_service, std::shared_ptr<ClientConnection> owner, const char* cmd_line_buf, size_t cmd_line_size)
-    : MemcCommand(io_service,
-        MemcachedLocator::Instance().GetEndpointByKey("1"), // FIXME
-        owner, cmd_line_buf, cmd_line_size) {
-  }
-  std::vector<std::shared_ptr<MemcCommand>> subcommands_;
-
-  // TODO : refinement
-  bool GroupGetKeys() {
-    std::vector<std::string> keys;
-    std::string key_list = cmd_line().substr(4, cmd_line().size() - 6);
-    boost::split(keys, key_list, boost::is_any_of(" "), boost::token_compress_on);
-
-    std::map<ip::tcp::endpoint, std::string> cmd_line_map;
-    
-    for (size_t i = 0; i < keys.size(); ++i) {
-      if (keys[i].empty()) {
-        continue;
-      }
-      ip::tcp::endpoint ep = MemcachedLocator::Instance().GetEndpointByKey(keys[i].c_str(), keys[i].size());
-
-      auto it = cmd_line_map.find(ep);
-      if (it == cmd_line_map.end()) {
-        it = cmd_line_map.insert(make_pair(ep, std::string("get"))).first;
-      }
-      it->second += ' ';
-      it->second += keys[i];
-    }
-
-    for (auto it = cmd_line_map.begin(); it != cmd_line_map.end(); ++it) {
-      LOG_DEBUG << "GroupGetKeys " << it->first << " get_keys=" << it->second;
-      it->second += "\r\n";
-      std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(io_service_, it->first, client_conn_, it->second.c_str(), it->second.size()));
-      // fetching_cmd_set_.insert(cmd);
-      subcommands_.push_back(cmd);
-    }
-    return true;
-  }
-};
 
 bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
   LOG_DEBUG << "GroupKeysByEndpoint enter, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
@@ -631,7 +414,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   }
 
   size_t cmd_line_bytes = 0;
-  bool is_new_version = false;
 
   while(parsed_bytes_ < up_buf_end_) { // TODO : 提取buffer对象
     size_t body_bytes = 0;
@@ -821,10 +603,10 @@ void ClientConnection::try_free_buffer_space() {
       up_buf_end_ -= up_buf_begin_;
       up_buf_begin_ = 0;
     }
-    LOG_INFO << "in try_free_buffer_space(), buf is unlocked, try moving offset, POST: begin=" << up_buf_begin_
+    LOG_DEBUG << "in try_free_buffer_space(), buf is unlocked, try moving offset, POST: begin=" << up_buf_begin_
              << " end=" << up_buf_end_ << " parsed=" << parsed_bytes_;
   } else {
-    LOG_WARN << "in try_free_buffer_space, buf is locked, do nothing";
+    LOG_DEBUG << "in try_free_buffer_space, buf is locked, do nothing";
   }
 }
 void ClientConnection::update_processed_bytes(size_t processed) {
