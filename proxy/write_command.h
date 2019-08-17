@@ -11,6 +11,9 @@ class WriteCommand : public MemcCommand {
 private:
   // bool is_forwarding_request_;
   // bool is_forwarding_response_;
+  const char * request_cmd_line_;
+  size_t request_cmd_len_;
+
   size_t request_forwarded_bytes_;
   size_t request_body_bytes_;
   size_t bytes_forwarding_;
@@ -20,12 +23,16 @@ public:
 
   virtual ~WriteCommand();
 
-  virtual size_t upcoming_bytes() const;
+  virtual size_t request_body_upcoming_bytes() const;
 
   virtual void ForwardRequest(const char * request_data, size_t client_buf_received_bytes);
   virtual void OnUpstreamRequestWritten(size_t, const boost::system::error_code& error);
 private:
   virtual bool ParseUpstreamResponse();
+
+  virtual std::string cmd_line_without_rn() const {
+    return std::string(request_cmd_line_, request_cmd_len_ - 2);
+  }
 };
 
 }

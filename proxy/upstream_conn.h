@@ -33,16 +33,11 @@ private:
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleConnect(const char * buf, size_t bytes, bool has_more_data, const boost::system::error_code& error);
 public:
-
-  void OnResponseProcessed(size_t bytes) {
-    popped_bytes_ += bytes;
-  }
-
   void ResetBuffer() {
-    popped_bytes_ = pushed_bytes_ = 0;
+    popped_bytes_ = pushed_bytes_ = parsed_bytes_ = 0;
   }
 
-  ip::tcp::socket & socket() {
+  ip::tcp::socket& socket() {
     return socket_;
   }
 
@@ -67,14 +62,12 @@ public:
   void update_parsed_bytes(size_t bytes) {
     parsed_bytes_ += bytes;
   }
-//size_t parsed_bytes() const {
-//  return parsed_bytes_;
-//}
   const char * unparsed_data() const {
     return buf_ + parsed_bytes_;
   }
   size_t unparsed_bytes() const;
 
+private:
   // enum { BUFFER_SIZE = 64 * 1024};
   enum { BUFFER_SIZE = 32 * 1024}; // TODO : use c++11 enum
   char buf_[BUFFER_SIZE];
