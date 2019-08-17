@@ -102,7 +102,7 @@ UpstreamWriteCallback WrapOnUpstreamRequestWritten(std::weak_ptr<MemcCommand> cm
 bool MemcCommand::IsFormostCommand() {
   return client_conn_->IsFirstCommand(shared_from_this());
 }
-
+/*
 void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
   if (upstream_conn_ == nullptr) {
     // 需要一个上行的 memcache connection
@@ -127,6 +127,7 @@ void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
       std::bind(&MemcCommand::HandleWrite, shared_from_this(), p, bytes,
           std::placeholders::_1, std::placeholders::_2));
 }
+*/
 
 void MemcCommand::Abort() {
   if (upstream_conn_) {
@@ -139,6 +140,7 @@ void MemcCommand::Abort() {
   }
 }
 
+/*
 void MemcCommand::AsyncRead() {
   //MCE_DEBUG(cmd_line_ << " read buffer size:" << UpstreamConn::BUFFER_SIZE - upstream_conn_->pushed_bytes_);
   upstream_conn_->socket().async_read_some(boost::asio::buffer(upstream_conn_->buf_ + upstream_conn_->pushed_bytes_,
@@ -146,7 +148,9 @@ void MemcCommand::AsyncRead() {
                   std::bind(&MemcCommand::HandleRead, shared_from_this(),
                       std::placeholders::_1, std::placeholders::_2));
 }
+*/
 
+/*
 void MemcCommand::HandleWrite(const char * buf,
     const size_t bytes, // 命令的当前可写字节数(包含命令行和body)
     const boost::system::error_code& error, size_t bytes_transferred)
@@ -196,7 +200,9 @@ void MemcCommand::HandleWrite(const char * buf,
     client_conn_->HandleForwardMoreData(shared_from_this(), bytes);
   }
 }
+*/
 
+/*
 void MemcCommand::HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error)
 {
   if (error) {
@@ -223,6 +229,7 @@ void MemcCommand::HandleConnect(const char * buf, size_t bytes, const boost::sys
 
   ForwardRequest(buf, bytes);
 }
+*/
 
 bool MemcCommand::NeedLoadMissed() {
   if (missed_keys_.empty()) {
@@ -270,19 +277,20 @@ void MemcCommand::RemoveMissedKey(const std::string & key) {
 
 // 注意, 该函数会被其他线程调用!
 void MemcCommand::DispatchMissedKeyData() {
-  missed_ready_ = true; // 这里不需要同步
+//missed_ready_ = true; // 这里不需要同步
 
-  //MCE_DEBUG(cmd_line_ << " 从 loader 取数据完成");
+////MCE_DEBUG(cmd_line_ << " 从 loader 取数据完成");
 
-  missed_timer_ = new boost::asio::deadline_timer(io_service_, boost::posix_time::microsec(1));
-  missed_timer_->async_wait(std::bind(&MemcCommand::HandleMissedKeyReady, shared_from_this()));
+//missed_timer_ = new boost::asio::deadline_timer(io_service_, boost::posix_time::microsec(1));
+//missed_timer_->async_wait(std::bind(&MemcCommand::HandleMissedKeyReady, shared_from_this()));
 }
 
 void MemcCommand::HandleMissedKeyReady() {
-  // MCE_INFO("MemcCommand::HandleMissedKeyReady --> cli:" << client_conn_.operator->() << " cmd:" << this);
-  client_conn_->OnCommandReady(shared_from_this());
+//// MCE_INFO("MemcCommand::HandleMissedKeyReady --> cli:" << client_conn_.operator->() << " cmd:" << this);
+//client_conn_->OnCommandReady(shared_from_this());
 }
 
+/*
 void MemcCommand::HandleRead(const boost::system::error_code& error, size_t bytes_transferred)
 {
   if (error) {
@@ -301,6 +309,7 @@ void MemcCommand::HandleRead(const boost::system::error_code& error, size_t byte
 
   client_conn_->OnCommandReady(shared_from_this());
 }
+*/
 
 void MemcCommand::OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
   if (error) {

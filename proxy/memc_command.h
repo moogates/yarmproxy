@@ -25,7 +25,7 @@ public:
 
   virtual ~MemcCommand();
 //////////////////////////////////////
-  virtual void ForwardRequest(const char * buf, size_t bytes);
+  virtual void ForwardRequest(const char * buf, size_t bytes) = 0;
   virtual bool ParseUpstreamResponse() {
     return false;
   }
@@ -51,7 +51,7 @@ public:
     upstream_nomore_data_ = true;
   }
 //////////////////////////////////////
-  void AsyncRead();
+  // void AsyncRead();
   void Abort();
 
   // response_cmd_line
@@ -114,9 +114,9 @@ public:
   void LoadMissedKeys();
   void DispatchMissedKeyData();
 public: // TODO : should be private
-  void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
-  void HandleWrite(const char * buf, const size_t bytes, const boost::system::error_code& error, size_t bytes_transferred);
-  void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
+  // void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
+  // void HandleWrite(const char * buf, const size_t bytes, const boost::system::error_code& error, size_t bytes_transferred);
+  // void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleMissedKeyReady();
 protected:
   std::string cmd_line_;
