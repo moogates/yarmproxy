@@ -1,10 +1,9 @@
 #include "client_conn.h"
 
-#include <boost/algorithm/string.hpp>
+// #include <boost/algorithm/string.hpp>
 
 #include <atomic>
 #include <memory>
-// #include <chrono>
 
 #include "base/logging.h"
 
@@ -316,7 +315,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
                << ". conn=" << this;
 
     recursive_lock_buffer();
-    if (cmd_need_more_data_->upcoming_bytes() > (up_buf_end_ - up_buf_begin_)) {
+    if (cmd_need_more_data_->request_body_upcoming_bytes() > (up_buf_end_ - up_buf_begin_)) {
       update_processed_bytes(up_buf_end_ - up_buf_begin_);
       LOG_INFO << "ClientConnection::HandleRead.ForwardRequest : up_buf_begin_=" << up_buf_begin_
                << " bytes=" << (up_buf_end_ - up_buf_begin_) << ". HAS MORE DATA. conn=" << this;
@@ -325,9 +324,9 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       return;
     } else {
       LOG_INFO << "ClientConnection::HandleRead.ForwardRequest : up_buf_begin_=" << up_buf_begin_
-               << " bytes=" << cmd_need_more_data_->upcoming_bytes() << ". NO MORE DATA. conn=" << this;
-      cmd_need_more_data_->ForwardRequest(buf_ + up_buf_begin_, cmd_need_more_data_->upcoming_bytes());  
-      update_processed_bytes(cmd_need_more_data_->upcoming_bytes());
+               << " bytes=" << cmd_need_more_data_->request_body_upcoming_bytes() << ". NO MORE DATA. conn=" << this;
+      cmd_need_more_data_->ForwardRequest(buf_ + up_buf_begin_, cmd_need_more_data_->request_body_upcoming_bytes());  
+      update_processed_bytes(cmd_need_more_data_->request_body_upcoming_bytes());
       cmd_need_more_data_.reset();
       // 终于转发cmd_need_more_data_的全部数据,  继续处理其他命令
     }
@@ -469,13 +468,10 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
   }
 #endif 
 
-  std::string timeout_lines;
   std::set<std::shared_ptr<MemcCommand>>::iterator it = fetching_cmd_set_.begin();
   while(it != fetching_cmd_set_.end()) {
     auto cmd = *it;
     fetching_cmd_set_.erase(it++);
-
-    timeout_lines += cmd->cmd_line();
     // MCE_WARN << "终止请求 : " << cmd->cmd_line();
     cmd->Abort();
     // LOG_S(WARN) << "ClientConnection::HandleMemcCommandTimeout --> Abort set_upstream_conn, cli:" 
@@ -483,8 +479,6 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
     //delete cmd->upstream_conn();
     //cmd.reset();
   }
-
-  LOG_WARN << "MemcCommandTimeout, 终止未返回的请求 : " << timeout_lines;
 
   try {
     // static char s[] = "SERVER_ERROR timeout\r\n";
@@ -542,130 +536,6 @@ void ClientConnection::recursive_unlock_buffer() {
   try_free_buffer_space();
 }
 
-// 这两个函数, 可以合二为一的
-void ClientConnection::HandleForwardAllData(std::shared_ptr<MemcCommand> cmd, size_t bytes) {
-  // 当前命令所有数据都转发
-  up_buf_begin_ += bytes;
-
-  if (!cmd->cmd_line_forwarded()) {
-    up_buf_begin_ -= cmd->cmd_line_bytes();
-    cmd->set_cmd_line_forwarded(true);
-  }
-
-  if (up_buf_begin_ > up_buf_end_) {
-    // LOG_S(WARN) << "转发越界!";
-  } else if (up_buf_begin_ == up_buf_end_) {
-    up_buf_begin_ = up_buf_end_ = 0;
-  } else {
-  //LOG_S(WARN) << "处理完当前命令, client buffer 中仍然有命令 : " << up_buf_begin_ 
-  //     << ":" << up_buf_end_; // 处理完当前命令, client buffer 中仍然有命令. 暂时不支持此种情况
-
-    //up_buf_begin_ = up_buf_end_ = 0;
-    memmove(buf_, buf_ + up_buf_begin_, up_buf_end_ - up_buf_begin_);
-    up_buf_end_ = up_buf_end_ - up_buf_begin_;
-    up_buf_begin_ = 0;
-  }
-}
-
-void ClientConnection::HandleForwardMoreData(std::shared_ptr<MemcCommand> cmd, size_t bytes) {
-  up_buf_begin_ += bytes;
-
-  if (!cmd->cmd_line_forwarded()) {
-    up_buf_begin_ -= cmd->cmd_line_bytes();
-    cmd->set_cmd_line_forwarded(true);
-  }
-
-  if (up_buf_begin_ > up_buf_end_) {
-    //LOG(WARNING) << "转发越界!";
-  } else if (up_buf_begin_ == up_buf_end_) {
-    //LOG(VERBOSE) << "转发所有数据!";
-    up_buf_begin_ = up_buf_end_ = 0;
-
-    if (cmd->forwarded_bytes() < cmd->total_bytes()) {
-      //LOG(VERBOSE) << "  半条数据";
-    }
-  } else {
-    // 未解析并写到 upstream conn 的内容, 挪到 buffer 开头
-    //LOG(VERBOSE) << " --------- 未解析并写出到 upstream 的内容. size = " << up_buf_end_ - up_buf_begin_;
-    memmove(buf_, buf_ + up_buf_begin_, up_buf_end_ - up_buf_begin_);
-    up_buf_end_ = up_buf_end_ - up_buf_begin_;
-    up_buf_begin_ = 0;
-  }
-
-  AsyncRead();
-}
-
-void ClientConnection::AsyncWrite() {
-//UpstreamConn * upstream_conn = current_ready_cmd_->upstream_conn();
-//if (!upstream_conn) {
-//  LOG_WARN << "AsyncWrite error : upstream_conn NULL";
-//  return;
-//}
-//boost::asio::async_write(socket_,
-//  boost::asio::buffer(upstream_conn->buf_ + upstream_conn->popped_bytes_,
-//                     upstream_conn->pushed_bytes_ - upstream_conn->popped_bytes_ - response_status_.unparsed_bytes),
-//  std::bind(&ClientConnection::HandleWrite, shared_from_this(),
-//    std::placeholders::_1, std::placeholders::_2));
-}
-
-void ClientConnection::AsyncWriteMissed() {
-//std::shared_ptr<MemcCommand> p = current_ready_cmd_;
-
-////MCE_DEBUG("开始写回 missed key data");
-
-//if (p->missed_buf().empty()) {
-//  //MCE_DEBUG("missed key data 为空");
-//}
-
-//boost::asio::async_write(socket_,
-//  boost::asio::buffer(p->missed_buf().c_str() + p->missed_popped_bytes(),
-//                      p->missed_buf().size() - p->missed_popped_bytes()),
-//  std::bind(&ClientConnection::HandleWriteMissed, shared_from_this(),
-//    std::placeholders::_1, std::placeholders::_2));
-}
-
-void ClientConnection::HandleWriteMissed(const boost::system::error_code& error, size_t bytes_transferred)
-{
-//if (!current_ready_cmd_) {
-//  // LOG_S(WARN) << "HandleWriteMissed error current_ready_cmd_ NULL";
-//  return;
-//}
-
-//std::shared_ptr<MemcCommand> cmd = current_ready_cmd_;
-
-//if (error) {
-//  // LOG_S(WARN) << "HandleWriteMissed error : " << cmd->cmd_line() << " " << error.message();
-//  socket_.close();
-//  current_ready_cmd_.reset();
-//  return;
-//}
-
-////MCE_DEBUG("完成写回 missed key data bytes : " << bytes_transferred);
-//cmd->set_missed_popped_bytes(cmd->missed_popped_bytes() + bytes_transferred);
-//if (cmd->missed_popped_bytes() < cmd->missed_buf().size()) {
-//  AsyncWriteMissed();
-//} else {
-//  // TODO : 清理
-//  fetching_cmd_set_.erase(current_ready_cmd_);
-//  current_ready_cmd_.reset();
-
-//  // 处理下一个 ready command
-//  if (!ready_cmd_queue_.empty()) {
-//    auto cmd = ready_cmd_queue_.front();
-//    ready_cmd_queue_.pop();
-//    OnCommandReady(cmd);
-//  } else {
-//    if (fetching_cmd_set_.empty()) {
-//      // 处理完所有ready command, 开始处理 client 的下一个请求
-//      // LOG_S(INFO) "HandleWriteMissed get next cmd: ";
-//      AsyncRead();
-//    } else {
-//      // 需要继续等其他未结束的command
-//    }
-//  }
-//}
-}
-
 void ClientConnection::OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error) {
   timer_.cancel();
 
@@ -693,186 +563,6 @@ void ClientConnection::OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, con
   memc_cmd->set_upstream_conn(nullptr);
   // LOG_S(WARN) << "ClientConnection::OnCommandError --> set_upstream_conn " << memc_cmd.operator->()<< " upconn:0";
 }
-
-/*
-void ClientConnection::OnCommandReady(std::shared_ptr<MemcCommand> memc_cmd) {
-  //MCE_INFO("ClientConnection::OnCommandReady --> " << memc_cmd->cmd_line());
-  if (current_ready_cmd_ && current_ready_cmd_ != memc_cmd) {
-    ready_cmd_queue_.push(memc_cmd); // 等处理完 current_ready_cmd_, 再处理
-    return;
-  }
-
-  current_ready_cmd_ = memc_cmd;
-  
-  if (memc_cmd->method() == "get") { // 需要 Reduce 的命令
-    // 从 Loader 加载数据完毕
-    if (memc_cmd->missed_ready()) {
-      if (fetching_cmd_set_.size() == 1) { // 最后一个, 要加 "END\r\n"
-        //MCE_DEBUG(memc_cmd->cmd_line() << "最后一个missed 写回");
-        memc_cmd->missed_buf() += "END\r\n";
-      }
-      //MCE_INFO("ClientConnection::OnCommandReady --> " << memc_cmd->cmd_line() << " write end");
-      AsyncWriteMissed();
-      return;
-    }
-    
-    UpstreamConn * conn = memc_cmd->upstream_conn();
-    if (!conn) {
-      // LOG_S(WARN) << "OnCommandReady error : upstream_conn NULL";
-      return;
-    }
-
-    // 有数据读过来, ReduceMemcGetCommand(memc_cmd)
-    size_t start_offset = conn->popped_bytes_ + response_status_.left_bytes;
-
-    if (start_offset > conn->pushed_bytes_) {
-      //MCE_DEBUG("当前value仍然没完");
-      response_status_.unparsed_bytes = 0;
-      response_status_.left_bytes -= conn->pushed_bytes_ - conn->popped_bytes_;
-      AsyncWrite();
-      return;
-    }
-
-    for(;;) {
-      const char * p = GetLineEnd(conn->buf_ + start_offset, conn->pushed_bytes_ - start_offset);
-
-      if (!p) {
-        //LOG(VERBOSE) <<  "buffer 结尾数据暂时无法解析 : ";
-        //LOG(VERBOSE).write(conn->buf_ + start_offset, conn->pushed_bytes_ - start_offset);
-        //LOG(VERBOSE) << conn->pushed_bytes_ - start_offset;
-
-        // TODO : read for more data
-        response_status_.complete = false;
-        response_status_.unparsed_bytes = conn->pushed_bytes_ - start_offset;
-        response_status_.left_bytes = 0;
-        AsyncWrite();
-        return;
-      }
-
-      std::string status_line(conn->buf_ + start_offset, p - (conn->buf_ + start_offset) - 1);
-      std::vector<std::string> strs;
-      boost::split(strs, status_line, boost::is_any_of(" "), boost::token_compress_on);
-      status_line += "\r\n";
-
-      size_t body_bytes = 0;
-      if (strs.size() == 4) { // VALUE <key> <flag> <bytes>
-        body_bytes = std::stoi(strs[3]);
-        //MCE_DEBUG(memc_cmd->cmd_line() << " 成功从memc 获取key " << strs[1] << " bytes=" << body_bytes);
-        //MCE_INFO("ClientConnection::OnCommandReady --> " << memc_cmd->cmd_line() << " get " << strs[1]);
-        memc_cmd->RemoveMissedKey(strs[1]); // 该key已经获取
-      } else { // "END \r\n", or error
-        //MCE_DEBUG("memcached get 数据完毕 : " << status_line << " missed key count : " 
-        //    << memc_cmd->NeedLoadMissed());
-        response_status_.complete = true;
-        if ((fetching_cmd_set_.size() > 1) || memc_cmd->NeedLoadMissed()) {
-          response_status_.unparsed_bytes = status_line.size(); // 最后一行, 不直接写回
-        } else {
-          response_status_.unparsed_bytes = 0; //最后一个get命令的最后一行, 直接写回
-        }
-        response_status_.left_bytes = 0;
-        //MCE_INFO("ClientConnection::OnCommandReady --> " << memc_cmd->cmd_line() << " get and write end");
-        AsyncWrite();
-        return;
-      }
-
-      size_t end_offset = start_offset + status_line.size() + body_bytes + 2;
-      if (end_offset  >= conn->pushed_bytes_) {
-        //LOG(VERBOSE) <<  "处理buffer 中所有数据. 读取更多.";
-        response_status_.complete = false;
-        response_status_.unparsed_bytes = 0;
-        response_status_.left_bytes = end_offset - conn->pushed_bytes_;
-        AsyncWrite();
-        return;
-      }
-      start_offset = end_offset;
-
-      ++ p;
-    }
-  } else if (memc_cmd->method() == "set" || memc_cmd->method() == "add" || memc_cmd->method() == "replace") {
-    UpstreamConn * conn = memc_cmd->upstream_conn();
-    if (!conn) {
-      // LOG_S(WARN) << "OnCommandReady error : upstream_conn NULL";
-      return;
-    }
-    if(conn->buf_[conn->pushed_bytes_ - 1] == '\n') {
-      response_status_.complete = true;
-    }
-    AsyncWrite();
-  }
-}
-*/
-
-/*
-void ClientConnection::HandleWrite(const boost::system::error_code& error, size_t bytes_transferred)
-{
-  if (error) {
-    // LOG_S(WARN) << "HandleWrite error : " << error << " " << error.message();
-    timer_.cancel();
-    socket_.close();
-    return;
-  }
-
-  if (!current_ready_cmd_) {
-    // MCE_WARN("HandleWrite error : current_ready_cmd_ NULL");
-    return;
-  }
-  //MCE_DEBUG("写回到client. bytes=" << bytes_transferred);
-  UpstreamConn * conn = current_ready_cmd_->upstream_conn();
-  if (!conn) {
-    // LOG_S(WARN) << "HandleWrite error : upstream_conn NULL";
-    return;
-  }
-
-  conn->popped_bytes_ += bytes_transferred;
-
-  if (conn->popped_bytes_ == conn->pushed_bytes_ - response_status_.unparsed_bytes) {
-    //MCE_DEBUG("全部写回到client. complete = " << response_status_.complete);
-
-    if (!response_status_.complete) {
-      //LOG(VERBOSE) << "需要继续读upstream conn";
-      memmove(conn->buf_, conn->buf_ + conn->pushed_bytes_ - response_status_.unparsed_bytes, response_status_.unparsed_bytes);
-      conn->popped_bytes_ = 0;
-      conn->pushed_bytes_ = response_status_.unparsed_bytes;
-      //MCE_INFO("ClientConnection::HandleWrite --> AsyncRead cli:" << this << " cmd:" << current_ready_cmd_.operator->());
-      // current_ready_cmd_->AsyncRead();
-      return; 
-    }
-    // current_ready_cmd_所有数据处理完毕, 清理/回收 
-    response_status_.Reset();
-
-    upconn_pool_->Push(current_ready_cmd_->upstream_endpoint(), conn);
-    current_ready_cmd_->set_upstream_conn(0);
-    //MCE_INFO("ClientConnection::HandleWrite --> set_upstream_conn cli:"
-    //<< this << " cmd:" << current_ready_cmd_.operator->() << " upconn:0");
-    //MCE_INFO("ClientConnection::HandleWrite --> " << current_ready_cmd_->cmd_line() << " clear upstream");
-
-    if (current_ready_cmd_->NeedLoadMissed()) {
-      //MCE_INFO("ClientConnection::HandleWrite --> " << current_ready_cmd_->cmd_line() << " load from db");
-      current_ready_cmd_->LoadMissedKeys();
-    } else {
-      fetching_cmd_set_.erase(current_ready_cmd_);
-    }
-    current_ready_cmd_.reset();
-
-    // 处理下一个 ready command
-    if (!ready_cmd_queue_.empty()) {
-      auto cmd = ready_cmd_queue_.front();
-      ready_cmd_queue_.pop();
-      OnCommandReady(cmd);
-    } else {
-      if (fetching_cmd_set_.empty()) {
-        // 处理完所有ready command, 开始处理 client 的下一个请求
-        AsyncRead();
-      } else {
-        // 需要继续等其他未结束的command
-      }
-    }
-  } else {
-    //LOG(VERBOSE) << "未全部写回到client";
-    AsyncWrite(); // 当前command还没写完，继续写
-  }
-}
-*/
 
 }
 

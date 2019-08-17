@@ -33,7 +33,7 @@ size_t GetValueBytes(const char * data, const char * end) {
 SingleGetCommand::SingleGetCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
     : MemcCommand(io_service, ep, owner, buf, cmd_len) 
-    // , is_forwarding_response_(false)
+    , cmd_line_(buf, cmd_len)
 {
   LOG_DEBUG << "SingleGetCommand ctor " << ++single_get_cmd_count;
 }
@@ -105,12 +105,12 @@ void SingleGetCommand::OnForwardResponseReady() {
 
 void SingleGetCommand::ForwardRequest(const char *, size_t) {
   if (upstream_conn_ == nullptr) {
-    LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") create upstream conn";
+    LOG_DEBUG << "SingleGetCommand (" << cmd_line_without_rn() << ") create upstream conn";
     upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_,
                                       WrapOnUpstreamResponse(shared_from_this()),
                                       WrapOnUpstreamRequestWritten(shared_from_this()));
   } else {
-    LOG_DEBUG << "SingleGetCommand (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") reuse upstream conn";
+    LOG_DEBUG << "SingleGetCommand (" << cmd_line_without_rn() << ") reuse upstream conn";
     upstream_conn_->set_upstream_read_callback(WrapOnUpstreamResponse(shared_from_this()),
                                                WrapOnUpstreamRequestWritten(shared_from_this()));
   }
