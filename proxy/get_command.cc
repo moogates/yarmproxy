@@ -33,7 +33,7 @@ size_t GetValueBytes(const char * data, const char * end) {
 SingleGetCommand::SingleGetCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
     : MemcCommand(io_service, ep, owner, buf, cmd_len) 
-    , is_forwarding_response_(false)
+    // , is_forwarding_response_(false)
 {
   LOG_DEBUG << "SingleGetCommand ctor " << ++single_get_cmd_count;
 }
@@ -83,66 +83,6 @@ bool SingleGetCommand::ParseUpstreamResponse() {
     }
   }
   return valid;
-}
-
-void SingleGetCommand::OnUpstreamResponse(const boost::system::error_code& error) {
-  if (error) {
-    // MCE_WARN(cmd_line_ << " upstream read error : " << upstream_endpoint_ << " - "  << error << " " << error.message());
-    LOG_WARN << "SingleGetCommand OnUpstreamResponse error";
-    client_conn_->OnCommandError(shared_from_this(), error);
-    return;
-  }
-  LOG_DEBUG << "SingleGetCommand OnUpstreamResponse data";
-
-  bool valid = ParseUpstreamResponse();
-  if (!valid) {
-    LOG_WARN << "SingleGetCommand parsing error! valid=false";
-    // TODO : error handling
-  }
-  if (IsFormostCommand()) {
-    if (!is_forwarding_response_) {
-      is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-      auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->to_transfer_bytes(), shared_from_this());
-      client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
-                  upstream_conn_->to_transfer_bytes(), cb_wrap);
-      LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, to_transfer_bytes="
-                << upstream_conn_->to_transfer_bytes();
-    } else {
-      LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
-    }
-  } else {
-    // TODO : do nothing, just wait
-    LOG_WARN << "SingleGetCommand IsFirstCommand false! to_transfer_bytes="
-             << upstream_conn_->to_transfer_bytes();
-  }
-
-  if (!upstream_nomore_data()) {
-    upstream_conn_->TryReadMoreData(); // upstream 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
-  }
-}
-
-void SingleGetCommand::OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
-  if (error) {
-    // TODO
-    LOG_DEBUG << "OnForwardResponseFinished (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") error=" << error;
-    return;
-  }
-
-  upstream_conn_->update_transfered_bytes(bytes);
-
-  if (upstream_nomore_data() && upstream_conn_->to_transfer_bytes() == 0) {
-    client_conn_->RotateFirstCommand();
-    LOG_DEBUG << "OnForwardResponseFinished upstream_nomore_data, and all data forwarded to client";
-  } else {
-    LOG_DEBUG << "OnForwardResponseFinished upstream transfered_bytes=" << bytes
-              << " ready_to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
-    is_forwarding_response_ = false;
-    if (!upstream_nomore_data()) {
-      upstream_conn_->TryReadMoreData(); // 这里必须继续try
-    }
-
-    OnForwardResponseReady(); // 可能已经有新读到的数据，因而要尝试转发更多
-  }
 }
 
 void SingleGetCommand::OnForwardResponseReady() {

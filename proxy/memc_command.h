@@ -26,14 +26,17 @@ public:
   virtual ~MemcCommand();
 //////////////////////////////////////
   virtual void ForwardRequest(const char * buf, size_t bytes);
-  virtual void OnUpstreamResponse(const boost::system::error_code& error) {
+  virtual bool ParseUpstreamResponse() {
+    return false;
   }
+
   virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
   }
 
-  virtual void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
-  }
+  void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error);
+
   virtual void OnForwardResponseReady() {}
+  void OnUpstreamResponse(const boost::system::error_code& error);
 protected:
   // 判断是否最靠前的command, 是才可以转发
   bool IsFormostCommand();
@@ -123,6 +126,8 @@ protected:
   size_t forwarded_bytes_;
   size_t body_bytes_;
 
+  bool is_forwarding_response_;
+
   std::vector<std::string> missed_keys_;
   bool missed_ready_;
   std::string missed_buf_;
@@ -132,6 +137,7 @@ protected:
   ip::tcp::endpoint upstream_endpoint_;
   UpstreamConn * upstream_conn_;
 protected:
+
   std::shared_ptr<ClientConnection> client_conn_;
   boost::asio::io_service& io_service_;
 

@@ -14,6 +14,8 @@
 
 namespace mcproxy {
 
+ForwardResponseCallback WrapOnForwardResponseFinished(size_t to_transfer_bytes, std::weak_ptr<MemcCommand> cmd_wptr);
+
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
     std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len) 
@@ -21,6 +23,7 @@ MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::end
   , cmd_line_forwarded_(false)
   , forwarded_bytes_(0)
   , body_bytes_(0)
+  , is_forwarding_response_(false)
   , missed_ready_(false)
   , missed_popped_bytes_(0)
   , missed_timer_(0)
@@ -47,6 +50,42 @@ MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::end
 
   upstream_conn_ = owner->upconn_pool()->Pop(upstream_endpoint_);
 };
+
+void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
+  if (error) {
+    // MCE_WARN(cmd_line_ << " upstream read error : " << upstream_endpoint_ << " - "  << error << " " << error.message());
+    LOG_WARN << "SingleGetCommand OnUpstreamResponse error";
+    client_conn_->OnCommandError(shared_from_this(), error);
+    return;
+  }
+  LOG_DEBUG << "SingleGetCommand OnUpstreamResponse data";
+
+  bool valid = ParseUpstreamResponse();
+  if (!valid) {
+    LOG_WARN << "SingleGetCommand parsing error! valid=false";
+    // TODO : error handling
+  }
+  if (IsFormostCommand()) {
+    if (!is_forwarding_response_) {
+      is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
+      auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->to_transfer_bytes(), shared_from_this());
+      client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
+                  upstream_conn_->to_transfer_bytes(), cb_wrap);
+      LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, to_transfer_bytes="
+                << upstream_conn_->to_transfer_bytes();
+    } else {
+      LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
+    }
+  } else {
+    // TODO : do nothing, just wait
+    LOG_WARN << "SingleGetCommand IsFirstCommand false! to_transfer_bytes="
+             << upstream_conn_->to_transfer_bytes();
+  }
+
+  if (!upstream_nomore_data()) {
+    upstream_conn_->TryReadMoreData(); // upstream 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
+  }
+}
 
 MemcCommand::~MemcCommand() {
   if (upstream_conn_) {
@@ -261,6 +300,30 @@ void MemcCommand::HandleRead(const boost::system::error_code& error, size_t byte
   upstream_conn_->pushed_bytes_ += bytes_transferred;
 
   client_conn_->OnCommandReady(shared_from_this());
+}
+
+void MemcCommand::OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
+  if (error) {
+    // TODO
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") error=" << error;
+    return;
+  }
+
+  upstream_conn_->update_transfered_bytes(bytes);
+
+  if (upstream_nomore_data() && upstream_conn_->to_transfer_bytes() == 0) {
+    client_conn_->RotateFirstCommand();
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream_nomore_data, and all data forwarded to client";
+  } else {
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream transfered_bytes=" << bytes
+              << " ready_to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
+    is_forwarding_response_ = false;
+    if (!upstream_nomore_data()) {
+      upstream_conn_->TryReadMoreData(); // 这里必须继续try
+    }
+
+    OnForwardResponseReady(); // 可能已经有新读到的数据，因而要尝试转发更多
+  }
 }
 
 }

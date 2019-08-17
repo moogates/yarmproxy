@@ -9,12 +9,10 @@ namespace mcproxy {
 
 class WriteCommand : public MemcCommand {
 private:
-  bool is_forwarding_request_;
-  bool is_forwarding_response_;
-
+  // bool is_forwarding_request_;
+  // bool is_forwarding_response_;
   size_t request_forwarded_bytes_;
   size_t request_body_bytes_;
-
   size_t bytes_forwarding_;
 public:
   WriteCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
@@ -26,11 +24,8 @@ public:
 
   virtual void ForwardRequest(const char * request_data, size_t client_buf_received_bytes);
   virtual void OnUpstreamRequestWritten(size_t, const boost::system::error_code& error);
-
-  bool ParseUpstreamWriteResponse();
-
-  virtual void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error);
-  virtual void OnUpstreamResponse(const boost::system::error_code& error);
+private:
+  virtual bool ParseUpstreamResponse();
 };
 
 }
