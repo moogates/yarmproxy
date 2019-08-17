@@ -1,7 +1,5 @@
-#ifndef _CLIENT_CONN_H_
-#define _CLIENT_CONN_H_
-
-// #include "client_conn_fwd.h"
+#ifndef _CLIENT_CONNECTION_H_
+#define _CLIENT_CONNECTION_H_
 
 #include <list>
 #include <queue>
@@ -123,5 +121,5 @@ private:
 
 }
 
-#endif // _CLIENT_CONN_H_
+#endif // _CLIENT_CONNECTION_H_
 

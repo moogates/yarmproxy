@@ -1,8 +1,6 @@
 #ifndef _MEMC_COMMAND_H_
 #define _MEMC_COMMAND_H_
 
-// #include "memc_command_fwd.h"
-
 #include <list>
 #include <vector>
 #include <string>
@@ -36,12 +34,10 @@ public:
   virtual void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
   }
   virtual void OnForwardResponseReady() {}
-
+protected:
   // 判断是否最靠前的command, 是才可以转发
-  virtual bool IsFormostCommand() {
-    return false;
-  }
-
+  bool IsFormostCommand();
+public:
   virtual size_t upcoming_bytes() const {
     return 0;
   }

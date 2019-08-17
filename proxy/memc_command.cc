@@ -60,6 +60,10 @@ MemcCommand::~MemcCommand() {
 UpstreamReadCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr);
 UpstreamWriteCallback WrapOnUpstreamRequestWritten(std::weak_ptr<MemcCommand> cmd_wptr);
 
+bool MemcCommand::IsFormostCommand() {
+  return client_conn_->IsFirstCommand(shared_from_this());
+}
+
 void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
   if (upstream_conn_ == nullptr) {
     // 需要一个上行的 memcache connection
