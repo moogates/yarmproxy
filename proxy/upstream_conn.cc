@@ -80,14 +80,18 @@ UpstreamConn::~UpstreamConn() {
   void UpstreamConn::ForwardRequest(const char* data, size_t bytes, bool has_more_data) {
     if (!socket_.is_open()) {
       LOG_DEBUG << "UpstreamConn::ForwardRequest open socket, req="
-                << std::string(data, bytes - 2) << " conn=" << this;
+                << std::string(data, bytes - 2) << " size=" << bytes
+                << " has_more_data=" << has_more_data << " conn=" << this;
       socket_.async_connect(upstream_endpoint_, std::bind(&UpstreamConn::HandleConnect, this, 
           data, bytes, has_more_data, std::placeholders::_1));
       return;
     }
 
-    LOG_DEBUG << "UpstreamConn::ForwardRequest write data, req="
-              << std::string(data, bytes - 2) << " conn=" << this;
+    LOG_DEBUG << "UpstreamConn::ForwardRequest write data,  bytes=" << bytes
+              << " has_more_data=" << has_more_data
+              << " req_ptr=" << (void*)data
+              << " req_data=" << std::string(data, bytes - 2)
+              << " conn=" << this;
     async_write(socket_, boost::asio::buffer(data, bytes),
         std::bind(&UpstreamConn::HandleWrite, this, data, bytes, has_more_data,
             std::placeholders::_1, std::placeholders::_2));
@@ -139,7 +143,7 @@ UpstreamConn::~UpstreamConn() {
       // socket_.close();
       // TODO : 如何通知给外界?
     } else {
-      LOG_WARN << "UpstreamConn::HandleRead upstream read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
+      LOG_DEBUG << "UpstreamConn::HandleRead upstream read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
       pushed_bytes_ += bytes_transferred;
       is_reading_more_ = false;  // finish reading, you could memmove now
       upstream_read_callback_(error); // TODO : error总是false，所以这个参数应当去掉

@@ -142,10 +142,10 @@ ForwardResponseCallback WrapOnForwardResponseFinished(size_t to_transfer_bytes, 
     // typedef std::function<void(size_t bytes, const boost::system::error_code& error)> ForwardResponseCallback;
     return [to_transfer_bytes, cmd_wptr](const boost::system::error_code& error) {
                           if (auto cmd_ptr = cmd_wptr.lock()) {
-                            LOG_DEBUG << "OnForwardResponseFinished cmd valid";
+                            LOG_DEBUG << "OnForwardResponseFinished cmd weak_ptr valid";
                             cmd_ptr->OnForwardResponseFinished(to_transfer_bytes, error);
                           } else {
-                            LOG_DEBUG << "OnForwardResponseFinished cmd released";
+                            LOG_DEBUG << "OnForwardResponseFinished cmd weak_ptr released";
                           }
                         };
 }
@@ -352,14 +352,16 @@ public:
                                                  WrapOnUpstreamRequestWritten(shared_from_this()));
     }
 
-    bytes_forwarding_ = std::min(client_buf_received_bytes, cmd_line_.size() + body_bytes_);
+    bytes_forwarding_ = std::min(client_buf_received_bytes, cmd_line_.size() + body_bytes_); // FIXME
     upstream_conn_->ForwardRequest(request_data, bytes_forwarding_, upcoming_bytes() != 0);
   }
   virtual void OnUpstreamRequestWritten(size_t, const boost::system::error_code& error) {
     if (error) {
-      // TODO
-      LOG_INFO << "WriteCommand OnUpstreamRequestWritten error";
+      // TODO : error handling
+      LOG_WARN << "WriteCommand OnUpstreamRequestWritten error";
+      return;
     }
+    LOG_INFO << "WriteCommand OnUpstreamRequestWritten ok, bytes_forwarding_=" << bytes_forwarding_;
     client_conn_->recursive_unlock_buffer();
 
     if (bytes_forwarding_ < cmd_line_.size() + body_bytes_) {
@@ -371,6 +373,7 @@ public:
     request_forwarded_bytes_ += bytes_forwarding_;
     bytes_forwarding_ = 0;
   }
+
   bool ParseUpstreamWriteResponse() {
     const char * entry = upstream_conn_->unparsed_data();
     const char * p = GetLineEnd(entry, upstream_conn_->unparsed_bytes());
@@ -384,13 +387,37 @@ public:
 
     set_upstream_nomore_data();
     upstream_conn_->update_parsed_bytes(p - entry + 1);
-    LOG_WARN << "WriteCommand ParseUpstreamResponse unknown data [" << std::string(entry, p - entry - 1) << "]";
+    LOG_WARN << "WriteCommand ParseUpstreamResponse resp=[" << std::string(entry, p - entry - 1) << "]";
     return true;
   }
 
   virtual bool IsFormostCommand() {
     // SubCommand 检察是否是第一个 command
     return client_conn_->IsFirstCommand(shared_from_this());
+  }
+
+  virtual void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
+    if (error) {
+      // TODO
+      LOG_DEBUG << "WriteCommand::OnForwardResponseFinished (" << cmd_line_.substr(0, cmd_line_.size() - 2) << ") error=" << error;
+      return;
+    }
+
+    upstream_conn_->update_transfered_bytes(bytes);
+
+    if (upstream_nomore_data() && upstream_conn_->to_transfer_bytes() == 0) {
+      client_conn_->RotateFirstCommand();
+      LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream_nomore_data, and all data forwarded to client";
+    } else {
+      LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream transfered_bytes=" << bytes
+                << " ready_to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
+      is_forwarding_response_ = false;
+      if (!upstream_nomore_data()) {
+        upstream_conn_->TryReadMoreData(); // 这里必须继续try
+      }
+
+      OnForwardResponseReady(); // 可能已经有新读到的数据，因而要尝试转发更多
+    }
   }
 
   virtual void OnUpstreamResponse(const boost::system::error_code& error) {
@@ -413,8 +440,9 @@ public:
         auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->to_transfer_bytes(), shared_from_this());
         client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
                     upstream_conn_->to_transfer_bytes(), cb_wrap);
-        LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, to_transfer_bytes="
-                  << upstream_conn_->to_transfer_bytes();
+        LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, "
+                  << "resp=" << std::string(upstream_conn_->to_transfer_data(), upstream_conn_->to_transfer_bytes())
+                  << " to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
       } else {
         LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
       }
@@ -620,7 +648,7 @@ void ClientConnection::ForwardResponse(const char* data, size_t bytes, const For
       }
     } else {
       LOG_DEBUG << "ClientConnection::ForwardResponse callback, bytes_transferred=" << bytes_transferred
-               << " total_bytes=" << bytes << " error=" << error << ", all current data forwarded";
+               << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
       cb(error);  // 发完了，或出错了，才告知MemcCommand
     }
 
@@ -724,16 +752,26 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   up_buf_end_ += bytes_transferred;
 
-  if (cmd_need_more_data_) {
+  if (cmd_need_more_data_) { // 当前已经解析但还需要更多数据的command
+    LOG_INFO << "ClientConnection::HandleRead.cmd_need_more_data_ : up_buf_begin_=" << up_buf_begin_
+               << " bytes=" << (up_buf_end_ - up_buf_begin_)
+               << " bytes_transferred=" << bytes_transferred
+               << ". conn=" << this;
+
     recursive_lock_buffer();
     if (cmd_need_more_data_->upcoming_bytes() > (up_buf_end_ - up_buf_begin_)) {
       update_processed_bytes(up_buf_end_ - up_buf_begin_);
+      LOG_INFO << "ClientConnection::HandleRead.ForwardRequest : up_buf_begin_=" << up_buf_begin_
+               << " bytes=" << (up_buf_end_ - up_buf_begin_) << ". HAS MORE DATA. conn=" << this;
       cmd_need_more_data_->ForwardRequest(buf_ + up_buf_begin_, up_buf_end_ - up_buf_begin_);  
       // 尚未转发cmd_need_more_data_的全部数据
       return;
     } else {
-      update_processed_bytes(cmd_need_more_data_->upcoming_bytes());
+      LOG_INFO << "ClientConnection::HandleRead.ForwardRequest : up_buf_begin_=" << up_buf_begin_
+               << " bytes=" << cmd_need_more_data_->upcoming_bytes() << ". NO MORE DATA. conn=" << this;
       cmd_need_more_data_->ForwardRequest(buf_ + up_buf_begin_, cmd_need_more_data_->upcoming_bytes());  
+      update_processed_bytes(cmd_need_more_data_->upcoming_bytes());
+      cmd_need_more_data_.reset();
       // 终于转发cmd_need_more_data_的全部数据,  继续处理其他命令
     }
   }
@@ -741,9 +779,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   size_t cmd_line_bytes = 0;
   bool is_new_version = false;
 
-  // , parsed_bytes_(0)
-
-  while(up_buf_begin_ < up_buf_end_) {
+  while(parsed_bytes_ < up_buf_end_) { // TODO : 提取buffer对象
     size_t body_bytes = 0;
     bool lock_buffer = true;
 
@@ -760,6 +796,10 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       return;
     } else {
       LOG_DEBUG << "ClientConnection::HandleRead CreateCommand ok, cmd_line_size=" << cmd_line_bytes
+                << " body_bytes=" << body_bytes
+                << " total_bytes=" << (cmd_line_bytes + body_bytes)
+                << " parsed_bytes=" << parsed_bytes
+                << " received_bytes=" << (up_buf_end_ - up_buf_begin_)
                 << " sub_commands.size=" << sub_commands.size();
       for(auto entry : sub_commands) { // TODO : 要控制单client的并发command数
         LOG_DEBUG << "new version command created";
@@ -779,7 +819,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       parsed_bytes_ += parsed_bytes;
       up_buf_begin_ += std::min((size_t)parsed_bytes, up_buf_end_ - up_buf_begin_);
       if (lock_buffer) {
-        ++buf_lock_;
+        recursive_lock_buffer();
       }
     }
   }
@@ -915,7 +955,8 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
 void ClientConnection::try_free_buffer_space() {
   // TODO : locking ?
   if (buf_lock_ == 0) {
-    LOG_INFO << "try_free_buffer_space, buf is unlocked, try moving offset";
+    LOG_INFO << "in try_free_buffer_space(), buf is unlocked, try moving offset, PRE: begin=" << up_buf_begin_
+             << " end=" << up_buf_end_ << " parsed=" << parsed_bytes_;
     if (up_buf_begin_ == up_buf_end_) {
       parsed_bytes_ -= up_buf_begin_;
       up_buf_begin_ = up_buf_end_ = 0;
@@ -926,8 +967,10 @@ void ClientConnection::try_free_buffer_space() {
       up_buf_end_ -= up_buf_begin_;
       up_buf_begin_ = 0;
     }
+    LOG_INFO << "in try_free_buffer_space(), buf is unlocked, try moving offset, POST: begin=" << up_buf_begin_
+             << " end=" << up_buf_end_ << " parsed=" << parsed_bytes_;
   } else {
-    LOG_WARN << "try_free_buffer_space, buf is locked";
+    LOG_WARN << "in try_free_buffer_space, buf is locked, do nothing";
   }
 }
 void ClientConnection::update_processed_bytes(size_t processed) {
