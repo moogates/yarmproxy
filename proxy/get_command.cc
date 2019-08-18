@@ -86,19 +86,19 @@ bool SingleGetCommand::ParseUpstreamResponse() {
 }
 
 void SingleGetCommand::OnForwardResponseReady() {
-  if (upstream_conn_->read_buffer_.to_transfer_bytes() == 0) { // TODO : for test only, 正常这里不触发解析, 在收到数据时候触发的解析，会一次解析所有可解析的
+  if (upstream_conn_->read_buffer_.unprocessed_bytes() == 0) { // TODO : for test only, 正常这里不触发解析, 在收到数据时候触发的解析，会一次解析所有可解析的
      ParseUpstreamResponse();
   }
 
-  if (!is_forwarding_response_ && upstream_conn_->read_buffer_.to_transfer_bytes() > 0) {
+  if (!is_forwarding_response_ && upstream_conn_->read_buffer_.unprocessed_bytes() > 0) {
     is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-    auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->read_buffer_.to_transfer_bytes(), shared_from_this());
-    client_conn_->ForwardResponse(upstream_conn_->read_buffer_.to_transfer_data(),
-                                  upstream_conn_->read_buffer_.to_transfer_bytes(),
+    auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->read_buffer_.unprocessed_bytes(), shared_from_this());
+    client_conn_->ForwardResponse(upstream_conn_->read_buffer_.unprocessed_data(),
+                                  upstream_conn_->read_buffer_.unprocessed_bytes(),
                                   cb_wrap);
     // LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, data="
-    //           << std::string(upstream_conn_->read_buffer_.to_transfer_data(), upstream_conn_->read_buffer_.to_transfer_bytes() - 2)
-    //           << " to_transfer_bytes=" << upstream_conn_->read_buffer_.to_transfer_bytes();
+    //           << std::string(upstream_conn_->read_buffer_.unprocessed_data(), upstream_conn_->read_buffer_.unprocessed_bytes() - 2)
+    //           << " unprocessed_bytes=" << upstream_conn_->read_buffer_.unprocessed_bytes();
   } else {
     LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, upstream no data ready to_transfer, waiting to read more data then write down";
   }

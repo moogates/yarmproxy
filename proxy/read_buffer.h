@@ -12,48 +12,48 @@ private:
   enum { BUFFER_SIZE = 32 * 1024}; // TODO : use c++11 enum
   char data_[BUFFER_SIZE];
 
-  size_t popped_bytes_;
-  size_t pushed_bytes_;
+  size_t processed_bytes_;
+  size_t received_bytes_;
   size_t parsed_bytes_;
-
   size_t memmove_lock_count_;
 public:
-  ReadBuffer() : popped_bytes_(0)
-               , pushed_bytes_(0)
+  ReadBuffer() : processed_bytes_(0)
+               , received_bytes_(0)
                , parsed_bytes_(0) 
                , memmove_lock_count_(0) {
   }
-public:
+
   void Reset() {
-    pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
+    received_bytes_ = processed_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
     memmove_lock_count_ = 0;
   }
 
   bool has_much_free_space() {
-    return pushed_bytes_ * 3 <  BUFFER_SIZE * 2; // there is still more than 1/3 buffer space free
+    return received_bytes_ * 3 <  BUFFER_SIZE * 2; // there is still more than 1/3 buffer space free
   }
 
-  char* free_begin() {
-    return data_ + pushed_bytes_;
+  char* free_space_begin() {
+    return data_ + received_bytes_;
   }
-  size_t free_size() {
-    return BUFFER_SIZE - pushed_bytes_;
+  size_t free_space_size() {
+    return BUFFER_SIZE - received_bytes_;
   }
 
   void lock_memmove();
   void unlock_memmove();
 
-  const char* to_transfer_data() const { // 可以向下游传递的数据
-    return data_ + popped_bytes_;
+  const char* unprocessed_data() const {
+    return data_ + processed_bytes_;
   }
-  size_t to_transfer_bytes() const {
-    LOG_DEBUG << "ReadBuffer::to_transfer_bytes pushed="
-              << pushed_bytes_ << " parsed=" << parsed_bytes_
-              << " popped=" << popped_bytes_;
-    return std::min(pushed_bytes_, parsed_bytes_) - popped_bytes_;
+  size_t unprocessed_bytes() const {
+    LOG_DEBUG << "ReadBuffer::unprocessed_bytes pushed="
+              << received_bytes_ << " parsed=" << parsed_bytes_
+              << " processed=" << processed_bytes_;
+    return std::min(received_bytes_, parsed_bytes_) - processed_bytes_;
   }
-  void update_transfered_bytes(size_t transfered);
-  void update_received_bytes(size_t transfered);
+
+  void update_processed_bytes(size_t processes_bytes);
+  void update_received_bytes(size_t received_bytes);
 
   void update_parsed_bytes(size_t bytes) {
     parsed_bytes_ += bytes;

@@ -60,7 +60,7 @@ UpstreamConn::~UpstreamConn() {
 
   void UpstreamConn::ReadResponse() {
     // socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
-    socket_.async_read_some(boost::asio::buffer(read_buffer_.free_begin(), read_buffer_.free_size()),
+    socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
         std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
   }
 
@@ -72,7 +72,7 @@ UpstreamConn::~UpstreamConn() {
       read_buffer_.lock_memmove();
 
       // socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
-      socket_.async_read_some(boost::asio::buffer(read_buffer_.free_begin(), read_buffer_.free_size()),
+      socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
           std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
       LOG_DEBUG << "TryReadMoreData";
     } else {
@@ -136,7 +136,7 @@ UpstreamConn::~UpstreamConn() {
         read_buffer_.Reset();  // TODO : 这里还需要吗？
       
         // socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
-        socket_.async_read_some(boost::asio::buffer(read_buffer_.free_begin(), read_buffer_.free_size()),
+        socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
             std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
       }
     }
