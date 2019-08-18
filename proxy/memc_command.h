@@ -18,14 +18,14 @@ class MemcCommand : public std::enable_shared_from_this<MemcCommand> {
 public:
   static int CreateCommand(boost::asio::io_service& io_service,
                            std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
-                           size_t* cmd_line_bytes, size_t* body_bytes, bool* lock_buffer, std::list<std::shared_ptr<MemcCommand>>* sub_cmds);
+                           std::list<std::shared_ptr<MemcCommand>>* sub_cmds);
   MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
       std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
 
 public:
   virtual ~MemcCommand();
 //////////////////////////////////////
-  virtual void ForwardRequest(const char * buf, size_t bytes) = 0;
+  void ForwardRequest(const char * buf, size_t bytes);
   virtual bool ParseUpstreamResponse() = 0;
 
   virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
@@ -38,6 +38,7 @@ public:
 private:
   // 判断是否最靠前的command, 是才可以转发
   bool IsFormostCommand();
+  virtual void DoForwardRequest(const char * buf, size_t bytes) = 0;
 public:
   virtual size_t request_body_upcoming_bytes() const {
     return 0;
@@ -52,8 +53,11 @@ public:
 //////////////////////////////////////
   // void AsyncRead();
   void Abort();
-private:
+public:
   virtual std::string cmd_line_without_rn() const = 0; // for debug info only
+  virtual size_t request_body_bytes() const {  // for debug info only
+    return 0;
+  }
 
 public:
   UpstreamConn * upstream_conn() {

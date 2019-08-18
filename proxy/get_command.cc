@@ -104,17 +104,7 @@ void SingleGetCommand::OnForwardResponseReady() {
   }
 }
 
-void SingleGetCommand::ForwardRequest(const char *, size_t) {
-  if (upstream_conn_ == nullptr) {
-    LOG_DEBUG << "SingleGetCommand (" << cmd_line_without_rn() << ") create upstream conn";
-    upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_,
-                                      WrapOnUpstreamResponse(shared_from_this()),
-                                      WrapOnUpstreamRequestWritten(shared_from_this()));
-  } else {
-    LOG_DEBUG << "SingleGetCommand (" << cmd_line_without_rn() << ") reuse upstream conn";
-    upstream_conn_->set_upstream_read_callback(WrapOnUpstreamResponse(shared_from_this()),
-                                               WrapOnUpstreamRequestWritten(shared_from_this()));
-  }
+void SingleGetCommand::DoForwardRequest(const char *, size_t) {
   upstream_conn_->ForwardRequest(cmd_line_.data(), cmd_line_.size(), false);
 }
 

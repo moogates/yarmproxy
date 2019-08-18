@@ -32,18 +32,8 @@ size_t WriteCommand::request_body_upcoming_bytes() const {
   return request_cmd_len_ + request_body_bytes_ - bytes_forwarding_ - request_forwarded_bytes_;
 }
 
-// TODO : merge ForwardRequest() into base class
-void WriteCommand::ForwardRequest(const char * request_data, size_t client_buf_received_bytes) {
-  if (upstream_conn_ == nullptr) {
-    LOG_DEBUG << "WriteCommand::ForwardRequest(" << cmd_line_without_rn() << ") create upstream conn";
-    upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_, WrapOnUpstreamResponse(shared_from_this()),
-                                      WrapOnUpstreamRequestWritten(shared_from_this()));
-  } else {
-    LOG_DEBUG << "WriteCommand::ForwardRequest(" << cmd_line_without_rn() << ") reuse upstream conn";
-    upstream_conn_->set_upstream_read_callback(WrapOnUpstreamResponse(shared_from_this()),
-                                               WrapOnUpstreamRequestWritten(shared_from_this()));
-  }
-
+void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) {
+  client_conn_->recursive_lock_buffer();
   bytes_forwarding_ = std::min(client_buf_received_bytes, request_cmd_len_ + request_body_bytes_); // FIXME
   upstream_conn_->ForwardRequest(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
 }

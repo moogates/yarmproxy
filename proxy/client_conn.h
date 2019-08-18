@@ -53,39 +53,39 @@ public:
   void try_free_buffer_space();
 
   bool has_much_free_space() {
-    return received_bytes_ * 3 <  BUFFER_SIZE * 2; // there is still more than 1/3 buffer space free
+    return received_offset_ * 3 <  BUFFER_SIZE * 2; // there is still more than 1/3 buffer space free
   }
 
   char* free_space_begin() {
-    return data_ + received_bytes_;
+    return data_ + received_offset_;
   }
   size_t free_space_size() {
-    return BUFFER_SIZE - received_bytes_;
+    return BUFFER_SIZE - received_offset_;
   }
 
   const char* unprocessed_data() const {
-    return data_ + processed_bytes_;
+    return data_ + processed_offset_;
   }
 
   size_t parsed_unreceived_bytes() const {
-    if (parsed_bytes_ > received_bytes_) {
-      return parsed_bytes_ - received_bytes_;
+    if (parsed_offset_ > received_offset_) {
+      return parsed_offset_ - received_offset_;
     }
     return 0;
   }
 
   size_t received_bytes() const {
-    return received_bytes_ - processed_bytes_;
+    return received_offset_ - processed_offset_;
   }
 
   size_t unparsed_received_bytes() const {
-    if (received_bytes_ > parsed_bytes_) {
-      return received_bytes_ - parsed_bytes_;
+    if (received_offset_ > parsed_offset_) {
+      return received_offset_ - parsed_offset_;
     }
     return 0;
   }
 //size_t unprocessed_bytes() const {
-//  return std::min(received_bytes_, parsed_bytes_) - processed_bytes_;
+//  return std::min(received_offset_, parsed_offset_) - processed_offset_;
 //}
 
 protected:
@@ -96,8 +96,8 @@ private:
   enum {BUFFER_SIZE = 64 * 1024};
   char data_[BUFFER_SIZE];
   size_t buf_lock_;
-  size_t processed_bytes_, received_bytes_;
-  size_t parsed_bytes_;
+  size_t processed_offset_, received_offset_;
+  size_t parsed_offset_;
 
 protected:
   UpstreamConnPool * upconn_pool_;
