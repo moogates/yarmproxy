@@ -23,7 +23,7 @@ MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::end
   , client_conn_(owner)
   , io_service_(io_service)
   , loaded_(false)
-  , upstream_nomore_data_(false)
+  , upstream_nomore_response_(false)
 {
   upstream_conn_ = owner->upconn_pool()->Pop(upstream_endpoint_);
 };
@@ -59,7 +59,7 @@ void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
              << upstream_conn_->read_buffer_.unprocessed_bytes();
   }
 
-  if (!upstream_nomore_data()) {
+  if (!upstream_nomore_response()) {
     upstream_conn_->TryReadMoreData(); // upstream 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
   }
 }
@@ -97,14 +97,14 @@ void MemcCommand::OnForwardResponseFinished(size_t bytes, const boost::system::e
 
   upstream_conn_->read_buffer_.update_processed_bytes(bytes);
 
-  if (upstream_nomore_data() && upstream_conn_->read_buffer_.unprocessed_bytes() == 0) {
+  if (upstream_nomore_response() && upstream_conn_->read_buffer_.unprocessed_bytes() == 0) {
     client_conn_->RotateFirstCommand();
-    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream_nomore_data, and all data forwarded to client";
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream_nomore_response, and all data forwarded to client";
   } else {
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream transfered_bytes=" << bytes
               << " ready_to_transfer_bytes=" << upstream_conn_->read_buffer_.unprocessed_bytes();
     is_forwarding_response_ = false;
-    if (!upstream_nomore_data()) {
+    if (!upstream_nomore_response()) {
       upstream_conn_->TryReadMoreData(); // 这里必须继续try
     }
 

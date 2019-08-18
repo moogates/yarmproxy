@@ -19,10 +19,10 @@ public:
   static int CreateCommand(boost::asio::io_service& io_service,
                            std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
                            size_t* cmd_line_bytes, size_t* body_bytes, bool* lock_buffer, std::list<std::shared_ptr<MemcCommand>>* sub_cmds);
-
   MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
       std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
 
+public:
   virtual ~MemcCommand();
 //////////////////////////////////////
   virtual void ForwardRequest(const char * buf, size_t bytes) = 0;
@@ -42,11 +42,12 @@ public:
   virtual size_t request_body_upcoming_bytes() const {
     return 0;
   }
-  bool upstream_nomore_data() {
-    return upstream_nomore_data_;
+
+  bool upstream_nomore_response() {
+    return upstream_nomore_response_;
   }
-  void set_upstream_nomore_data() {
-    upstream_nomore_data_ = true;
+  void set_upstream_nomore_response() {
+    upstream_nomore_response_ = true;
   }
 //////////////////////////////////////
   // void AsyncRead();
@@ -78,7 +79,7 @@ private:
   timeval time_created_;
   bool loaded_;
 ////////////////////////////
-  bool upstream_nomore_data_;
+  bool upstream_nomore_response_;
 };
 
 }

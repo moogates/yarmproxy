@@ -84,17 +84,17 @@ UpstreamConn::~UpstreamConn() {
   void UpstreamConn::ForwardRequest(const char* data, size_t bytes, bool has_more_data) {
     if (!socket_.is_open()) {
       LOG_DEBUG << "UpstreamConn::ForwardRequest open socket, req="
-                << std::string(data, bytes - 2) << " size=" << bytes
+                // << std::string(data, bytes - 2) << " size=" << bytes
                 << " has_more_data=" << has_more_data << " conn=" << this;
       socket_.async_connect(upstream_endpoint_, std::bind(&UpstreamConn::HandleConnect, this, 
           data, bytes, has_more_data, std::placeholders::_1));
       return;
     }
 
-    LOG_DEBUG << "UpstreamConn::ForwardRequest write data,  bytes=" << bytes
+    LOG_DEBUG << "UpstreamConn::ForwardRequest write data, bytes=" << bytes
               << " has_more_data=" << has_more_data
-              << " req_ptr=" << (void*)data
-              << " req_data=" << std::string(data, bytes - 2)
+              // << " req_ptr=" << (void*)data
+              // << " req_data=" << std::string(data, bytes - 2)
               << " conn=" << this;
     async_write(socket_, boost::asio::buffer(data, bytes),
         std::bind(&UpstreamConn::HandleWrite, this, data, bytes, has_more_data,
@@ -205,7 +205,7 @@ UpstreamConn * UpstreamConnPool::Pop(const ip::tcp::endpoint & ep){
   if ((i != conn_map_.end()) && (!i->second.empty())) {
     conn = i->second.back();
     i->second.pop_back();
-    // MCE_DEBUG("conn_pool " << ep << " pop. size=" << conn_map_[ep].size());
+    // LOG_DEBUG << "conn_pool " << ep << " pop. size=" << conn_map_[ep].size();
   }
   return conn;
 }
@@ -222,7 +222,7 @@ void UpstreamConnPool::Push(const ip::tcp::endpoint & ep, UpstreamConn * conn) {
       // conn->ResetBuffer();
       conn->read_buffer_.Reset();
       conn_map_[ep].push_back(conn);
-      // MCE_DEBUG("conn_pool " << ep << " push. size=" << conn_map_[ep].size());
+      // LOG_DEBUG << "conn_pool " << ep << " push. size=" << conn_map_[ep].size();
     }
   }
 }

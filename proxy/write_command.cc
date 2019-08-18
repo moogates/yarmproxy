@@ -78,7 +78,7 @@ bool WriteCommand::ParseUpstreamResponse() {
     return true;
   }
 
-  set_upstream_nomore_data();
+  set_upstream_nomore_response();
   upstream_conn_->read_buffer_.update_parsed_bytes(p - entry + 1);
   LOG_WARN << "WriteCommand ParseUpstreamResponse resp=[" << std::string(entry, p - entry - 1) << "]";
   return true;

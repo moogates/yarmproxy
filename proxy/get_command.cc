@@ -65,7 +65,7 @@ bool SingleGetCommand::ParseUpstreamResponse() {
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-        set_upstream_nomore_data();
+        set_upstream_nomore_response();
         upstream_conn_->read_buffer_.update_parsed_bytes(sizeof("END\r\n") - 1);
         if (upstream_conn_->read_buffer_.unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;

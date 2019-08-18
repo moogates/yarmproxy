@@ -36,27 +36,8 @@ public:
 
   void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
 
-  void update_processed_bytes(size_t transfered);
   void recursive_lock_buffer();
   void recursive_unlock_buffer();
-private:
-  void try_free_buffer_space();
-
-protected:
-  boost::asio::io_service& io_service_;
-private:
-  ip::tcp::socket socket_;
-
-  enum {kBufLength = 64 * 1024};
-  char buf_[kBufLength];
-  size_t buf_lock_;
-  size_t up_buf_begin_, up_buf_end_;
-  size_t parsed_bytes_;
-
-  std::shared_ptr<MemcCommand> cmd_need_more_data_; // use weak ptr
-
-protected:
-  UpstreamConnPool * upconn_pool_;
 
 public:
   void ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb);
@@ -65,6 +46,61 @@ public:
   }
   void RotateFirstCommand();
   void TryReadMoreRequest();
+private:
+
+public:
+  void update_processed_bytes(size_t transfered);
+  void try_free_buffer_space();
+
+  bool has_much_free_space() {
+    return received_bytes_ * 3 <  BUFFER_SIZE * 2; // there is still more than 1/3 buffer space free
+  }
+
+  char* free_space_begin() {
+    return data_ + received_bytes_;
+  }
+  size_t free_space_size() {
+    return BUFFER_SIZE - received_bytes_;
+  }
+
+  const char* unprocessed_data() const {
+    return data_ + processed_bytes_;
+  }
+
+  size_t parsed_unreceived_bytes() const {
+    if (parsed_bytes_ > received_bytes_) {
+      return parsed_bytes_ - received_bytes_;
+    }
+    return 0;
+  }
+
+  size_t received_bytes() const {
+    return received_bytes_ - processed_bytes_;
+  }
+
+  size_t unparsed_received_bytes() const {
+    if (received_bytes_ > parsed_bytes_) {
+      return received_bytes_ - parsed_bytes_;
+    }
+    return 0;
+  }
+//size_t unprocessed_bytes() const {
+//  return std::min(received_bytes_, parsed_bytes_) - processed_bytes_;
+//}
+
+protected:
+  boost::asio::io_service& io_service_;
+private:
+  ip::tcp::socket socket_;
+
+  enum {BUFFER_SIZE = 64 * 1024};
+  char data_[BUFFER_SIZE];
+  size_t buf_lock_;
+  size_t processed_bytes_, received_bytes_;
+  size_t parsed_bytes_;
+
+protected:
+  UpstreamConnPool * upconn_pool_;
 
 private:
   ForwardResponseCallback forward_resp_callback_;
