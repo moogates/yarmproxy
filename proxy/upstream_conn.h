@@ -8,6 +8,8 @@
 #include <boost/asio.hpp>
 #include "base/logging.h"
 
+#include "read_buffer.h"
+
 using namespace boost::asio;
 
 namespace mcproxy {
@@ -27,15 +29,15 @@ public:
 
   void ReadResponse();
   void TryReadMoreData();
+//void ResetBuffer() {
+//  popped_bytes_ = pushed_bytes_ = parsed_bytes_ = 0;
+//}
 private:
   void HandleWrite(const char * buf, const size_t bytes, bool has_more_data,
       const boost::system::error_code& error, size_t bytes_transferred);
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleConnect(const char * buf, size_t bytes, bool has_more_data, const boost::system::error_code& error);
 public:
-  void ResetBuffer() {
-    popped_bytes_ = pushed_bytes_ = parsed_bytes_ = 0;
-  }
 
   ip::tcp::socket& socket() {
     return socket_;
@@ -46,37 +48,32 @@ public:
     uptream_write_callback_ = write_callback;
   }
 
-  const char* to_transfer_data() const { // 可以向下游传递的数据
-    return buf_ + popped_bytes_;
-  }
-  size_t to_transfer_bytes() const {
-    return std::min(pushed_bytes_, parsed_bytes_) - popped_bytes_;
-    if (pushed_bytes_ > parsed_bytes_) {
-      return parsed_bytes_ - popped_bytes_;
-    } else {
-      return pushed_bytes_ - popped_bytes_;
-    }
-  }
-  void update_transfered_bytes(size_t transfered);
+private:
+//const char* to_transfer_data() const { // 可以向下游传递的数据
+//  return buf_ + popped_bytes_;
+//}
+//size_t to_transfer_bytes() const {
+//  return std::min(pushed_bytes_, parsed_bytes_) - popped_bytes_;
+//}
+//void update_transfered_bytes(size_t transfered);
 
-  void update_parsed_bytes(size_t bytes) {
-    parsed_bytes_ += bytes;
-  }
-  const char * unparsed_data() const {
-    return buf_ + parsed_bytes_;
-  }
-  size_t unparsed_bytes() const;
-
+//void update_parsed_bytes(size_t bytes) {
+//  parsed_bytes_ += bytes;
+//}
+//const char * unparsed_data() const {
+//  return buf_ + parsed_bytes_;
+//}
+//size_t unparsed_bytes() const;
+public:
+  ReadBuffer read_buffer_;
 private:
   // enum { BUFFER_SIZE = 64 * 1024};
-  enum { BUFFER_SIZE = 32 * 1024}; // TODO : use c++11 enum
-  char buf_[BUFFER_SIZE];
+//enum { BUFFER_SIZE = 32 * 1024}; // TODO : use c++11 enum
+//char buf_[BUFFER_SIZE];
 
-  size_t popped_bytes_;
-  size_t pushed_bytes_;
-
-private:
-  size_t parsed_bytes_;
+//size_t popped_bytes_;
+//size_t pushed_bytes_;
+//size_t parsed_bytes_;
 
   ip::tcp::endpoint upstream_endpoint_;
   ip::tcp::socket socket_;

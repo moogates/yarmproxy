@@ -68,18 +68,18 @@ void WriteCommand::OnUpstreamRequestWritten(size_t, const boost::system::error_c
 }
 
 bool WriteCommand::ParseUpstreamResponse() {
-  const char * entry = upstream_conn_->unparsed_data();
-  const char * p = GetLineEnd(entry, upstream_conn_->unparsed_bytes());
+  const char * entry = upstream_conn_->read_buffer_.unparsed_data();
+  const char * p = GetLineEnd(entry, upstream_conn_->read_buffer_.unparsed_bytes());
   if (p == nullptr) {
     // TODO : no enough data for parsing, please read more
     LOG_DEBUG << "WriteCommand ParseUpstreamResponse no enough data for parsing, please read more"
-              << " data=" << std::string(entry, upstream_conn_->unparsed_bytes())
-              << " bytes=" << upstream_conn_->unparsed_bytes();
+              << " data=" << std::string(entry, upstream_conn_->read_buffer_.unparsed_bytes())
+              << " bytes=" << upstream_conn_->read_buffer_.unparsed_bytes();
     return true;
   }
 
   set_upstream_nomore_data();
-  upstream_conn_->update_parsed_bytes(p - entry + 1);
+  upstream_conn_->read_buffer_.update_parsed_bytes(p - entry + 1);
   LOG_WARN << "WriteCommand ParseUpstreamResponse resp=[" << std::string(entry, p - entry - 1) << "]";
   return true;
 }
