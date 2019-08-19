@@ -16,7 +16,6 @@ public:
     static MemcachedLocator locator;
     return locator;
   }
-  // bool InitCacheClusters();
   bool Initialize();
   boost::asio::ip::tcp::endpoint GetEndpointByKey(const char * key, size_t len);
   boost::asio::ip::tcp::endpoint GetEndpointByKey(const std::string& key);

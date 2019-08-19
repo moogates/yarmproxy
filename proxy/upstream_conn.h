@@ -3,40 +3,84 @@
 
 #include <map>
 #include <string>
+#include <functional>
 
 #include <boost/asio.hpp>
 #include "base/logging.h"
+
+#include "read_buffer.h"
 
 using namespace boost::asio;
 
 namespace mcproxy {
 
+typedef std::function<void(const boost::system::error_code& error)> UpstreamReadCallback;
+typedef std::function<void(size_t written_bytes, const boost::system::error_code& error)> UpstreamWriteCallback;
+
 class UpstreamConn {
 public:
-  UpstreamConn(boost::asio::io_service& io_service, const ip::tcp::endpoint& upendpoint);
+  UpstreamConn(boost::asio::io_service& io_service, 
+      const ip::tcp::endpoint& upendpoint,
+      const UpstreamReadCallback& uptream_read_callback,
+      const UpstreamWriteCallback& uptream_write_callback);
+  ~UpstreamConn();
 
-  void ForwardData(const char* buf, size_t bytes);
-  void HandleWrite(const char * buf, const size_t bytes,
+  void ForwardRequest(const char* data, size_t bytes, bool has_more_data);
+
+  void ReadResponse();
+  void TryReadMoreData();
+//void ResetBuffer() {
+//  popped_bytes_ = pushed_bytes_ = parsed_bytes_ = 0;
+//}
+private:
+  void HandleWrite(const char * buf, const size_t bytes, bool has_more_data,
       const boost::system::error_code& error, size_t bytes_transferred);
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
+  void HandleConnect(const char * buf, size_t bytes, bool has_more_data, const boost::system::error_code& error);
+public:
 
-  void Reset() {
-    popped_bytes_ = pushed_bytes_ = 0;
-  }
-
-  ip::tcp::socket & socket() {
+  ip::tcp::socket& socket() {
     return socket_;
   }
 
-  enum { BUFFER_SIZE = 64 * 1024};
-  char buf_[BUFFER_SIZE];
+  void set_upstream_read_callback(const UpstreamReadCallback& read_callback, const UpstreamWriteCallback& write_callback) {
+    upstream_read_callback_ = read_callback;
+    uptream_write_callback_ = write_callback;
+  }
 
-  size_t popped_bytes_;
-  size_t pushed_bytes_;
 private:
+//const char* to_transfer_data() const { // 可以向下游传递的数据
+//  return buf_ + popped_bytes_;
+//}
+//size_t to_transfer_bytes() const {
+//  return std::min(pushed_bytes_, parsed_bytes_) - popped_bytes_;
+//}
+//void update_transfered_bytes(size_t transfered);
+
+//void update_parsed_bytes(size_t bytes) {
+//  parsed_bytes_ += bytes;
+//}
+//const char * unparsed_data() const {
+//  return buf_ + parsed_bytes_;
+//}
+//size_t unparsed_bytes() const;
+public:
+  ReadBuffer read_buffer_;
+private:
+  // enum { BUFFER_SIZE = 64 * 1024};
+//enum { BUFFER_SIZE = 32 * 1024}; // TODO : use c++11 enum
+//char buf_[BUFFER_SIZE];
+
+//size_t popped_bytes_;
+//size_t pushed_bytes_;
+//size_t parsed_bytes_;
+
   ip::tcp::endpoint upstream_endpoint_;
   ip::tcp::socket socket_;
+  UpstreamReadCallback upstream_read_callback_;
+  UpstreamWriteCallback uptream_write_callback_;
+
+  bool is_reading_more_;
 };
 
 class UpstreamConnPool {

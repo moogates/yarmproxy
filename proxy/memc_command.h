@@ -1,8 +1,7 @@
 #ifndef _MEMC_COMMAND_H_
 #define _MEMC_COMMAND_H_
 
-// #include "memc_command_fwd.h"
-
+#include <list>
 #include <vector>
 #include <string>
 #include <boost/asio.hpp>
@@ -18,99 +17,64 @@ class ClientConnection;
 class MemcCommand : public std::enable_shared_from_this<MemcCommand> {
 public:
   static int CreateCommand(boost::asio::io_service& io_service,
-          std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
-          std::shared_ptr<MemcCommand>* cmd);
-
+                           std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
+                           std::list<std::shared_ptr<MemcCommand>>* sub_cmds);
   MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
       std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
 
+public:
   virtual ~MemcCommand();
+//////////////////////////////////////
+  void ForwardRequest(const char * buf, size_t bytes);
+  virtual bool ParseUpstreamResponse() = 0;
 
-  virtual void ForwardData(const char * buf, size_t bytes);
-  void AsyncRead();
+  virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
+  }
+
+  void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error);
+
+  virtual void OnForwardResponseReady() {}
+  void OnUpstreamResponse(const boost::system::error_code& error);
+private:
+  // 判断是否最靠前的command, 是才可以转发
+  bool IsFormostCommand();
+  virtual void DoForwardRequest(const char * buf, size_t bytes) = 0;
+  virtual size_t request_body_upcoming_bytes() const {
+    return 0;
+  }
+
+public:
+  bool upstream_nomore_response() {
+    return upstream_nomore_response_;
+  }
+  void set_upstream_nomore_response() {
+    upstream_nomore_response_ = true;
+  }
+//////////////////////////////////////
+  // void AsyncRead();
   void Abort();
-
-  // response_cmd_line
-  const std::string & cmd_line() const {
-    return cmd_line_;
-  }
-  size_t cmd_line_bytes() const {
-    return cmd_line_.size();
-  }
-  bool cmd_line_forwarded() {
-    return cmd_line_forwarded_;
-  }
-  void set_cmd_line_forwarded(bool b) {
-    cmd_line_forwarded_ = b;
+public:
+  virtual std::string cmd_line_without_rn() const = 0; // for debug info only
+  virtual size_t request_body_bytes() const {  // for debug info only
+    return 0;
   }
 
-  size_t body_bytes() const {
-    return body_bytes_;
-  }
-  size_t total_bytes() const {
-    return cmd_line_bytes() + body_bytes();
-  }
-  size_t forwarded_bytes() const {
-    return forwarded_bytes_;
-  }
-  size_t missed_popped_bytes() const {
-    return missed_popped_bytes_;
-  }
-  void set_missed_popped_bytes(size_t bytes) {
-    missed_popped_bytes_ = bytes;
-  }
-
-  const std::string & method() const {
-    return method_;
-  }
-
-  std::string & missed_buf() {
-    return missed_buf_;
-  }
-
-  bool missed_ready() const {
-    return missed_ready_;
-  }
-
-  const ip::tcp::endpoint & upstream_endpoint() const {
-    return upstream_endpoint_;
-  }
-
+public:
   UpstreamConn * upstream_conn() {
     return upstream_conn_;
   }
 
-  bool NeedLoadMissed();
-
   void set_upstream_conn(UpstreamConn * conn) {
     upstream_conn_ = conn;
   }
-
-  void RemoveMissedKey(const std::string & key);
-  void LoadMissedKeys();
-  void DispatchMissedKeyData();
-public: // TODO : should be private
-  void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
-  void HandleWrite(const char * buf, const size_t bytes, const boost::system::error_code& error, size_t bytes_transferred);
-  void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  void HandleMissedKeyReady();
 protected:
-  std::string cmd_line_;
-  std::string method_;
+  bool is_forwarding_response_;
 
-  bool cmd_line_forwarded_;
-  size_t forwarded_bytes_;
-  size_t body_bytes_;
-
-  std::vector<std::string> missed_keys_;
-  bool missed_ready_;
-  std::string missed_buf_;
-  size_t missed_popped_bytes_;
-  boost::asio::deadline_timer * missed_timer_;
-
+protected:
   ip::tcp::endpoint upstream_endpoint_;
-  UpstreamConn * upstream_conn_;
 protected:
+  UpstreamConn * upstream_conn_;
+
   std::shared_ptr<ClientConnection> client_conn_;
   boost::asio::io_service& io_service_;
 
@@ -118,6 +82,8 @@ private:
 
   timeval time_created_;
   bool loaded_;
+////////////////////////////
+  bool upstream_nomore_response_;
 };
 
 }

@@ -4,77 +4,265 @@
 #include <functional>
 
 #include <boost/asio.hpp>
-#include <boost/algorithm/string.hpp>
 
-#include "base/thread_pool.h"
 #include "base/logging.h"
 
 #include "client_conn.h"
+#include "memcached_locator.h"
 #include "upstream_conn.h"
 
+#include "get_command.h"
+#include "write_command.h"
+
 namespace mcproxy {
+
+ForwardResponseCallback WrapOnForwardResponseFinished(size_t to_transfer_bytes, std::weak_ptr<MemcCommand> cmd_wptr) { 
+    // std::weak_ptr<MemcCommand> cmd_wptr = shared_from_this();
+    // typedef std::function<void(size_t bytes, const boost::system::error_code& error)> ForwardResponseCallback;
+    return [to_transfer_bytes, cmd_wptr](const boost::system::error_code& error) {
+                          if (auto cmd_ptr = cmd_wptr.lock()) {
+                            LOG_DEBUG << "OnForwardResponseFinished cmd weak_ptr valid";
+                            cmd_ptr->OnForwardResponseFinished(to_transfer_bytes, error);
+                          } else {
+                            LOG_DEBUG << "OnForwardResponseFinished cmd weak_ptr released";
+                          }
+                        };
+}
+
+
+
+// 指向行尾的'\n'字符
+const char * GetLineEnd(const char * buf, size_t len) {
+  const char * p = buf + 1; // 首字符肯定不是'\n'
+  for(;;) {
+    p = (const char *)memchr(p, '\n', len - (p - buf));
+    if (p == nullptr) {
+      break;
+    }
+    if(*(p - 1) == '\r') {
+      break;
+    }
+    ++ p; // p 指向 '\n' 的下一个字符
+  }
+
+  return p;
+}
+
+bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
+  LOG_DEBUG << "GroupKeysByEndpoint enter, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
+  for(const char* p = cmd_line + 4/*strlen("get ")*/; p < cmd_line + cmd_line_size - 2/*strlen("\r\n")*/; ++p) {
+    const char* q = p;
+    while(*q != ' ' && *q != '\r') {
+      ++q;
+    }
+    ip::tcp::endpoint ep = MemcachedLocator::Instance().GetEndpointByKey(p, q - p);
+
+    auto it = endpoint_key_map->find(ep);
+    if (it == endpoint_key_map->end()) {
+      it = endpoint_key_map->insert(std::make_pair(ep, std::string("get"))).first;
+    }
+
+    it->second.append(p - 1, 1 + q - p);
+    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first << " key=[" << std::string(p-1, 1+q-p) << "]"
+              << " current=" << it->second;
+
+    p = q;
+  }
+  LOG_DEBUG << "GroupKeysByEndpoint exit, endpoint_key_map.size=" << endpoint_key_map->size();
+
+//for (auto it = cmd_line_map.begin(); it != cmd_line_map.end(); ++it) {
+//  LOG_DEBUG << "GroupGetKeys " << it->first << " get_keys=" << it->second;
+//  it->second += "\r\n";
+//  std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(io_service_, it->first, client_conn_, it->second.c_str(), it->second.size()));
+//  // fetching_cmd_set_.insert(cmd);
+//  subcommands.push_back(cmd);
+//}
+  return true;
+}
+
+int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key, size_t* bytes) {
+  //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
+  {
+    const char *p = cmd_line;
+    while(*(p++) != ' ') {
+      ;
+    }
+    const char *q = p;
+    while(*(++q) != ' ') {
+      ;
+    }
+    key->assign(p, q - p);
+  }
+
+  {
+    const char *p = cmd_line + cmd_len - 2;
+    while(*(p-1) != ' ') {
+      --p;
+    }
+    *bytes = std::atoi(p) + 2; // 2 is lenght of the ending "\r\n"
+  }
+  LOG_DEBUG << "ParseWriteCommandLine cmd=" << std::string(cmd_line, cmd_len - 2)
+            << " key=[" << *key << "]" << " body_bytes=" << *bytes;
+
+  return 0;
+}
+
 
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
     std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len) 
-  : cmd_line_(buf, cmd_len)
-  , cmd_line_forwarded_(false)
-  , forwarded_bytes_(0)
-  , body_bytes_(0)
-  , missed_ready_(false)
-  , missed_popped_bytes_(0)
-  , missed_timer_(0)
+  : is_forwarding_response_(false)
   , upstream_endpoint_(ep)
   , upstream_conn_(nullptr)
   , client_conn_(owner)
   , io_service_(io_service)
   , loaded_(false)
+  , upstream_nomore_response_(false)
 {
-  std::vector<std::string> strs;
-  std::string cmd_line(buf, cmd_len); 
-  boost::split(strs, cmd_line, boost::is_any_of(" \r\n"), boost::token_compress_on);
-  method_ = strs[0];
-  if (method_ == "set") {
-    body_bytes_ += size_t(std::stoi(strs[4]));
-    body_bytes_ += 2; // 数据后面, 要有一个 "\r\n" 串
-  } else if (method_ == "get") {
-    strs.erase(strs.begin());
-    strs.pop_back();
-    missed_keys_.swap(strs);
-    // MCE_DEBUG("keys count : " << missed_keys_.size());
-  }
-
   upstream_conn_ = owner->upconn_pool()->Pop(upstream_endpoint_);
 };
 
-MemcCommand::~MemcCommand() {
-  if (missed_timer_) {
-    delete missed_timer_;
+// 0 : ok, 数据不够解析
+// >0 : ok, 解析成功，返回已解析的字节数
+// <0 : error, 未知命令
+int MemcCommand::CreateCommand(boost::asio::io_service& asio_service,
+          std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
+          std::list<std::shared_ptr<MemcCommand>>* sub_commands) {
+  const char * p = GetLineEnd(buf, size);
+  if (p == nullptr) {
+    LOG_DEBUG << "CreateCommand no complete cmd line found";
+    return 0;
+  }
+
+  size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
+
+  if (strncmp(buf, "get ", 4) == 0) {
+#define DONT_USE_MAP 0
+#if DONT_USE_MAP
+    auto ep = MemcachedLocator::Instance().GetEndpointByKey("1");
+    std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(asio_service,
+                     ep, owner, buf, cmd_line_bytes));
+    sub_commands->push_back(cmd);
+    LOG_DEBUG << "DONT_USE_MAP ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
+    return cmd_line_bytes;
+#endif
+    std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
+    GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
+    for (auto it = endpoint_key_map.begin(); it != endpoint_key_map.end(); ++it) {
+      LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first << " keys=" << it->second;
+      it->second += "\r\n";
+      std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(asio_service, it->first, owner, it->second.c_str(), it->second.size()));
+      // fetching_cmd_set_.insert(cmd);
+      // subcommands.push_back(cmd);
+      sub_commands->push_back(cmd);
+    }
+    return cmd_line_bytes;
+  } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0 || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
+    std::string key;
+    size_t body_bytes;
+    ParseWriteCommandLine(buf, cmd_line_bytes, &key, &body_bytes);
+
+    //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
+    std::shared_ptr<MemcCommand> cmd(new WriteCommand(asio_service,
+              MemcachedLocator::Instance().GetEndpointByKey(key),
+              owner, buf, cmd_line_bytes, body_bytes));
+    sub_commands->push_back(cmd);
+    return cmd_line_bytes + body_bytes;
+  } else {
+    LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
+             << ") len=" << cmd_line_bytes << " client_conn=" << owner.get();
+    return -1;
   }
 }
 
-void MemcCommand::ForwardData(const char * buf, size_t bytes) {
-  if (upstream_conn_ == nullptr) {
-    // 需要一个上行的 memcache connection
-    upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_);
-    upstream_conn_->socket().async_connect(upstream_endpoint_, std::bind(&MemcCommand::HandleConnect, shared_from_this(), 
-        buf, bytes, std::placeholders::_1));
+void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
+  if (error) {
+    LOG_WARN << "MemcCommand::OnUpstreamResponse " << cmd_line_without_rn()
+             << " upstream read error : " << upstream_endpoint_ << " - "  << error << " " << error.message();
+    client_conn_->OnCommandError(shared_from_this(), error);
     return;
   }
-  
-  //MCE_DEBUG(cmd_line_ << " write data to upstream. bytes : " << bytes);
-  char * p = const_cast<char *>(buf);
-  if (!cmd_line_forwarded()) {
-    p -= cmd_line_.size(); // TODO : 检查逻辑, 确保这里确实不会越界
-    memcpy(p, cmd_line_.c_str(), cmd_line_.size());
-    bytes += cmd_line_.size();
+  LOG_DEBUG << "SingleGetCommand OnUpstreamResponse data";
+
+  bool valid = ParseUpstreamResponse();
+  if (!valid) {
+    LOG_WARN << "SingleGetCommand parsing error! valid=false";
+    // TODO : error handling
+  }
+  if (IsFormostCommand()) {
+    if (!is_forwarding_response_) {
+      is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
+      auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->read_buffer_.unprocessed_bytes(), shared_from_this());
+      client_conn_->ForwardResponse(upstream_conn_->read_buffer_.unprocessed_data(),
+                  upstream_conn_->read_buffer_.unprocessed_bytes(), cb_wrap);
+      LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, unprocessed_bytes="
+                << upstream_conn_->read_buffer_.unprocessed_bytes();
+    } else {
+      LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
+    }
+  } else {
+    // TODO : do nothing, just wait
+    LOG_WARN << "SingleGetCommand IsFirstCommand false! unprocessed_bytes="
+             << upstream_conn_->read_buffer_.unprocessed_bytes();
   }
 
-  //MCE_INFO("MemcCommand::ForwardData --> AsyncWrite cli:" << client_conn_.operator->() << " cmd:" << this);
-  async_write(upstream_conn_->socket(),
-      boost::asio::buffer(p, bytes),
-      std::bind(&MemcCommand::HandleWrite, shared_from_this(), p, bytes,
-          std::placeholders::_1, std::placeholders::_2));
+  if (!upstream_nomore_response()) {
+    upstream_conn_->TryReadMoreData(); // upstream 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
+  }
+}
+
+MemcCommand::~MemcCommand() {
+  if (upstream_conn_) {
+    delete upstream_conn_; // TODO : 需要连接池。暂时直接销毁
+  }
+}
+
+UpstreamReadCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr) {
+  return [cmd_wptr](const boost::system::error_code& error) {
+           // if (std::shared_ptr<MemcCommand> cmd = cmd_wptr.lock()) {
+           if (auto cmd_ptr = cmd_wptr.lock()) {
+             LOG_DEBUG << "OnUpstreamResponse cmd ok";
+             cmd_ptr->OnUpstreamResponse(error);
+           } else {
+             LOG_DEBUG << "OnUpstreamResponse cmd released";
+           }
+         };
+
+  // TODO : 梳理资源管理和释放的时机
+  auto cmd_ptr = cmd_wptr.lock();
+  return [cmd_ptr](const boost::system::error_code& error) {
+           cmd_ptr->OnUpstreamResponse(error);
+         };
+}
+
+UpstreamWriteCallback WrapOnUpstreamRequestWritten(std::weak_ptr<MemcCommand> cmd_wptr) {
+  return [cmd_wptr](size_t written_bytes, const boost::system::error_code& error) {
+           // if (std::shared_ptr<MemcCommand> cmd = cmd_wptr.lock()) {
+           if (auto cmd_ptr = cmd_wptr.lock()) {
+             LOG_DEBUG << "OnUpstreamRequestWritten cmd ok";
+             cmd_ptr->OnUpstreamRequestWritten(written_bytes, error);
+           } else {
+             LOG_DEBUG << "OnUpstreamRequestWritten cmd released";
+           }
+         };
+}
+
+bool MemcCommand::IsFormostCommand() {
+  return client_conn_->IsFirstCommand(shared_from_this());
+}
+
+void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
+  if (upstream_conn_ == nullptr) {
+    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create upstream conn";
+    upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_,
+                                      WrapOnUpstreamResponse(shared_from_this()),
+                                      WrapOnUpstreamRequestWritten(shared_from_this()));
+  } else {
+    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") reuse upstream conn";
+    upstream_conn_->set_upstream_read_callback(WrapOnUpstreamResponse(shared_from_this()),
+                                               WrapOnUpstreamRequestWritten(shared_from_this()));
+  }
+  DoForwardRequest(buf, bytes);
 }
 
 void MemcCommand::Abort() {
@@ -88,166 +276,28 @@ void MemcCommand::Abort() {
   }
 }
 
-void MemcCommand::AsyncRead() {
-  //MCE_DEBUG(cmd_line_ << " read buffer size:" << UpstreamConn::BUFFER_SIZE - upstream_conn_->pushed_bytes_);
-  upstream_conn_->socket().async_read_some(boost::asio::buffer(upstream_conn_->buf_ + upstream_conn_->pushed_bytes_,
-                                          UpstreamConn::BUFFER_SIZE - upstream_conn_->pushed_bytes_),
-                  std::bind(&MemcCommand::HandleRead, shared_from_this(),
-                      std::placeholders::_1, std::placeholders::_2));
-}
-
-void MemcCommand::HandleWrite(const char * buf,
-    const size_t bytes, // 命令的当前可写字节数(包含命令行和body)
-    const boost::system::error_code& error, size_t bytes_transferred)
-{
+void MemcCommand::OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
   if (error) {
-    LOG_WARN << "MemcCommand::HandleWrite " << cmd_line_ << " err, upstream="
-             << upstream_endpoint_ << " - "  << error << " " << error.message();
-    client_conn_->OnCommandError(shared_from_this(), error);
+    // TODO
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished (" << cmd_line_without_rn() << ") error=" << error;
     return;
   }
 
-  LOG_DEBUG << "MemcCommand::HandleWrite " << cmd_line_ << " bytes written to upstream : " << bytes;
+  upstream_conn_->read_buffer_.update_processed_bytes(bytes);
 
-  // forwarded_bytes_ , 是本命令总的已发送字节数
-  // bytes , 是本命令本次已发送字节数, 其中"可能"(cmd_line_forwarded_标志)包括cmd_line的长度
-  forwarded_bytes_ += bytes_transferred;
-
-  if (bytes_transferred < bytes) {
-    LOG_DEBUG << "MemcCommand::HandleWrite " << cmd_line_ << "向 upstream 没写完, 继续写.";
-    boost::asio::async_write(upstream_conn_->socket(),
-        boost::asio::buffer(buf + bytes_transferred, bytes - bytes_transferred),
-        std::bind(&MemcCommand::HandleWrite, shared_from_this(), buf + bytes_transferred, bytes - bytes_transferred,
-            std::placeholders::_1, std::placeholders::_2));
-    return;
-  }
-
-  if (forwarded_bytes_ == total_bytes()) {
-    // 转发了当前命令的所有数据, 需要 client_conn_ 调整相应的 buffer offset
-    LOG_DEBUG << cmd_line_ << "转发了当前命令的所有数据, 等待 upstream 的响应.";
-     
-    if(!upstream_conn_){
-      LOG_WARN << "MemcCommand::HandleWrite --> null upstream_conn cmd=" << this;
-      return;
-    }
-    upstream_conn_->pushed_bytes_ = upstream_conn_->popped_bytes_ = 0;
-    //MCE_INFO("MemcCommand::HandleWrite --> AsyncRead cli:" << client_conn_.operator->() << " cmd:" << this);
-    AsyncRead();
-    //upstream_conn_->socket().async_read_some(boost::asio::buffer(upstream_conn_->buf_, UpstreamConn::BUFFER_SIZE),
-    //                boost::bind(&MemcCommand::HandleRead, shared_from_this(),
-    //                    boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
-
-    client_conn_->HandleForwardAllData(shared_from_this(), bytes);
+  if (upstream_nomore_response() && upstream_conn_->read_buffer_.unprocessed_bytes() == 0) {
+    client_conn_->RotateFirstCommand();
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream_nomore_response, and all data forwarded to client";
   } else {
-    // 转发了当前命令的部分数据, 需要client_conn_ 请求更多client数据
-    //MCE_DEBUG( cmd_line_ << "转发了一部分, 继续处理.");
-    client_conn_->HandleForwardMoreData(shared_from_this(), bytes);
-  }
-}
-
-void MemcCommand::HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error)
-{
-  if (error) {
-    // MCE_WARN("upstream connect error : " << upstream_endpoint_ << " - " << error << " " << error.message());
-    client_conn_->OnCommandError(shared_from_this(), error);
-    return;
-  }
-
-  // TODO : socket option 定制
-  ip::tcp::no_delay no_delay(true);
-  upstream_conn_->socket().set_option(no_delay);
-
-  socket_base::keep_alive keep_alive(true);
-  upstream_conn_->socket().set_option(keep_alive);
-
-  boost::asio::socket_base::linger linger(true, 0);
-  upstream_conn_->socket().set_option(linger);
-
-  //boost::asio::socket_base::receive_buffer_size recv_buf_size;
-  //upstream_conn_->socket().get_option(recv_buf_size);
-
-  //boost::asio::socket_base::send_buffer_size send_buf_size;
-  //upstream_conn_->socket().get_option(send_buf_size);
-
-  ForwardData(buf, bytes);
-}
-
-bool MemcCommand::NeedLoadMissed() {
-  if (missed_keys_.empty()) {
-    return false;
-  }
-
-  return boost::starts_with(missed_keys_[0], "FEED#");
-}
-
-using namespace nbsdx::concurrent;
-class TaskManager {
- static ThreadPool<5> thread_pool_;
-public:
- static ThreadPool<5>& Instance() {
-   return thread_pool_;
- }
-};
-ThreadPool<5> TaskManager::thread_pool_;
-
-// TODO : 只是发起load, 应该改一下名字
-void MemcCommand::LoadMissedKeys() {
-  // MCE_INFO("MemcCommand::LoadMissedKeys --> cli:" << client_conn_.operator->() << " cmd:" << this);
-  loaded_ = true;
-
-  // TODO : lamda capture 成员变量的最佳实践?
-  std::vector<std::string>& missed_keys = missed_keys_;
-  std::shared_ptr<MemcCommand> this_cmd = shared_from_this();
-  TaskManager::Instance().AddJob([&missed_keys, this_cmd]() {
-        // new LoadMissedTask(missed_keys_, shared_from_this())
-        for(std::string key : missed_keys) {
-          LOG_INFO << "load missed key " << std::endl;
-          // TODO : do real loading
-        }
-      });
-}
-
-void MemcCommand::RemoveMissedKey(const std::string & key) {
-  for (size_t i = 0; i < missed_keys_.size(); ++ i) {
-    if (missed_keys_[i] == key) {
-      missed_keys_.erase(missed_keys_.begin() + i);
-      break;
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream transfered_bytes=" << bytes
+              << " ready_to_transfer_bytes=" << upstream_conn_->read_buffer_.unprocessed_bytes();
+    is_forwarding_response_ = false;
+    if (!upstream_nomore_response()) {
+      upstream_conn_->TryReadMoreData(); // 这里必须继续try
     }
+
+    OnForwardResponseReady(); // 可能已经有新读到的数据，因而要尝试转发更多
   }
-}
-
-// 注意, 该函数会被其他线程调用!
-void MemcCommand::DispatchMissedKeyData() {
-  missed_ready_ = true; // 这里不需要同步
-
-  //MCE_DEBUG(cmd_line_ << " 从 loader 取数据完成");
-
-  missed_timer_ = new boost::asio::deadline_timer(io_service_, boost::posix_time::microsec(1));
-  missed_timer_->async_wait(std::bind(&MemcCommand::HandleMissedKeyReady, shared_from_this()));
-}
-
-void MemcCommand::HandleMissedKeyReady() {
-  // MCE_INFO("MemcCommand::HandleMissedKeyReady --> cli:" << client_conn_.operator->() << " cmd:" << this);
-  client_conn_->OnCommandReady(shared_from_this());
-}
-
-void MemcCommand::HandleRead(const boost::system::error_code& error, size_t bytes_transferred)
-{
-  if (error) {
-    // MCE_WARN(cmd_line_ << " upstream read error : " << upstream_endpoint_ << " - "  << error << " " << error.message());
-    client_conn_->OnCommandError(shared_from_this(), error);
-    return;
-  }
-
-  // MCE_DEBUG(cmd_line_ << " bytes read from up server : " << bytes_transferred);
-
-  if (!upstream_conn_){
-    LOG_WARN << "MemcCommand::HandleRead --> upstream_conn_=" << upstream_conn_ << " cmd=" << this;
-    return;
-  }
-  upstream_conn_->pushed_bytes_ += bytes_transferred;
-
-  client_conn_->OnCommandReady(shared_from_this());
 }
 
 }
