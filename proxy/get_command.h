@@ -14,11 +14,11 @@ public:
   virtual ~SingleGetCommand();
 
   virtual void OnForwardResponseReady();
-  virtual void ForwardRequest(const char *, size_t);
   virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
     // 不需要再通知Client Conn
   }
 private:
+  virtual void DoForwardRequest(const char *, size_t);
   virtual bool ParseUpstreamResponse();
   virtual std::string cmd_line_without_rn() const {
     return cmd_line_.substr(0, cmd_line_.size() - 2);

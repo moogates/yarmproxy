@@ -44,14 +44,14 @@ SingleGetCommand::~SingleGetCommand() {
 
 bool SingleGetCommand::ParseUpstreamResponse() {
   bool valid = true;
-  while(upstream_conn_->unparsed_bytes() > 0) {
-    const char * entry = upstream_conn_->unparsed_data();
-    const char * p = GetLineEnd(entry, upstream_conn_->unparsed_bytes());
+  while(upstream_conn_->read_buffer_.unparsed_bytes() > 0) {
+    const char * entry = upstream_conn_->read_buffer_.unparsed_data();
+    const char * p = GetLineEnd(entry, upstream_conn_->read_buffer_.unparsed_bytes());
     if (p == nullptr) {
       // TODO : no enough data for parsing, please read more
       LOG_DEBUG << "ParseUpstreamResponse no enough data for parsing, please read more"
-                << " data=" << std::string(entry, upstream_conn_->unparsed_bytes())
-                << " bytes=" << upstream_conn_->unparsed_bytes();
+                << " data=" << std::string(entry, upstream_conn_->read_buffer_.unparsed_bytes())
+                << " bytes=" << upstream_conn_->read_buffer_.unparsed_bytes();
       return true;
     }
 
@@ -60,14 +60,14 @@ bool SingleGetCommand::ParseUpstreamResponse() {
       size_t body_bytes = GetValueBytes(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
 
-      upstream_conn_->update_parsed_bytes(entry_bytes);
+      upstream_conn_->read_buffer_.update_parsed_bytes(entry_bytes);
       break; // TODO : 每次转发一条，only for test
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-        set_upstream_nomore_data();
-        upstream_conn_->update_parsed_bytes(sizeof("END\r\n") - 1);
-        if (upstream_conn_->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
+        set_upstream_nomore_response();
+        upstream_conn_->read_buffer_.update_parsed_bytes(sizeof("END\r\n") - 1);
+        if (upstream_conn_->read_buffer_.unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
           LOG_WARN << "ParseUpstreamResponse END not really end!";
         } else {
@@ -86,34 +86,25 @@ bool SingleGetCommand::ParseUpstreamResponse() {
 }
 
 void SingleGetCommand::OnForwardResponseReady() {
-  if (upstream_conn_->to_transfer_bytes() == 0) { // TODO : for test only, 正常这里不触发解析, 在收到数据时候触发的解析，会一次解析所有可解析的
+  if (upstream_conn_->read_buffer_.unprocessed_bytes() == 0) { // TODO : for test only, 正常这里不触发解析, 在收到数据时候触发的解析，会一次解析所有可解析的
      ParseUpstreamResponse();
   }
 
-  if (!is_forwarding_response_ && upstream_conn_->to_transfer_bytes() > 0) {
+  if (!is_forwarding_response_ && upstream_conn_->read_buffer_.unprocessed_bytes() > 0) {
     is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-    auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->to_transfer_bytes(), shared_from_this());
-    client_conn_->ForwardResponse(upstream_conn_->to_transfer_data(),
-                                  upstream_conn_->to_transfer_bytes(),
+    auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->read_buffer_.unprocessed_bytes(), shared_from_this());
+    client_conn_->ForwardResponse(upstream_conn_->read_buffer_.unprocessed_data(),
+                                  upstream_conn_->read_buffer_.unprocessed_bytes(),
                                   cb_wrap);
-    // LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, data=" << std::string(upstream_conn_->to_transfer_data(), upstream_conn_->to_transfer_bytes() - 2)
-    //           << " to_transfer_bytes=" << upstream_conn_->to_transfer_bytes();
+    // LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, data="
+    //           << std::string(upstream_conn_->read_buffer_.unprocessed_data(), upstream_conn_->read_buffer_.unprocessed_bytes() - 2)
+    //           << " unprocessed_bytes=" << upstream_conn_->read_buffer_.unprocessed_bytes();
   } else {
     LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, upstream no data ready to_transfer, waiting to read more data then write down";
   }
 }
 
-void SingleGetCommand::ForwardRequest(const char *, size_t) {
-  if (upstream_conn_ == nullptr) {
-    LOG_DEBUG << "SingleGetCommand (" << cmd_line_without_rn() << ") create upstream conn";
-    upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_,
-                                      WrapOnUpstreamResponse(shared_from_this()),
-                                      WrapOnUpstreamRequestWritten(shared_from_this()));
-  } else {
-    LOG_DEBUG << "SingleGetCommand (" << cmd_line_without_rn() << ") reuse upstream conn";
-    upstream_conn_->set_upstream_read_callback(WrapOnUpstreamResponse(shared_from_this()),
-                                               WrapOnUpstreamRequestWritten(shared_from_this()));
-  }
+void SingleGetCommand::DoForwardRequest(const char *, size_t) {
   upstream_conn_->ForwardRequest(cmd_line_.data(), cmd_line_.size(), false);
 }
 
