@@ -21,8 +21,7 @@ class MemcCommand;
 
 typedef std::function<void(const boost::system::error_code& error)> ForwardResponseCallback;
 
-class ClientConnection : public std::enable_shared_from_this<ClientConnection> 
-{
+class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
 public:
   ClientConnection(boost::asio::io_service& io_service, UpstreamConnPool * pool);
   ~ClientConnection();
@@ -46,9 +45,7 @@ public:
   }
   void RotateFirstCommand();
   void TryReadMoreRequest();
-private:
 
-public:
 protected:
   boost::asio::io_service& io_service_;
 private:

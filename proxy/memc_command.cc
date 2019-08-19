@@ -119,7 +119,7 @@ MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::end
   , loaded_(false)
   , upstream_nomore_response_(false)
 {
-  upstream_conn_ = owner->upconn_pool()->Pop(upstream_endpoint_);
+  // upstream_conn_ = owner->upconn_pool()->Allocate(upstream_endpoint_);
 };
 
 // 0 : ok, 数据不够解析
@@ -213,7 +213,8 @@ void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
 
 MemcCommand::~MemcCommand() {
   if (upstream_conn_) {
-    delete upstream_conn_; // TODO : 需要连接池。暂时直接销毁
+    client_conn_->upconn_pool()->Release(upstream_conn_);
+    // delete upstream_conn_; // TODO : 需要连接池。暂时直接销毁
   }
 }
 
@@ -254,14 +255,12 @@ bool MemcCommand::IsFormostCommand() {
 void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
   if (upstream_conn_ == nullptr) {
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create upstream conn";
-    upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_,
-                                      WrapOnUpstreamResponse(shared_from_this()),
-                                      WrapOnUpstreamRequestWritten(shared_from_this()));
-  } else {
-    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") reuse upstream conn";
-    upstream_conn_->set_upstream_read_callback(WrapOnUpstreamResponse(shared_from_this()),
-                                               WrapOnUpstreamRequestWritten(shared_from_this()));
+    // upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_);
+    upstream_conn_ = client_conn_->upconn_pool()->Allocate(upstream_endpoint_);
+    upstream_conn_->SetReadWriteCallback(WrapOnUpstreamResponse(shared_from_this()),
+                                         WrapOnUpstreamRequestWritten(shared_from_this()));
   }
+
   DoForwardRequest(buf, bytes);
 }
 
