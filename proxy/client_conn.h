@@ -93,7 +93,7 @@ protected:
 private:
   ip::tcp::socket socket_;
 
-  enum {BUFFER_SIZE = 64 * 1024};
+  enum {BUFFER_SIZE = 4 * 1024};
   char data_[BUFFER_SIZE];
   size_t buf_lock_;
   size_t processed_offset_, received_offset_;
@@ -105,10 +105,6 @@ protected:
 private:
   ForwardResponseCallback forward_resp_callback_;
 
-  std::shared_ptr<MemcCommand> current_ready_cmd_;
-  std::queue<std::shared_ptr<MemcCommand>> ready_cmd_queue_;
-  std::set<std::shared_ptr<MemcCommand>> fetching_cmd_set_;
-
   std::list<std::shared_ptr<MemcCommand>> poly_cmd_queue_; // 新版支持多态的cmd
 
   size_t timeout_;
@@ -117,6 +113,7 @@ private:
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
+  bool TryForwardParsedBody();
 
   void HandleMemcCommandTimeout(const boost::system::error_code& error);
   void HandleTimeoutWrite(const boost::system::error_code& error);

@@ -28,7 +28,6 @@ ClientConnection::ClientConnection(boost::asio::io_service& io_service, Upstream
   , received_offset_(0)
   , parsed_offset_(0)
   , upconn_pool_(pool)
-  //, current_ready_cmd_(NULL)
   , timeout_(0) // TODO : timeout timer 
   , timer_(io_service)
 {
@@ -63,8 +62,7 @@ void ClientConnection::TryReadMoreRequest() {
   AsyncRead();
 }
 
-void ClientConnection::AsyncRead()
-{
+void ClientConnection::AsyncRead() {
   timer_.cancel();
 
   socket_.async_read_some(boost::asio::buffer(free_space_begin(), free_space_size()),
@@ -99,53 +97,46 @@ void ClientConnection::ForwardResponse(const char* data, size_t bytes, const For
                << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
       cb(error);  // 发完了，或出错了，才告知MemcCommand
     }
-
-    return;
   };
 
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
-bool ProcessLeftBody(std::shared_ptr<MemcCommand> cmd_need_more_data, std::shared_ptr<ClientConnection> client_conn) {
-  LOG_INFO << "ClientConnection::HandleRead " << " received_bytes=" << client_conn->received_bytes()
-             << ". conn=" << client_conn.get();
+// return : true = command has still more data, false = no more data
+bool ClientConnection::TryForwardParsedBody() {
+  if (poly_cmd_queue_.empty() || poly_cmd_queue_.back()->request_body_upcoming_bytes() == 0) {
+    return false;
+  }
 
-  client_conn->recursive_lock_buffer();
-  if (cmd_need_more_data->request_body_upcoming_bytes() > client_conn->received_bytes()) {
-    LOG_INFO << "ClientConnection::HandleRead.ForwardRequest : "
-             << " bytes=" << client_conn->received_bytes() << ". HAS MORE DATA. conn=" << client_conn.get();
-    client_conn->update_processed_bytes(client_conn->received_bytes());
-    cmd_need_more_data->ForwardRequest(client_conn->unprocessed_data(), client_conn->received_bytes());  
-    // 尚未转发cmd_need_more_data的全部数据
+  std::shared_ptr<MemcCommand> cmd_need_more_data = poly_cmd_queue_.back(); // 当前已经解析但还需要更多数据的command
+  LOG_INFO << "ClientConnection::HandleRead " << " received_bytes=" << received_bytes()
+             << ". conn=" << this;
+
+  if (cmd_need_more_data->request_body_upcoming_bytes() > received_bytes()) {
+    cmd_need_more_data->ForwardRequest(unprocessed_data(), received_bytes());  
+    update_processed_bytes(received_bytes());
+    LOG_DEBUG << "ClientConnection::HandleRead.ForwardRequest HAS MORE DATA. conn=" << this;
     return true;
   } else {
-    LOG_INFO << "ClientConnection::HandleRead.ForwardRequest : "
-             << " bytes=" << cmd_need_more_data->request_body_upcoming_bytes() << ". NO MORE DATA. conn=" << client_conn.get();
-    cmd_need_more_data->ForwardRequest(client_conn->unprocessed_data(), cmd_need_more_data->request_body_upcoming_bytes());  
-    client_conn->update_processed_bytes(cmd_need_more_data->request_body_upcoming_bytes());
-    // 终于转发cmd_need_more_data的全部数据,  继续处理其他命令
+    cmd_need_more_data->ForwardRequest(unprocessed_data(), cmd_need_more_data->request_body_upcoming_bytes());  
+    update_processed_bytes(cmd_need_more_data->request_body_upcoming_bytes());
+    LOG_DEBUG << "ClientConnection::HandleRead.ForwardRequest NO MORE DATA. conn=" << this;
     return false;
   }
 }
 
 void ClientConnection::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    if (error == boost::asio::error::eof) {
-      LOG_INFO << "ClientConnection::HandleRead : client connection closed. conn=" << this;
-    } else {
-      LOG_WARN << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
-    }
+    LOG_INFO << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
     return;
   }
 
   // TODO : bytes_transferred == 0, 如何处理? 此时会eof，前面已经处理
   received_offset_ += bytes_transferred;
 
-  if (poly_cmd_queue_.size() > 0 && poly_cmd_queue_.back()->request_body_upcoming_bytes() > 0) { // 当前已经解析但还需要更多数据的command
-    bool still_need_more_data = ProcessLeftBody(poly_cmd_queue_.back(), shared_from_this());
-    if (still_need_more_data) {
-      return;
-    }
+  if (TryForwardParsedBody()) {
+    // 要不要AsyncRead() ?
+    return;
   }
 
   while(parsed_offset_ < received_offset_) { // TODO : 提取buffer对象
@@ -201,42 +192,6 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
     }
     return;
   }
-#if 0
-  if (current_ready_cmd_) {
-    MCE_WARN("error MemcCommandTimeout : 正在返回数据, 不予强行终止" << current_ready_cmd_->cmd_line());
-    timer_.expires_from_now(boost::posix_time::millisec(timeout_ / 2));
-    timer_.async_wait(std::bind(&ClientConnection::HandleMemcCommandTimeout, shared_from_this(), std::placeholders::_1));
-    return;
-  }
-
-  if (fetching_cmd_set_.empty()) {
-    MCE_WARN("error MemcCommandTimeout but all cmd has finished.");
-    return;
-  }
-
-  assert(ready_cmd_queue_.empty());
-
-  if (fetching_cmd_set_.size() < mapped_cmd_count_) {
-    MCE_WARN("error MemcCommandTimeout : 部分数据返回, 部分没有返回(只可能是get命令)");
-
-    boost::asio::async_write(socket_,
-      boost::asio::buffer("END\r\n", 5),
-        std::bind(&ClientConnection::HandleTimeoutWrite, shared_from_this(), std::placeholders::_1));
-    return;
-  }
-#endif 
-
-  std::set<std::shared_ptr<MemcCommand>>::iterator it = fetching_cmd_set_.begin();
-  while(it != fetching_cmd_set_.end()) {
-    auto cmd = *it;
-    fetching_cmd_set_.erase(it++);
-    // MCE_WARN << "终止请求 : " << cmd->cmd_line();
-    cmd->Abort();
-    // LOG_S(WARN) << "ClientConnection::HandleMemcCommandTimeout --> Abort set_upstream_conn, cli:" 
-    //            << this << " cmd:" << cmd.operator->() << " upconn:0");
-    //delete cmd->upstream_conn();
-    //cmd.reset();
-  }
 
   try {
     // static char s[] = "SERVER_ERROR timeout\r\n";
@@ -245,12 +200,6 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
   } catch(std::exception& e) {
     LOG_WARN << "ClientConnection::HandleMemcCommandTimeout write END err, " << e.what();
   }
-
-  fetching_cmd_set_.clear();
-  while(!ready_cmd_queue_.empty()) {
-    ready_cmd_queue_.pop();
-  }
-  current_ready_cmd_.reset();
 
   socket_.close();
   return;
@@ -298,18 +247,6 @@ void ClientConnection::OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, con
   timer_.cancel();
 
   // TODO : 如果是最后一个error, 要负责client的收尾工作
-
-  auto it = fetching_cmd_set_.find(memc_cmd);
-  if (it != fetching_cmd_set_.end()) {
-    fetching_cmd_set_.erase(it);
-  }
-
-  if (fetching_cmd_set_.empty()) {
-  }
-
-  if (memc_cmd == current_ready_cmd_) {
-    current_ready_cmd_.reset();
-  }
 
   UpstreamConn * upstream_conn = memc_cmd->upstream_conn();
   if (!upstream_conn) {
