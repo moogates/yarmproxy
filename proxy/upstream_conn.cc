@@ -147,28 +147,28 @@ void UpstreamConn::HandleConnect(const char * data, size_t bytes, bool request_h
           std::placeholders::_1, std::placeholders::_2));
 }
 
-UpstreamConn* UpstreamConnPool::Allocate(const ip::tcp::endpoint & ep){
+UpstreamConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
   UpstreamConn* conn;
   auto it = conn_map_.find(ep);
   if ((it != conn_map_.end()) && (!it->second.empty())) {
     conn = it->second.front();
     it->second.pop();
-    LOG_DEBUG << "UpstreamConnPool::Allocate reuse conn, thread=" << std::this_thread::get_id() << " ep=" << ep << ", idles=" << it->second.size();
+    LOG_DEBUG << "BackendConnPool::Allocate reuse conn, thread=" << std::this_thread::get_id() << " ep=" << ep << ", idles=" << it->second.size();
   } else {
     conn = new UpstreamConn(io_service_, ep);
-    LOG_DEBUG << "UpstreamConnPool::Allocate create conn, thread=" << std::this_thread::get_id() << " ep=" << ep;
+    LOG_DEBUG << "BackendConnPool::Allocate create conn, thread=" << std::this_thread::get_id() << " ep=" << ep;
   }
   active_conns_.insert(std::make_pair(conn, ep));
   return conn;
 }
 
-void UpstreamConnPool::Release(UpstreamConn * conn) {
+void BackendConnPool::Release(UpstreamConn * conn) {
   if (conn == nullptr) {
     return;
   }
   auto ep_it = active_conns_.find(conn);
   if (ep_it == active_conns_.end()) {
-    LOG_DEBUG << "UpstreamConnPool::Release destroyed, thread=" << std::this_thread::get_id() << " conn " << conn << "  not found";
+    LOG_DEBUG << "BackendConnPool::Release destroyed, thread=" << std::this_thread::get_id() << " conn " << conn << "  not found";
     delete conn;
     return;
   }
@@ -178,16 +178,16 @@ void UpstreamConnPool::Release(UpstreamConn * conn) {
   if (it == conn_map_.end()) {
     conn->read_buffer_.Reset();
     conn_map_[ep].push(conn);
-    LOG_DEBUG << "UpstreamConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=1";
+    LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=1";
   } else {
     if (it->second.size() >= kMaxConnPerEndpoint){
-      LOG_DEBUG << "UpstreamConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " destroyed, size=" << it->second.size();
+      LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " destroyed, size=" << it->second.size();
       conn->socket().close();
       delete conn;
     } else {
       conn->read_buffer_.Reset();
       it->second.push(conn);
-      LOG_DEBUG << "UpstreamConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=" << it->second.size();
+      LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=" << it->second.size();
     }
   }
 }

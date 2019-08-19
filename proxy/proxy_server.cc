@@ -12,8 +12,7 @@
 namespace mcproxy {
 
 RequestDispatcher::RequestDispatcher(int id) : id_(id), work_(io_service_) {
-  upconn_pool_ = new UpstreamConnPool(io_service_); // TODO : 
-  // upconn_pool_ = new UpstreamConnPool(); // TODO : 
+  upconn_pool_ = new BackendConnPool(io_service_); // TODO : 
 }
 
 ClientConnection* RequestDispatcher::NewClientConntion() {

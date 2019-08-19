@@ -16,21 +16,21 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-class UpstreamConnPool;
+class BackendConnPool;
 class MemcCommand;
 
 typedef std::function<void(const boost::system::error_code& error)> ForwardResponseCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
 public:
-  ClientConnection(boost::asio::io_service& io_service, UpstreamConnPool * pool);
+  ClientConnection(boost::asio::io_service& io_service, BackendConnPool* pool);
   ~ClientConnection();
 
   ip::tcp::socket& socket() {
     return socket_;
   }
 
-  UpstreamConnPool * upconn_pool() {
+  BackendConnPool* upconn_pool() {
     return upconn_pool_;
   }
 
@@ -54,7 +54,7 @@ public:
   ReadBuffer read_buffer_;
 
 protected:
-  UpstreamConnPool * upconn_pool_;
+  BackendConnPool* upconn_pool_;
 
 private:
   ForwardResponseCallback forward_resp_callback_;

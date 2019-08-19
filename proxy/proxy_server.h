@@ -9,7 +9,7 @@ namespace mcproxy {
 
 using namespace boost::asio;
 
-class UpstreamConnPool;
+class BackendConnPool;
 class ClientConnection;
 
 class RequestDispatcher {
@@ -29,7 +29,7 @@ private:
   int id_;
   io_service io_service_;
   io_service::work work_;
-  UpstreamConnPool* upconn_pool_;
+  BackendConnPool* upconn_pool_;
 };
 
 class ProxyServer {

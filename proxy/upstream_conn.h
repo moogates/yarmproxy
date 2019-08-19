@@ -52,13 +52,13 @@ private:
   bool is_reading_more_;
 };
 
-class UpstreamConnPool {
+class BackendConnPool {
 private:
   boost::asio::io_service& io_service_;
   std::map<ip::tcp::endpoint, std::queue<UpstreamConn*>> conn_map_;
   std::map<UpstreamConn*, ip::tcp::endpoint> active_conns_;
 public:
-  UpstreamConnPool(boost::asio::io_service& asio_service) : io_service_(asio_service) {
+  BackendConnPool(boost::asio::io_service& asio_service) : io_service_(asio_service) {
   }
 
   UpstreamConn * Allocate(const ip::tcp::endpoint & ep);

@@ -18,7 +18,7 @@ namespace mcproxy {
 
 std::atomic_int g_cc_count;
 
-ClientConnection::ClientConnection(boost::asio::io_service& io_service, UpstreamConnPool * pool)
+ClientConnection::ClientConnection(boost::asio::io_service& io_service, BackendConnPool* pool)
   : io_service_(io_service)
   , socket_(io_service)
   , upconn_pool_(pool)
