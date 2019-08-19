@@ -39,11 +39,11 @@ private:
   // 判断是否最靠前的command, 是才可以转发
   bool IsFormostCommand();
   virtual void DoForwardRequest(const char * buf, size_t bytes) = 0;
-public:
   virtual size_t request_body_upcoming_bytes() const {
     return 0;
   }
 
+public:
   bool upstream_nomore_response() {
     return upstream_nomore_response_;
   }

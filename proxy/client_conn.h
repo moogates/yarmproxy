@@ -9,6 +9,9 @@
 #include <boost/asio.hpp>
 #include <memory>
 
+#include "base/logging.h"
+#include "read_buffer.h"
+
 using namespace boost::asio;
 
 namespace mcproxy {
@@ -36,9 +39,6 @@ public:
 
   void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
 
-  void recursive_lock_buffer();
-  void recursive_unlock_buffer();
-
 public:
   void ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb);
   bool IsFirstCommand(std::shared_ptr<MemcCommand> cmd) {
@@ -49,55 +49,12 @@ public:
 private:
 
 public:
-  void update_processed_bytes(size_t transfered);
-  void try_free_buffer_space();
-
-  bool has_much_free_space() {
-    return received_offset_ * 3 <  BUFFER_SIZE * 2; // there is still more than 1/3 buffer space free
-  }
-
-  char* free_space_begin() {
-    return data_ + received_offset_;
-  }
-  size_t free_space_size() {
-    return BUFFER_SIZE - received_offset_;
-  }
-
-  const char* unprocessed_data() const {
-    return data_ + processed_offset_;
-  }
-
-  size_t parsed_unreceived_bytes() const {
-    if (parsed_offset_ > received_offset_) {
-      return parsed_offset_ - received_offset_;
-    }
-    return 0;
-  }
-
-  size_t received_bytes() const {
-    return received_offset_ - processed_offset_;
-  }
-
-  size_t unparsed_received_bytes() const {
-    if (received_offset_ > parsed_offset_) {
-      return received_offset_ - parsed_offset_;
-    }
-    return 0;
-  }
-//size_t unprocessed_bytes() const {
-//  return std::min(received_offset_, parsed_offset_) - processed_offset_;
-//}
-
 protected:
   boost::asio::io_service& io_service_;
 private:
   ip::tcp::socket socket_;
-
-  enum {BUFFER_SIZE = 4 * 1024};
-  char data_[BUFFER_SIZE];
-  size_t buf_lock_;
-  size_t processed_offset_, received_offset_;
-  size_t parsed_offset_;
+public:
+  ReadBuffer read_buffer_;
 
 protected:
   UpstreamConnPool * upconn_pool_;
@@ -113,7 +70,7 @@ private:
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  bool TryForwardParsedBody();
+  bool ForwardParsedUnreceivedRequest(size_t last_parsed_unreceived_bytes);
 
   void HandleMemcCommandTimeout(const boost::system::error_code& error);
   void HandleTimeoutWrite(const boost::system::error_code& error);

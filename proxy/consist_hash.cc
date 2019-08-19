@@ -1,5 +1,4 @@
 #include "consist_hash.h"
-// #include <boost/algorithm/string.hpp>
 
 #include "doobs_hash.h"
 #include "base/logging.h"

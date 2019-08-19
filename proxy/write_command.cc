@@ -33,7 +33,7 @@ size_t WriteCommand::request_body_upcoming_bytes() const {
 }
 
 void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) {
-  client_conn_->recursive_lock_buffer();
+  client_conn_->read_buffer_.lock_memmove();
   bytes_forwarding_ = std::min(client_buf_received_bytes, request_cmd_len_ + request_body_bytes_); // FIXME
   upstream_conn_->ForwardRequest(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
 }
@@ -45,7 +45,7 @@ void WriteCommand::OnUpstreamRequestWritten(size_t, const boost::system::error_c
     return;
   }
   LOG_INFO << "WriteCommand OnUpstreamRequestWritten ok, bytes_forwarding_=" << bytes_forwarding_;
-  client_conn_->recursive_unlock_buffer();
+  client_conn_->read_buffer_.unlock_memmove();
 
   if (bytes_forwarding_ < request_cmd_len_ + request_body_bytes_) {
     client_conn_->TryReadMoreRequest();

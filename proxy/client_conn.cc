@@ -1,7 +1,5 @@
 #include "client_conn.h"
 
-// #include <boost/algorithm/string.hpp>
-
 #include <atomic>
 #include <memory>
 
@@ -23,10 +21,6 @@ std::atomic_int g_cc_count;
 ClientConnection::ClientConnection(boost::asio::io_service& io_service, UpstreamConnPool * pool)
   : io_service_(io_service)
   , socket_(io_service)
-  , buf_lock_(0)
-  , processed_offset_(0)
-  , received_offset_(0)
-  , parsed_offset_(0)
   , upconn_pool_(pool)
   , timeout_(0) // TODO : timeout timer 
   , timer_(io_service)
@@ -65,7 +59,7 @@ void ClientConnection::TryReadMoreRequest() {
 void ClientConnection::AsyncRead() {
   timer_.cancel();
 
-  socket_.async_read_some(boost::asio::buffer(free_space_begin(), free_space_size()),
+  socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
       std::bind(&ClientConnection::HandleRead, shared_from_this(),
           std::placeholders::_1, // 占位符
           std::placeholders::_2));
@@ -103,26 +97,16 @@ void ClientConnection::ForwardResponse(const char* data, size_t bytes, const For
 }
 
 // return : true = command has still more data, false = no more data
-bool ClientConnection::TryForwardParsedBody() {
-  if (poly_cmd_queue_.empty() || poly_cmd_queue_.back()->request_body_upcoming_bytes() == 0) {
-    return false;
-  }
+bool ClientConnection::ForwardParsedUnreceivedRequest(size_t last_parsed_unreceived_bytes) {
+  size_t to_process_bytes = std::min(last_parsed_unreceived_bytes, read_buffer_.received_bytes());
+  poly_cmd_queue_.back()->ForwardRequest(read_buffer_.unprocessed_data(), to_process_bytes);  
+  read_buffer_.update_processed_bytes(to_process_bytes);
 
-  std::shared_ptr<MemcCommand> cmd_need_more_data = poly_cmd_queue_.back(); // 当前已经解析但还需要更多数据的command
-  LOG_INFO << "ClientConnection::HandleRead " << " received_bytes=" << received_bytes()
-             << ". conn=" << this;
-
-  if (cmd_need_more_data->request_body_upcoming_bytes() > received_bytes()) {
-    cmd_need_more_data->ForwardRequest(unprocessed_data(), received_bytes());  
-    update_processed_bytes(received_bytes());
-    LOG_DEBUG << "ClientConnection::HandleRead.ForwardRequest HAS MORE DATA. conn=" << this;
-    return true;
-  } else {
-    cmd_need_more_data->ForwardRequest(unprocessed_data(), cmd_need_more_data->request_body_upcoming_bytes());  
-    update_processed_bytes(cmd_need_more_data->request_body_upcoming_bytes());
-    LOG_DEBUG << "ClientConnection::HandleRead.ForwardRequest NO MORE DATA. conn=" << this;
-    return false;
-  }
+  bool has_still_more_data = last_parsed_unreceived_bytes > read_buffer_.received_bytes();
+  LOG_DEBUG << "ClientConnection::HandleRead.ForwardRequest last_parsed_unreceived_bytes="
+           << last_parsed_unreceived_bytes << " received_bytes=" << read_buffer_.received_bytes()
+           << " HAS_MORE_DATA=" << has_still_more_data << ". conn=" << this;
+  return has_still_more_data;
 }
 
 void ClientConnection::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
@@ -131,18 +115,19 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
     return;
   }
 
+  size_t last_parsed_unreceived_bytes = read_buffer_.parsed_unreceived_bytes();
   // TODO : bytes_transferred == 0, 如何处理? 此时会eof，前面已经处理
-  received_offset_ += bytes_transferred;
+  read_buffer_.update_received_bytes(bytes_transferred);
 
-  if (TryForwardParsedBody()) {
+  if (last_parsed_unreceived_bytes > 0 && ForwardParsedUnreceivedRequest(last_parsed_unreceived_bytes)) {
     // 要不要AsyncRead() ?
     return;
   }
 
-  while(parsed_offset_ < received_offset_) { // TODO : 提取buffer对象
+  while(read_buffer_.unparsed_received_bytes() > 0) { // TODO : 提取buffer对象
     std::list<std::shared_ptr<MemcCommand>> sub_commands;
     int parsed_bytes = MemcCommand::CreateCommand(io_service_,
-          shared_from_this(), unprocessed_data(), received_bytes(),
+          shared_from_this(), read_buffer_.unprocessed_data(), read_buffer_.received_bytes(),
           &sub_commands);
 
     if (parsed_bytes < 0) {
@@ -153,21 +138,18 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       AsyncRead(); // read more data
       return;
     } else {
+      size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_.received_bytes());
       for(auto entry : sub_commands) { // TODO : 要控制单client的并发command数
         LOG_DEBUG << "ClientConnection::HandleRead CreateCommand ok, cmd_line_size=" << entry->cmd_line_without_rn()
                 << " body_bytes=" << entry->request_body_bytes()
                 << " parsed_bytes=" << parsed_bytes
-                << " received_bytes=" << received_bytes()
+                << " received_bytes=" << read_buffer_.received_bytes()
                 << " sub_commands.size=" << sub_commands.size();
-        if (parsed_bytes > received_offset_ - processed_offset_) {
-          entry->ForwardRequest(unprocessed_data(), received_bytes());  
-        } else {
-          entry->ForwardRequest(unprocessed_data(), (size_t)parsed_bytes);  
-        }
+        entry->ForwardRequest(read_buffer_.unprocessed_data(), to_process_bytes);  
       }
       poly_cmd_queue_.splice(poly_cmd_queue_.end(), sub_commands);
-      parsed_offset_ += parsed_bytes;
-      processed_offset_ += std::min((size_t)parsed_bytes, received_offset_ - processed_offset_);
+      read_buffer_.update_parsed_bytes(parsed_bytes);
+      read_buffer_.update_processed_bytes(to_process_bytes);
     }
   }
 
@@ -209,40 +191,6 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
       std::bind(&ClientConnection::HandleTimeoutWrite, shared_from_this(), std::placeholders::_1));
 }
 
-void ClientConnection::try_free_buffer_space() {
-  // TODO : locking ?
-  if (buf_lock_ == 0) {
-    LOG_INFO << "in try_free_buffer_space(), buf is unlocked, try moving offset, PRE: begin=" << processed_offset_
-             << " end=" << received_offset_ << " parsed=" << parsed_offset_;
-    if (processed_offset_ == received_offset_) {
-      parsed_offset_ -= processed_offset_;
-      processed_offset_ = received_offset_ = 0;
-    } else if (processed_offset_ > (BUFFER_SIZE - received_offset_)) {
-      // TODO : memmove
-      memmove(data_, data_ + processed_offset_, received_offset_ - processed_offset_);
-      parsed_offset_ -= processed_offset_;
-      received_offset_ -= processed_offset_;
-      processed_offset_ = 0;
-    }
-    LOG_DEBUG << "in try_free_buffer_space(), buf is unlocked, try moving offset, POST: begin=" << processed_offset_
-             << " end=" << received_offset_ << " parsed=" << parsed_offset_;
-  } else {
-    LOG_DEBUG << "in try_free_buffer_space, buf is locked, do nothing";
-  }
-}
-void ClientConnection::update_processed_bytes(size_t processed) {
-  processed_offset_ += processed;
-  try_free_buffer_space();
-}
-
-void ClientConnection::recursive_lock_buffer() {
-  ++buf_lock_;
-}
-void ClientConnection::recursive_unlock_buffer() {
-  --buf_lock_;
-  try_free_buffer_space();
-}
-
 void ClientConnection::OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error) {
   timer_.cancel();
 
@@ -260,5 +208,4 @@ void ClientConnection::OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, con
 }
 
 }
-
 

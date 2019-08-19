@@ -6,20 +6,16 @@ namespace mcproxy {
 
 size_t ReadBuffer::unparsed_bytes() const {
   LOG_DEBUG << "ReadBuffer::unparsed_bytes pushed="
-              << received_bytes_ << " parsed=" << parsed_bytes_;
-  if (received_bytes_ > parsed_bytes_) {
-    return received_bytes_ - parsed_bytes_;
+              << received_offset_ << " parsed=" << parsed_offset_;
+  if (received_offset_ > parsed_offset_) {
+    return received_offset_ - parsed_offset_;
   }
   return 0;
 }
 
 void ReadBuffer::update_processed_bytes(size_t processed) {
-  processed_bytes_ += processed;
+  processed_offset_ += processed;
   try_free_buffer_space();
-}
-
-void ReadBuffer::update_received_bytes(size_t received) {
-  received_bytes_ += received;
 }
 
 void ReadBuffer::lock_memmove() {
@@ -33,26 +29,25 @@ void ReadBuffer::unlock_memmove() {
   } else {
     LOG_WARN << "ReadBuffer::unlock_memmove, bad unlock";
   }
-  return;
-  try_free_buffer_space(); // 这里不释放，如果需要，可以自己调用
+  try_free_buffer_space(); // TODO : 这里不释放? 如果需要，可以自己调用
 }
 
 void ReadBuffer::try_free_buffer_space() {
   if (memmove_lock_count_ == 0) {
-    LOG_INFO << "in try_free_buffer_space(), memmove is unlocked, try moving offset, PRE: begin=" << processed_bytes_
-             << " end=" << received_bytes_ << " parsed=" << parsed_bytes_;
-    if (processed_bytes_ == received_bytes_) {
-      parsed_bytes_ -= processed_bytes_;
-      processed_bytes_ = received_bytes_ = 0;
-    } else if (processed_bytes_ > (BUFFER_SIZE - received_bytes_)) {
+    LOG_INFO << "in try_free_buffer_space(), memmove is unlocked, try moving offset, PRE: begin=" << processed_offset_
+             << " end=" << received_offset_ << " parsed=" << parsed_offset_;
+    if (processed_offset_ == received_offset_) {
+      parsed_offset_ -= processed_offset_;
+      processed_offset_ = received_offset_ = 0;
+    } else if (processed_offset_ > (BUFFER_SIZE - received_offset_)) {
       // TODO : memmove
-      memmove(data_, data_ + processed_bytes_, received_bytes_ - processed_bytes_);
-      parsed_bytes_ -= processed_bytes_;
-      received_bytes_ -= processed_bytes_;
-      processed_bytes_ = 0;
+      memmove(data_, data_ + processed_offset_, received_offset_ - processed_offset_);
+      parsed_offset_ -= processed_offset_;
+      received_offset_ -= processed_offset_;
+      processed_offset_ = 0;
     }
-    LOG_DEBUG << "in try_free_buffer_space(), memmove is unlocked, try moving offset, POST: begin=" << processed_bytes_
-             << " end=" << received_bytes_ << " parsed=" << parsed_bytes_;
+    LOG_DEBUG << "in try_free_buffer_space(), memmove is unlocked, try moving offset, POST: begin=" << processed_offset_
+             << " end=" << received_offset_ << " parsed=" << parsed_offset_;
   } else {
     LOG_DEBUG << "in try_free_buffer_space, memmove is locked, do nothing, memmove_lock_count_=" << memmove_lock_count_;
   }
