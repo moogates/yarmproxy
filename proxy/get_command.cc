@@ -92,10 +92,9 @@ void SingleGetCommand::OnForwardResponseReady() {
 
   if (!is_forwarding_response_ && backend_conn_->read_buffer_.unprocessed_bytes() > 0) {
     is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-    auto cb_wrap = WrapOnForwardResponseFinished(backend_conn_->read_buffer_.unprocessed_bytes(), shared_from_this());
     client_conn_->ForwardResponse(backend_conn_->read_buffer_.unprocessed_data(),
                                   backend_conn_->read_buffer_.unprocessed_bytes(),
-                                  cb_wrap);
+                                  WeakBindOnForwardResponseFinished(backend_conn_->read_buffer_.unprocessed_bytes()));
     // LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, data="
     //           << std::string(backend_conn_->read_buffer_.unprocessed_data(), backend_conn_->read_buffer_.unprocessed_bytes() - 2)
     //           << " unprocessed_bytes=" << backend_conn_->read_buffer_.unprocessed_bytes();

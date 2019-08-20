@@ -16,17 +16,22 @@
 
 namespace mcproxy {
 
-ForwardResponseCallback WrapOnForwardResponseFinished(size_t to_transfer_bytes, std::weak_ptr<MemcCommand> cmd_wptr) { 
-    // std::weak_ptr<MemcCommand> cmd_wptr = shared_from_this();
-    // typedef std::function<void(size_t bytes, const boost::system::error_code& error)> ForwardResponseCallback;
-    return [to_transfer_bytes, cmd_wptr](const boost::system::error_code& error) {
-                          if (auto cmd_ptr = cmd_wptr.lock()) {
-                            LOG_DEBUG << "OnForwardResponseFinished cmd weak_ptr valid";
-                            cmd_ptr->OnForwardResponseFinished(to_transfer_bytes, error);
-                          } else {
-                            LOG_DEBUG << "OnForwardResponseFinished cmd weak_ptr released";
-                          }
-                        };
+ForwardResponseCallback MemcCommand::WeakBindOnForwardResponseFinished(size_t forwarded_bytes) {
+  return WeakBind1(&MemcCommand::OnForwardResponseFinished, forwarded_bytes);
+  std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
+  return [forwarded_bytes, cmd_wptr](const boost::system::error_code& error) {
+         if (auto cmd_ptr = cmd_wptr.lock()) {
+          cmd_ptr->OnForwardResponseFinished(forwarded_bytes, error);
+        }
+      };
+}
+
+ForwardResponseCallback WrapOnForwardResponseFinished(size_t forwarded_bytes, std::weak_ptr<MemcCommand> cmd_wptr) { 
+  return [forwarded_bytes, cmd_wptr](const boost::system::error_code& error) {
+           if (auto cmd_ptr = cmd_wptr.lock()) {
+             cmd_ptr->OnForwardResponseFinished(forwarded_bytes, error);
+           }
+         };
 }
 
 
@@ -192,9 +197,9 @@ void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
   if (IsFormostCommand()) {
     if (!is_forwarding_response_) {
       is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-      auto cb_wrap = WrapOnForwardResponseFinished(backend_conn_->read_buffer_.unprocessed_bytes(), shared_from_this());
-      client_conn_->ForwardResponse(backend_conn_->read_buffer_.unprocessed_data(),
-                  backend_conn_->read_buffer_.unprocessed_bytes(), cb_wrap);
+      size_t to_process_bytes = backend_conn_->read_buffer_.unprocessed_bytes();
+      client_conn_->ForwardResponse(backend_conn_->read_buffer_.unprocessed_data(), to_process_bytes,
+                                   WeakBindOnForwardResponseFinished(to_process_bytes));
       LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, unprocessed_bytes="
                 << backend_conn_->read_buffer_.unprocessed_bytes();
     } else {
@@ -274,20 +279,20 @@ void MemcCommand::Abort() {
   }
 }
 
-void MemcCommand::OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
+void MemcCommand::OnForwardResponseFinished(size_t forwarded_bytes, const boost::system::error_code& error) {
   if (error) {
     // TODO
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished (" << cmd_line_without_rn() << ") error=" << error;
     return;
   }
 
-  backend_conn_->read_buffer_.update_processed_bytes(bytes);
+  backend_conn_->read_buffer_.update_processed_bytes(forwarded_bytes);
 
   if (backend_nomore_response() && backend_conn_->read_buffer_.unprocessed_bytes() == 0) {
     client_conn_->RotateFirstCommand();
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished backend_nomore_response, and all data forwarded to client";
   } else {
-    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished backend transfered_bytes=" << bytes
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished backend transfered_bytes=" << forwarded_bytes
               << " ready_to_transfer_bytes=" << backend_conn_->read_buffer_.unprocessed_bytes();
     is_forwarding_response_ = false;
     if (!backend_nomore_response()) {

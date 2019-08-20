@@ -7,6 +7,8 @@
 #include <boost/asio.hpp>
 #include <memory>
 
+#include "client_conn.h"
+
 using namespace boost::asio;
 
 namespace mcproxy {
@@ -30,8 +32,6 @@ public:
 
   virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
   }
-
-  void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error);
 
   virtual void OnForwardResponseReady() {}
   void OnUpstreamResponse(const boost::system::error_code& error);
@@ -63,6 +63,7 @@ public:
   BackendConn * backend_conn() {
     return backend_conn_;
   }
+  void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error);
 
 protected:
   bool is_forwarding_response_;
@@ -75,8 +76,19 @@ protected:
   std::shared_ptr<ClientConnection> client_conn_;
   boost::asio::io_service& io_service_;
 
-private:
+  ForwardResponseCallback WeakBindOnForwardResponseFinished(size_t forwarded_bytes);
 
+  template<class MemFun, class Arg1>
+  ForwardResponseCallback WeakBind1(MemFun&& mf, Arg1&& arg) {
+    std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
+    return [cmd_wptr, mf, arg](const boost::system::error_code& error) {
+          if (auto cmd_ptr = cmd_wptr.lock()) {
+            ((*cmd_ptr).*mf)(arg, error);
+          }
+        };
+  }
+
+private:
   timeval time_created_;
   bool loaded_;
 ////////////////////////////
