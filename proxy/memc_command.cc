@@ -9,7 +9,7 @@
 
 #include "client_conn.h"
 #include "memcached_locator.h"
-#include "upstream_conn.h"
+#include "backend_conn.h"
 
 #include "get_command.h"
 #include "write_command.h"
@@ -255,7 +255,6 @@ bool MemcCommand::IsFormostCommand() {
 void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
   if (upstream_conn_ == nullptr) {
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create upstream conn";
-    // upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_);
     upstream_conn_ = client_conn_->upconn_pool()->Allocate(upstream_endpoint_);
     upstream_conn_->SetReadWriteCallback(WrapOnUpstreamResponse(shared_from_this()),
                                          WrapOnUpstreamRequestWritten(shared_from_this()));

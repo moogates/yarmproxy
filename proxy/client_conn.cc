@@ -6,7 +6,7 @@
 #include "base/logging.h"
 
 #include "memc_command.h"
-#include "upstream_conn.h"
+#include "backend_conn.h"
 
 using namespace boost::asio;
 
@@ -193,18 +193,9 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
 
 void ClientConnection::OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error) {
   timer_.cancel();
-
+  // TODO : 销毁工作
   // TODO : 如果是最后一个error, 要负责client的收尾工作
-
-  UpstreamConn * upstream_conn = memc_cmd->upstream_conn();
-  if (!upstream_conn) {
-    // LOG_S(WARN) << "OnCommandError error : upstream_conn NULL";
-    return;
-  }
-  upstream_conn->socket().close();
-  delete upstream_conn; //socket有出错/关闭, 不回收
-  memc_cmd->set_upstream_conn(nullptr);
-  // LOG_S(WARN) << "ClientConnection::OnCommandError --> set_upstream_conn " << memc_cmd.operator->()<< " upconn:0";
+  LOG_WARN << "ClientConnection::OnCommandError --> set_upstream_conn " << memc_cmd.operator->()<< " upconn:0";
 }
 
 }

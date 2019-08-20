@@ -11,7 +11,7 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-class UpstreamConn;
+class BackendConn;
 class ClientConnection;
 
 class MemcCommand : public std::enable_shared_from_this<MemcCommand> {
@@ -60,20 +60,17 @@ public:
   }
 
 public:
-  UpstreamConn * upstream_conn() {
+  BackendConn * upstream_conn() {
     return upstream_conn_;
   }
 
-  void set_upstream_conn(UpstreamConn * conn) {
-    upstream_conn_ = conn;
-  }
 protected:
   bool is_forwarding_response_;
 
 protected:
   ip::tcp::endpoint upstream_endpoint_;
 protected:
-  UpstreamConn * upstream_conn_;
+  BackendConn * upstream_conn_;
 
   std::shared_ptr<ClientConnection> client_conn_;
   boost::asio::io_service& io_service_;

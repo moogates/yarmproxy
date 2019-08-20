@@ -1,4 +1,4 @@
-#include "upstream_conn.h"
+#include "backend_conn.h"
 
 #include "base/logging.h"
 
@@ -10,25 +10,25 @@ namespace mcproxy {
 
 std::atomic_int upstream_conn_count;
 
-UpstreamConn::UpstreamConn(boost::asio::io_service& io_service,
+BackendConn::BackendConn(boost::asio::io_service& io_service,
                            const ip::tcp::endpoint& upendpoint)
   : upstream_endpoint_(upendpoint)
   , socket_(io_service) 
   , is_reading_more_(false) {
-  LOG_DEBUG << "UpstreamConn ctor, upstream_conn_count=" << ++upstream_conn_count;
+  LOG_DEBUG << "BackendConn ctor, upstream_conn_count=" << ++upstream_conn_count;
 }
 
-UpstreamConn::~UpstreamConn() {
-  LOG_DEBUG << "UpstreamConn dtor, upstream_conn_count=" << --upstream_conn_count;
+BackendConn::~BackendConn() {
+  LOG_DEBUG << "BackendConn dtor, upstream_conn_count=" << --upstream_conn_count;
 }
 
-void UpstreamConn::ReadResponse() {
+void BackendConn::ReadResponse() {
   // socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
   socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
-      std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
 }
 
-void UpstreamConn::TryReadMoreData() {
+void BackendConn::TryReadMoreData() {
   if (!is_reading_more_  // not reading more
       // && pushed_bytes_ * 3 <  BUFFER_SIZE * 2) {// there is still more than 1/3 buffer space free
       && read_buffer_.has_much_free_space()) {
@@ -37,7 +37,7 @@ void UpstreamConn::TryReadMoreData() {
 
     // socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
     socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
-        std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
+        std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
     LOG_DEBUG << "TryReadMoreData";
   } else {
     LOG_DEBUG << "No TryReadMoreData, is_reading_more_=" << is_reading_more_
@@ -45,28 +45,28 @@ void UpstreamConn::TryReadMoreData() {
   }
 }
 
-void UpstreamConn::ForwardRequest(const char* data, size_t bytes, bool has_more_data) {
+void BackendConn::ForwardRequest(const char* data, size_t bytes, bool has_more_data) {
   if (!socket_.is_open()) {
-    LOG_DEBUG << "UpstreamConn::ForwardRequest open socket, req="
+    LOG_DEBUG << "BackendConn::ForwardRequest open socket, req="
               // << std::string(data, bytes - 2) << " size=" << bytes
               << " has_more_data=" << has_more_data << " conn=" << this;
-    socket_.async_connect(upstream_endpoint_, std::bind(&UpstreamConn::HandleConnect, this, 
+    socket_.async_connect(upstream_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
         data, bytes, has_more_data, std::placeholders::_1));
     return;
   }
 
-  LOG_DEBUG << "UpstreamConn::ForwardRequest write data, bytes=" << bytes
+  LOG_DEBUG << "BackendConn::ForwardRequest write data, bytes=" << bytes
             << " has_more_data=" << has_more_data
             // << " req_ptr=" << (void*)data
             // << " req_data=" << std::string(data, bytes - 2)
             << " conn=" << this;
   async_write(socket_, boost::asio::buffer(data, bytes),
-      std::bind(&UpstreamConn::HandleWrite, this, data, bytes, has_more_data,
+      std::bind(&BackendConn::HandleWrite, this, data, bytes, has_more_data,
           std::placeholders::_1, std::placeholders::_2));
 }
 
 
-void UpstreamConn::HandleWrite(const char * data, const size_t bytes, bool request_has_more_data,
+void BackendConn::HandleWrite(const char * data, const size_t bytes, bool request_has_more_data,
     const boost::system::error_code& error, size_t bytes_transferred)
 {
   if (error) {
@@ -84,7 +84,7 @@ void UpstreamConn::HandleWrite(const char * data, const size_t bytes, bool reque
     LOG_DEBUG << "HandleWrite 向 upstream 没写完, 继续写.";
     boost::asio::async_write(socket_,
         boost::asio::buffer(data + bytes_transferred, bytes - bytes_transferred),
-        std::bind(&UpstreamConn::HandleWrite, this, data + bytes_transferred, request_has_more_data,
+        std::bind(&BackendConn::HandleWrite, this, data + bytes_transferred, request_has_more_data,
           bytes - bytes_transferred,
           std::placeholders::_1, std::placeholders::_2));
     return;
@@ -92,28 +92,28 @@ void UpstreamConn::HandleWrite(const char * data, const size_t bytes, bool reque
 
   {
     if (request_has_more_data) {
-      LOG_WARN << "UpstreamConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
+      LOG_WARN << "BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
       uptream_write_callback_(bytes, error);
     } else {
-      LOG_DEBUG << "UpstreamConn::HandleWrite 转发了当前命令的所有数据, 等待 upstream 的响应.";
+      LOG_DEBUG << "BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 upstream 的响应.";
       // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
       read_buffer_.Reset();  // TODO : 这里还需要吗？
     
       // socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
       socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
-          std::bind(&UpstreamConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
+          std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
     }
   }
 }
 
-void UpstreamConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
+void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    LOG_WARN << "UpstreamConn::HandleRead upstream read error, upconn=" << this
+    LOG_WARN << "BackendConn::HandleRead upstream read error, upconn=" << this
              << " ep=" << upstream_endpoint_ << " err=" << error.message();
     // socket_.close();
     // TODO : 如何通知给外界?
   } else {
-    LOG_DEBUG << "UpstreamConn::HandleRead upstream read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
+    LOG_DEBUG << "BackendConn::HandleRead upstream read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
     if (is_reading_more_) {
       is_reading_more_ = false;  // finish reading, you could memmove now
       read_buffer_.unlock_memmove();
@@ -124,7 +124,7 @@ void UpstreamConn::HandleRead(const boost::system::error_code& error, size_t byt
   }
 }
 
-void UpstreamConn::HandleConnect(const char * data, size_t bytes, bool request_has_more_data, const boost::system::error_code& error) {
+void BackendConn::HandleConnect(const char * data, size_t bytes, bool request_has_more_data, const boost::system::error_code& error) {
   if (error) {
     socket_.close();
     // TODO : 如何通知给外界?
@@ -143,26 +143,33 @@ void UpstreamConn::HandleConnect(const char * data, size_t bytes, bool request_h
   
   // ForwardData(data, bytes);
   async_write(socket_, boost::asio::buffer(data, bytes),
-      std::bind(&UpstreamConn::HandleWrite, this, data, bytes, request_has_more_data,
+      std::bind(&BackendConn::HandleWrite, this, data, bytes, request_has_more_data,
           std::placeholders::_1, std::placeholders::_2));
 }
 
-UpstreamConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
-  UpstreamConn* conn;
+BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
+  {
+    BackendConn* conn = new BackendConn(io_service_, ep);
+    return conn;
+  }
+  BackendConn* conn;
   auto it = conn_map_.find(ep);
   if ((it != conn_map_.end()) && (!it->second.empty())) {
     conn = it->second.front();
     it->second.pop();
     LOG_DEBUG << "BackendConnPool::Allocate reuse conn, thread=" << std::this_thread::get_id() << " ep=" << ep << ", idles=" << it->second.size();
   } else {
-    conn = new UpstreamConn(io_service_, ep);
+    conn = new BackendConn(io_service_, ep);
     LOG_DEBUG << "BackendConnPool::Allocate create conn, thread=" << std::this_thread::get_id() << " ep=" << ep;
   }
   active_conns_.insert(std::make_pair(conn, ep));
   return conn;
 }
 
-void BackendConnPool::Release(UpstreamConn * conn) {
+void BackendConnPool::Release(BackendConn * conn) {
+  delete conn;
+  return;
+
   if (conn == nullptr) {
     return;
   }

@@ -17,11 +17,11 @@ namespace mcproxy {
 typedef std::function<void(const boost::system::error_code& error)> UpstreamReadCallback;
 typedef std::function<void(size_t written_bytes, const boost::system::error_code& error)> UpstreamWriteCallback;
 
-class UpstreamConn {
+class BackendConn {
 public:
-  UpstreamConn(boost::asio::io_service& io_service, 
+  BackendConn(boost::asio::io_service& io_service, 
       const ip::tcp::endpoint& upendpoint);
-  ~UpstreamConn();
+  ~BackendConn();
 
   void ForwardRequest(const char* data, size_t bytes, bool has_more_data);
 
@@ -55,14 +55,14 @@ private:
 class BackendConnPool {
 private:
   boost::asio::io_service& io_service_;
-  std::map<ip::tcp::endpoint, std::queue<UpstreamConn*>> conn_map_;
-  std::map<UpstreamConn*, ip::tcp::endpoint> active_conns_;
+  std::map<ip::tcp::endpoint, std::queue<BackendConn*>> conn_map_;
+  std::map<BackendConn*, ip::tcp::endpoint> active_conns_;
 public:
   BackendConnPool(boost::asio::io_service& asio_service) : io_service_(asio_service) {
   }
 
-  UpstreamConn * Allocate(const ip::tcp::endpoint & ep);
-  void Release(UpstreamConn * conn);
+  BackendConn * Allocate(const ip::tcp::endpoint & ep);
+  void Release(BackendConn * conn);
 };
 
 }

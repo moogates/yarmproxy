@@ -2,7 +2,7 @@
 
 #include "base/logging.h"
 #include "client_conn.h"
-#include "upstream_conn.h"
+#include "backend_conn.h"
 
 namespace mcproxy {
 

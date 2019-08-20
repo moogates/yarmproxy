@@ -7,7 +7,7 @@
 
 #include "client_conn.h"
 #include "memcached_locator.h"
-#include "upstream_conn.h"
+#include "backend_conn.h"
 
 namespace mcproxy {
 
