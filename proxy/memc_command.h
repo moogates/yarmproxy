@@ -11,7 +11,7 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-class UpstreamConn;
+class BackendConn;
 class ClientConnection;
 
 class MemcCommand : public std::enable_shared_from_this<MemcCommand> {
@@ -44,11 +44,11 @@ private:
   }
 
 public:
-  bool upstream_nomore_response() {
-    return upstream_nomore_response_;
+  bool backend_nomore_response() {
+    return backend_nomore_response_;
   }
-  void set_upstream_nomore_response() {
-    upstream_nomore_response_ = true;
+  void set_backend_nomore_response() {
+    backend_nomore_response_ = true;
   }
 //////////////////////////////////////
   // void AsyncRead();
@@ -60,20 +60,17 @@ public:
   }
 
 public:
-  UpstreamConn * upstream_conn() {
-    return upstream_conn_;
+  BackendConn * backend_conn() {
+    return backend_conn_;
   }
 
-  void set_upstream_conn(UpstreamConn * conn) {
-    upstream_conn_ = conn;
-  }
 protected:
   bool is_forwarding_response_;
 
 protected:
-  ip::tcp::endpoint upstream_endpoint_;
+  ip::tcp::endpoint backend_endpoint_;
 protected:
-  UpstreamConn * upstream_conn_;
+  BackendConn * backend_conn_;
 
   std::shared_ptr<ClientConnection> client_conn_;
   boost::asio::io_service& io_service_;
@@ -83,7 +80,7 @@ private:
   timeval time_created_;
   bool loaded_;
 ////////////////////////////
-  bool upstream_nomore_response_;
+  bool backend_nomore_response_;
 };
 
 }
