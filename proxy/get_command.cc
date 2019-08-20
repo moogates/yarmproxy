@@ -97,6 +97,8 @@ void SingleGetCommand::OnForwardResponseReady() {
     // LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, data="
     //           << std::string(backend_conn_->read_buffer_.unprocessed_data(), backend_conn_->read_buffer_.unprocessed_bytes() - 2)
     //           << " unprocessed_bytes=" << backend_conn_->read_buffer_.unprocessed_bytes();
+    backend_conn_->read_buffer_.lock_memmove();
+    backend_conn_->read_buffer_.update_processed_bytes(backend_conn_->read_buffer_.unprocessed_bytes());
   } else {
     LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, backend no data ready to_transfer, waiting to read more data then write down";
   }

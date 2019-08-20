@@ -201,7 +201,7 @@ void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
       LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, unprocessed_bytes="
                 << backend_conn_->read_buffer_.unprocessed_bytes();
       backend_conn_->read_buffer_.lock_memmove();
-      // backend_conn_->read_buffer_.update_processed_bytes(to_process_bytes);
+      backend_conn_->read_buffer_.update_processed_bytes(to_process_bytes);
     } else {
       LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
     }
@@ -290,7 +290,7 @@ void MemcCommand::OnForwardResponseFinished(size_t forwarded_bytes, const boost:
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished (" << cmd_line_without_rn() << ") error=" << error;
     return;
   }
-  backend_conn_->read_buffer_.update_processed_bytes(forwarded_bytes);
+  // backend_conn_->read_buffer_.update_processed_bytes(forwarded_bytes);
   backend_conn_->read_buffer_.unlock_memmove();
 
   if (backend_nomore_response() && backend_conn_->read_buffer_.unprocessed_bytes() == 0) {
