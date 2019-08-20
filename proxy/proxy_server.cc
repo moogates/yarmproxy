@@ -5,27 +5,12 @@
 
 #include "base/logging.h"
 
-#include "client_conn.h"
-#include "memcached_locator.h"
 #include "backend_conn.h"
+#include "client_conn.h"
+#include "worker_pool.h"
+#include "memcached_locator.h"
 
 namespace mcproxy {
-
-WorkerPool::Worker::Worker() : work_(io_service_), upconn_pool_(new BackendConnPool(io_service_)) {
-}
-
-ClientConnection* WorkerPool::NewClientConntion() {
-  Worker& worker = NextWorker();
-  return new ClientConnection(worker.io_service_, worker.upconn_pool_);
-}
-
-RequestDispatcher::RequestDispatcher(int id) : id_(id), work_(io_service_) {
-  upconn_pool_ = new BackendConnPool(io_service_); // TODO : 
-}
-
-ClientConnection* RequestDispatcher::NewClientConntion() {
-  return new ClientConnection(io_service_, upconn_pool_);
-}
 
 static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
   size_t pos = ep.find(':');
@@ -34,24 +19,15 @@ static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
   return ip::tcp::endpoint(ip::address::from_string(host), port);
 }
 
-ProxyServer::ProxyServer(const std::string & addr)
+ProxyServer::ProxyServer(const std::string & addr, size_t worker_concurrency)
   : work_(io_service_)
   , acceptor_(io_service_, ParseEndpoint(addr))
-  , dispatch_threads_(4)
-  , dispatch_round_(0)
-{
+  , worker_pool_(new WorkerPool(worker_concurrency)) {
 }
 
 ProxyServer::~ProxyServer() {
-  // TODO : 细化 asio 的这些调用
   io_service_.stop();
-  for(size_t i = 0; i < dispatch_threads_; ++i) {
-  //dispatch_services_[i]->stop();
-  //delete dispatch_services_[i];
-
-    dispatchers_[i]->Stop();
-    delete dispatchers_[i];
-  }
+  worker_pool_->StopDispatching();
 }
 
 void ProxyServer::Run() {
@@ -60,17 +36,7 @@ void ProxyServer::Run() {
     return;
   }
 
-  io_service_.reset();
-
-  for(size_t i = 0; i < dispatch_threads_; ++i) {
-    dispatchers_.push_back(new RequestDispatcher(i));
-  }
-
-  for(size_t i = 0; i < dispatch_threads_; ++i) {
-    std::thread th([this, i]() { dispatchers_[i]->Run(); } );
-    th.detach();
-  }
-
+  worker_pool_->StartDispatching();
   StartAccept();
 
   try {
@@ -80,17 +46,8 @@ void ProxyServer::Run() {
   }
 }
 
-RequestDispatcher* ProxyServer::NextDispatcher() {
-  RequestDispatcher* dispatcher = dispatchers_[dispatch_round_++];
-  if(++dispatch_round_ >= dispatch_threads_) {
-    dispatch_round_ = 0;
-  }
-  return dispatcher;
-}
-
 void ProxyServer::StartAccept() {
-  LOG_DEBUG << "ClientConnection created, dispatcher=" << dispatch_round_;
-  std::shared_ptr<ClientConnection> client_conn(NextDispatcher()->NewClientConntion());
+  std::shared_ptr<ClientConnection> client_conn(worker_pool_->NewClientConntion());
 
   acceptor_.async_accept(client_conn->socket(),
       std::bind(&ProxyServer::HandleAccept, this, client_conn,

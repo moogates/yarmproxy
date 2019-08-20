@@ -8,7 +8,7 @@ int main() {
 
   std::string endpoint("127.0.0.1:11311");
 	LOG_INFO << "Service listening on " << endpoint;
-  mcproxy::ProxyServer server(endpoint);
+  mcproxy::ProxyServer server(endpoint, 8);
   server.Run();
   return 0;
 }
