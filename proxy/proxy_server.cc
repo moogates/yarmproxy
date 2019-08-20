@@ -7,12 +7,16 @@
 
 #include "client_conn.h"
 #include "memcached_locator.h"
-#include "upstream_conn.h"
+#include "backend_conn.h"
 
 namespace mcproxy {
 
 RequestDispatcher::RequestDispatcher(int id) : id_(id), work_(io_service_) {
-  upconn_pool_ = new UpstreamConnPool(); // TODO : 
+  upconn_pool_ = new BackendConnPool(io_service_); // TODO : 
+}
+
+ClientConnection* RequestDispatcher::NewClientConntion() {
+  return new ClientConnection(io_service_, upconn_pool_);
 }
 
 static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
@@ -22,19 +26,10 @@ static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
   return ip::tcp::endpoint(ip::address::from_string(host), port);
 }
 
-
-ProxyServer::ProxyServer(const ip::tcp::endpoint & ep)
-  : work_(io_service_)
-  , acceptor_(io_service_, ep)
-  , dispatch_threads_(32)
-  , dispatch_round_(0)
-{
-}
-
 ProxyServer::ProxyServer(const std::string & addr)
   : work_(io_service_)
   , acceptor_(io_service_, ParseEndpoint(addr))
-  , dispatch_threads_(32)
+  , dispatch_threads_(4)
   , dispatch_round_(0)
 {
 }
@@ -77,14 +72,17 @@ void ProxyServer::Run() {
   }
 }
 
-void ProxyServer::StartAccept() {
-  std::shared_ptr<ClientConnection> client_conn(new ClientConnection(dispatchers_[dispatch_round_]->asio_service(),
-                                                              dispatchers_[dispatch_round_]->upconn_pool()));
-  LOG_DEBUG << "ClientConnection created, dispatcher=" << dispatch_round_;
-
+RequestDispatcher* ProxyServer::NextDispatcher() {
+  RequestDispatcher* dispatcher = dispatchers_[dispatch_round_++];
   if(++dispatch_round_ >= dispatch_threads_) {
     dispatch_round_ = 0;
   }
+  return dispatcher;
+}
+
+void ProxyServer::StartAccept() {
+  LOG_DEBUG << "ClientConnection created, dispatcher=" << dispatch_round_;
+  std::shared_ptr<ClientConnection> client_conn(NextDispatcher()->NewClientConntion());
 
   acceptor_.async_accept(client_conn->socket(),
       std::bind(&ProxyServer::HandleAccept, this, client_conn,

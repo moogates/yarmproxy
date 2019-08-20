@@ -7,11 +7,13 @@
 #include <boost/asio.hpp>
 #include <memory>
 
+#include "client_conn.h"
+
 using namespace boost::asio;
 
 namespace mcproxy {
 
-class UpstreamConn;
+class BackendConn;
 class ClientConnection;
 
 class MemcCommand : public std::enable_shared_from_this<MemcCommand> {
@@ -28,10 +30,8 @@ public:
   void ForwardRequest(const char * buf, size_t bytes);
   virtual bool ParseUpstreamResponse() = 0;
 
-  virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
+  virtual void OnUpstreamRequestWritten(const boost::system::error_code& error) {
   }
-
-  void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error);
 
   virtual void OnForwardResponseReady() {}
   void OnUpstreamResponse(const boost::system::error_code& error);
@@ -44,13 +44,7 @@ private:
   }
 
 public:
-  bool upstream_nomore_response() {
-    return upstream_nomore_response_;
-  }
-  void set_upstream_nomore_response() {
-    upstream_nomore_response_ = true;
-  }
-//////////////////////////////////////
+  bool backend_nomore_response();
   // void AsyncRead();
   void Abort();
 public:
@@ -60,30 +54,35 @@ public:
   }
 
 public:
-  UpstreamConn * upstream_conn() {
-    return upstream_conn_;
+  BackendConn * backend_conn() {
+    return backend_conn_;
   }
+  void OnForwardResponseFinished(const boost::system::error_code& error);
 
-  void set_upstream_conn(UpstreamConn * conn) {
-    upstream_conn_ = conn;
-  }
 protected:
   bool is_forwarding_response_;
 
 protected:
-  ip::tcp::endpoint upstream_endpoint_;
+  ip::tcp::endpoint backend_endpoint_;
 protected:
-  UpstreamConn * upstream_conn_;
+  BackendConn * backend_conn_;
 
   std::shared_ptr<ClientConnection> client_conn_;
   boost::asio::io_service& io_service_;
 
-private:
+  template<class MemFun>
+  ForwardResponseCallback WeakBind(MemFun&& mf) { // TODO : refine it!
+    std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
+    return [cmd_wptr, mf](const boost::system::error_code& error) {
+          if (auto cmd_ptr = cmd_wptr.lock()) {
+            ((*cmd_ptr).*mf)(error);
+          }
+        };
+  }
 
+private:
   timeval time_created_;
   bool loaded_;
-////////////////////////////
-  bool upstream_nomore_response_;
 };
 
 }

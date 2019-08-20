@@ -6,7 +6,7 @@
 #include "base/logging.h"
 
 #include "memc_command.h"
-#include "upstream_conn.h"
+#include "backend_conn.h"
 
 using namespace boost::asio;
 
@@ -18,7 +18,7 @@ namespace mcproxy {
 
 std::atomic_int g_cc_count;
 
-ClientConnection::ClientConnection(boost::asio::io_service& io_service, UpstreamConnPool * pool)
+ClientConnection::ClientConnection(boost::asio::io_service& io_service, BackendConnPool* pool)
   : io_service_(io_service)
   , socket_(io_service)
   , upconn_pool_(pool)
@@ -75,7 +75,7 @@ void ClientConnection::RotateFirstCommand() {
 void ClientConnection::ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb) {
   forward_resp_callback_ = cb;
 
-  std::weak_ptr<ClientConnection> wptr = shared_from_this();
+  std::weak_ptr<ClientConnection> wptr(shared_from_this());
   auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
     LOG_DEBUG << "ClientConnection::ForwardResponse callback begin, bytes_transferred=" << bytes_transferred;
     if (!error && bytes_transferred < bytes) {
@@ -193,18 +193,8 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
 
 void ClientConnection::OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error) {
   timer_.cancel();
-
+  // TODO : 销毁工作
   // TODO : 如果是最后一个error, 要负责client的收尾工作
-
-  UpstreamConn * upstream_conn = memc_cmd->upstream_conn();
-  if (!upstream_conn) {
-    // LOG_S(WARN) << "OnCommandError error : upstream_conn NULL";
-    return;
-  }
-  upstream_conn->socket().close();
-  delete upstream_conn; //socket有出错/关闭, 不回收
-  memc_cmd->set_upstream_conn(nullptr);
-  // LOG_S(WARN) << "ClientConnection::OnCommandError --> set_upstream_conn " << memc_cmd.operator->()<< " upconn:0";
 }
 
 }

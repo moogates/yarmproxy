@@ -9,27 +9,12 @@
 
 #include "client_conn.h"
 #include "memcached_locator.h"
-#include "upstream_conn.h"
+#include "backend_conn.h"
 
 #include "get_command.h"
 #include "write_command.h"
 
 namespace mcproxy {
-
-ForwardResponseCallback WrapOnForwardResponseFinished(size_t to_transfer_bytes, std::weak_ptr<MemcCommand> cmd_wptr) { 
-    // std::weak_ptr<MemcCommand> cmd_wptr = shared_from_this();
-    // typedef std::function<void(size_t bytes, const boost::system::error_code& error)> ForwardResponseCallback;
-    return [to_transfer_bytes, cmd_wptr](const boost::system::error_code& error) {
-                          if (auto cmd_ptr = cmd_wptr.lock()) {
-                            LOG_DEBUG << "OnForwardResponseFinished cmd weak_ptr valid";
-                            cmd_ptr->OnForwardResponseFinished(to_transfer_bytes, error);
-                          } else {
-                            LOG_DEBUG << "OnForwardResponseFinished cmd weak_ptr released";
-                          }
-                        };
-}
-
-
 
 // 指向行尾的'\n'字符
 const char * GetLineEnd(const char * buf, size_t len) {
@@ -112,14 +97,12 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
     std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len) 
   : is_forwarding_response_(false)
-  , upstream_endpoint_(ep)
-  , upstream_conn_(nullptr)
+  , backend_endpoint_(ep)
+  , backend_conn_(nullptr)
   , client_conn_(owner)
   , io_service_(io_service)
   , loaded_(false)
-  , upstream_nomore_response_(false)
 {
-  upstream_conn_ = owner->upconn_pool()->Pop(upstream_endpoint_);
 };
 
 // 0 : ok, 数据不够解析
@@ -178,7 +161,7 @@ int MemcCommand::CreateCommand(boost::asio::io_service& asio_service,
 void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
   if (error) {
     LOG_WARN << "MemcCommand::OnUpstreamResponse " << cmd_line_without_rn()
-             << " upstream read error : " << upstream_endpoint_ << " - "  << error << " " << error.message();
+             << " backend read error : " << backend_endpoint_ << " - "  << error << " " << error.message();
     client_conn_->OnCommandError(shared_from_this(), error);
     return;
   }
@@ -192,59 +175,37 @@ void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
   if (IsFormostCommand()) {
     if (!is_forwarding_response_) {
       is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-      auto cb_wrap = WrapOnForwardResponseFinished(upstream_conn_->read_buffer_.unprocessed_bytes(), shared_from_this());
-      client_conn_->ForwardResponse(upstream_conn_->read_buffer_.unprocessed_data(),
-                  upstream_conn_->read_buffer_.unprocessed_bytes(), cb_wrap);
+      size_t to_process_bytes = backend_conn_->read_buffer_.unprocessed_bytes();
+      client_conn_->ForwardResponse(backend_conn_->read_buffer_.unprocessed_data(), to_process_bytes,
+                                   WeakBind(&MemcCommand::OnForwardResponseFinished));
       LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, unprocessed_bytes="
-                << upstream_conn_->read_buffer_.unprocessed_bytes();
+                << backend_conn_->read_buffer_.unprocessed_bytes();
+      backend_conn_->read_buffer_.lock_memmove();
+      backend_conn_->read_buffer_.update_processed_bytes(to_process_bytes);
     } else {
       LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
     }
   } else {
     // TODO : do nothing, just wait
     LOG_WARN << "SingleGetCommand IsFirstCommand false! unprocessed_bytes="
-             << upstream_conn_->read_buffer_.unprocessed_bytes();
+             << backend_conn_->read_buffer_.unprocessed_bytes();
   }
 
-  if (!upstream_nomore_response()) {
-    upstream_conn_->TryReadMoreData(); // upstream 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
+  if (!backend_nomore_response()) {
+    backend_conn_->TryReadMoreData(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
   }
 }
 
 MemcCommand::~MemcCommand() {
-  if (upstream_conn_) {
-    delete upstream_conn_; // TODO : 需要连接池。暂时直接销毁
+  if (backend_conn_) {
+    client_conn_->upconn_pool()->Release(backend_conn_);
+    // delete backend_conn_; // TODO : 需要连接池。暂时直接销毁
   }
 }
 
-UpstreamReadCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr) {
-  return [cmd_wptr](const boost::system::error_code& error) {
-           // if (std::shared_ptr<MemcCommand> cmd = cmd_wptr.lock()) {
-           if (auto cmd_ptr = cmd_wptr.lock()) {
-             LOG_DEBUG << "OnUpstreamResponse cmd ok";
-             cmd_ptr->OnUpstreamResponse(error);
-           } else {
-             LOG_DEBUG << "OnUpstreamResponse cmd released";
-           }
-         };
-
-  // TODO : 梳理资源管理和释放的时机
-  auto cmd_ptr = cmd_wptr.lock();
-  return [cmd_ptr](const boost::system::error_code& error) {
-           cmd_ptr->OnUpstreamResponse(error);
-         };
-}
-
-UpstreamWriteCallback WrapOnUpstreamRequestWritten(std::weak_ptr<MemcCommand> cmd_wptr) {
-  return [cmd_wptr](size_t written_bytes, const boost::system::error_code& error) {
-           // if (std::shared_ptr<MemcCommand> cmd = cmd_wptr.lock()) {
-           if (auto cmd_ptr = cmd_wptr.lock()) {
-             LOG_DEBUG << "OnUpstreamRequestWritten cmd ok";
-             cmd_ptr->OnUpstreamRequestWritten(written_bytes, error);
-           } else {
-             LOG_DEBUG << "OnUpstreamRequestWritten cmd released";
-           }
-         };
+bool MemcCommand::backend_nomore_response() {
+  LOG_WARN << "-============OnUpstreamResponse cmd ok";
+  return backend_conn_->read_buffer_.parsed_unreceived_bytes() == 0;
 }
 
 bool MemcCommand::IsFormostCommand() {
@@ -252,48 +213,44 @@ bool MemcCommand::IsFormostCommand() {
 }
 
 void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
-  if (upstream_conn_ == nullptr) {
-    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create upstream conn";
-    upstream_conn_ = new UpstreamConn(io_service_, upstream_endpoint_,
-                                      WrapOnUpstreamResponse(shared_from_this()),
-                                      WrapOnUpstreamRequestWritten(shared_from_this()));
-  } else {
-    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") reuse upstream conn";
-    upstream_conn_->set_upstream_read_callback(WrapOnUpstreamResponse(shared_from_this()),
-                                               WrapOnUpstreamRequestWritten(shared_from_this()));
+  if (backend_conn_ == nullptr) {
+    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
+    backend_conn_ = client_conn_->upconn_pool()->Allocate(backend_endpoint_);
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnUpstreamResponse),
+                                   WeakBind(&MemcCommand::OnUpstreamRequestWritten));
   }
+
   DoForwardRequest(buf, bytes);
 }
 
 void MemcCommand::Abort() {
-  if (upstream_conn_) {
-    upstream_conn_->socket().close();
+  if (backend_conn_) {
+    backend_conn_->socket().close();
     // MCE_INFO("MemcCommand Abort OK.");
-    delete upstream_conn_;
-    upstream_conn_ = 0;
+    delete backend_conn_;
+    backend_conn_ = 0;
   } else {
-    // MCE_WARN("MemcCommand Abort NULL upstream_conn_.");
+    // MCE_WARN("MemcCommand Abort NULL backend_conn_.");
   }
 }
 
-void MemcCommand::OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error) {
+void MemcCommand::OnForwardResponseFinished(const boost::system::error_code& error) {
   if (error) {
     // TODO
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished (" << cmd_line_without_rn() << ") error=" << error;
     return;
   }
+  // backend_conn_->read_buffer_.update_processed_bytes(forwarded_bytes);
+  backend_conn_->read_buffer_.unlock_memmove();
 
-  upstream_conn_->read_buffer_.update_processed_bytes(bytes);
-
-  if (upstream_nomore_response() && upstream_conn_->read_buffer_.unprocessed_bytes() == 0) {
+  if (backend_nomore_response() && backend_conn_->read_buffer_.unprocessed_bytes() == 0) {
     client_conn_->RotateFirstCommand();
-    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream_nomore_response, and all data forwarded to client";
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished backend_nomore_response, and all data forwarded to client";
   } else {
-    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished upstream transfered_bytes=" << bytes
-              << " ready_to_transfer_bytes=" << upstream_conn_->read_buffer_.unprocessed_bytes();
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished ready_to_transfer_bytes=" << backend_conn_->read_buffer_.unprocessed_bytes();
     is_forwarding_response_ = false;
-    if (!upstream_nomore_response()) {
-      upstream_conn_->TryReadMoreData(); // 这里必须继续try
+    if (!backend_nomore_response()) {
+      backend_conn_->TryReadMoreData(); // 这里必须继续try
     }
 
     OnForwardResponseReady(); // 可能已经有新读到的数据，因而要尝试转发更多
