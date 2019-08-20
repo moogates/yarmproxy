@@ -13,14 +13,14 @@ public:
           std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
   virtual ~SingleGetCommand();
 
-  virtual void OnForwardResponseReady();
-  virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
+  void OnForwardResponseReady() override;
+  void OnUpstreamRequestWritten(const boost::system::error_code& error) override {
     // 不需要再通知Client Conn
   }
 private:
-  virtual void DoForwardRequest(const char *, size_t);
-  virtual bool ParseUpstreamResponse();
-  virtual std::string cmd_line_without_rn() const {
+  void DoForwardRequest(const char *, size_t) override;
+  bool ParseUpstreamResponse() override;
+  std::string cmd_line_without_rn() const override {
     return cmd_line_.substr(0, cmd_line_.size() - 2);
   }
 

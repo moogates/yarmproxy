@@ -93,7 +93,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
   {
     if (request_has_more_data) {
       LOG_WARN << "BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
-      uptream_write_callback_(bytes, error);
+      uptream_write_callback_(error);
     } else {
       LOG_DEBUG << "BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 backend 的响应.";
       // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？

@@ -16,26 +16,6 @@
 
 namespace mcproxy {
 
-ForwardResponseCallback MemcCommand::WeakBindOnForwardResponseFinished(size_t forwarded_bytes) {
-  return WeakBind1(&MemcCommand::OnForwardResponseFinished, forwarded_bytes);
-  std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
-  return [forwarded_bytes, cmd_wptr](const boost::system::error_code& error) {
-         if (auto cmd_ptr = cmd_wptr.lock()) {
-          cmd_ptr->OnForwardResponseFinished(forwarded_bytes, error);
-        }
-      };
-}
-
-ForwardResponseCallback WrapOnForwardResponseFinished(size_t forwarded_bytes, std::weak_ptr<MemcCommand> cmd_wptr) { 
-  return [forwarded_bytes, cmd_wptr](const boost::system::error_code& error) {
-           if (auto cmd_ptr = cmd_wptr.lock()) {
-             cmd_ptr->OnForwardResponseFinished(forwarded_bytes, error);
-           }
-         };
-}
-
-
-
 // 指向行尾的'\n'字符
 const char * GetLineEnd(const char * buf, size_t len) {
   const char * p = buf + 1; // 首字符肯定不是'\n'
@@ -197,7 +177,7 @@ void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
       is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
       size_t to_process_bytes = backend_conn_->read_buffer_.unprocessed_bytes();
       client_conn_->ForwardResponse(backend_conn_->read_buffer_.unprocessed_data(), to_process_bytes,
-                                   WeakBindOnForwardResponseFinished(to_process_bytes));
+                                   WeakBind(&MemcCommand::OnForwardResponseFinished));
       LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, unprocessed_bytes="
                 << backend_conn_->read_buffer_.unprocessed_bytes();
       backend_conn_->read_buffer_.lock_memmove();
@@ -228,36 +208,6 @@ bool MemcCommand::backend_nomore_response() {
   return backend_conn_->read_buffer_.parsed_unreceived_bytes() == 0;
 }
 
-UpstreamReadCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr) {
-  return [cmd_wptr](const boost::system::error_code& error) {
-           // if (std::shared_ptr<MemcCommand> cmd = cmd_wptr.lock()) {
-           if (auto cmd_ptr = cmd_wptr.lock()) {
-             LOG_DEBUG << "OnUpstreamResponse cmd ok";
-             cmd_ptr->OnUpstreamResponse(error);
-           } else {
-             LOG_DEBUG << "OnUpstreamResponse cmd released";
-           }
-         };
-
-  // TODO : 梳理资源管理和释放的时机
-  auto cmd_ptr = cmd_wptr.lock();
-  return [cmd_ptr](const boost::system::error_code& error) {
-           cmd_ptr->OnUpstreamResponse(error);
-         };
-}
-
-UpstreamWriteCallback WrapOnUpstreamRequestWritten(std::weak_ptr<MemcCommand> cmd_wptr) {
-  return [cmd_wptr](size_t written_bytes, const boost::system::error_code& error) {
-           // if (std::shared_ptr<MemcCommand> cmd = cmd_wptr.lock()) {
-           if (auto cmd_ptr = cmd_wptr.lock()) {
-             LOG_DEBUG << "OnUpstreamRequestWritten cmd ok";
-             cmd_ptr->OnUpstreamRequestWritten(written_bytes, error);
-           } else {
-             LOG_DEBUG << "OnUpstreamRequestWritten cmd released";
-           }
-         };
-}
-
 bool MemcCommand::IsFormostCommand() {
   return client_conn_->IsFirstCommand(shared_from_this());
 }
@@ -266,8 +216,8 @@ void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
   if (backend_conn_ == nullptr) {
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = client_conn_->upconn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WrapOnUpstreamResponse(shared_from_this()),
-                                         WrapOnUpstreamRequestWritten(shared_from_this()));
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnUpstreamResponse),
+                                   WeakBind(&MemcCommand::OnUpstreamRequestWritten));
   }
 
   DoForwardRequest(buf, bytes);
@@ -284,7 +234,7 @@ void MemcCommand::Abort() {
   }
 }
 
-void MemcCommand::OnForwardResponseFinished(size_t forwarded_bytes, const boost::system::error_code& error) {
+void MemcCommand::OnForwardResponseFinished(const boost::system::error_code& error) {
   if (error) {
     // TODO
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished (" << cmd_line_without_rn() << ") error=" << error;

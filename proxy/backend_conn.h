@@ -15,7 +15,7 @@ using namespace boost::asio;
 namespace mcproxy {
 
 typedef std::function<void(const boost::system::error_code& error)> UpstreamReadCallback;
-typedef std::function<void(size_t written_bytes, const boost::system::error_code& error)> UpstreamWriteCallback;
+typedef std::function<void(const boost::system::error_code& error)> UpstreamWriteCallback;
 
 class BackendConn {
 public:

@@ -6,9 +6,6 @@
 
 namespace mcproxy {
 
-UpstreamReadCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr);
-UpstreamWriteCallback WrapOnUpstreamRequestWritten(std::weak_ptr<MemcCommand> cmd_wptr);
-
 const char * GetLineEnd(const char * buf, size_t len);
 
 std::atomic_int write_cmd_count;
@@ -38,7 +35,7 @@ void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf
   backend_conn_->ForwardRequest(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
 }
 
-void WriteCommand::OnUpstreamRequestWritten(size_t, const boost::system::error_code& error) {
+void WriteCommand::OnUpstreamRequestWritten(const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
     LOG_WARN << "WriteCommand OnUpstreamRequestWritten error";

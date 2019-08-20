@@ -8,10 +8,6 @@ namespace mcproxy {
 
 std::atomic_int single_get_cmd_count;
 
-UpstreamReadCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr);
-UpstreamWriteCallback WrapOnUpstreamRequestWritten(std::weak_ptr<MemcCommand> cmd_wptr);
-ForwardResponseCallback WrapOnForwardResponseFinished(size_t to_transfer_bytes, std::weak_ptr<MemcCommand> cmd_wptr);
-
 const char * GetLineEnd(const char * buf, size_t len);
 
 size_t GetValueBytes(const char * data, const char * end) {
@@ -93,10 +89,7 @@ void SingleGetCommand::OnForwardResponseReady() {
     is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
     client_conn_->ForwardResponse(backend_conn_->read_buffer_.unprocessed_data(),
                                   backend_conn_->read_buffer_.unprocessed_bytes(),
-                                  WeakBindOnForwardResponseFinished(backend_conn_->read_buffer_.unprocessed_bytes()));
-    // LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, data="
-    //           << std::string(backend_conn_->read_buffer_.unprocessed_data(), backend_conn_->read_buffer_.unprocessed_bytes() - 2)
-    //           << " unprocessed_bytes=" << backend_conn_->read_buffer_.unprocessed_bytes();
+                                  WeakBind(&MemcCommand::OnForwardResponseFinished));
     backend_conn_->read_buffer_.lock_memmove();
     backend_conn_->read_buffer_.update_processed_bytes(backend_conn_->read_buffer_.unprocessed_bytes());
   } else {

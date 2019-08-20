@@ -24,18 +24,17 @@ public:
 
   virtual ~WriteCommand();
 
-  virtual size_t request_body_upcoming_bytes() const;
+  size_t request_body_upcoming_bytes() const override;
+  void OnUpstreamRequestWritten(const boost::system::error_code& error) override;
 
-  virtual void OnUpstreamRequestWritten(size_t, const boost::system::error_code& error);
-
-  virtual size_t request_body_bytes() const {  // for debug info only
+  size_t request_body_bytes() const override {  // for debug info only
     return request_body_bytes_;
   }
 private:
-  virtual bool ParseUpstreamResponse();
-  virtual void DoForwardRequest(const char * request_data, size_t client_buf_received_bytes);
+  bool ParseUpstreamResponse() override;
+  void DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) override;
 
-  virtual std::string cmd_line_without_rn() const {
+  std::string cmd_line_without_rn() const override {
     return std::string(request_cmd_line_, request_cmd_len_ - 2);
   }
 };

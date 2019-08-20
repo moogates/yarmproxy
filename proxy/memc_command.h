@@ -30,7 +30,7 @@ public:
   void ForwardRequest(const char * buf, size_t bytes);
   virtual bool ParseUpstreamResponse() = 0;
 
-  virtual void OnUpstreamRequestWritten(size_t bytes, const boost::system::error_code& error) {
+  virtual void OnUpstreamRequestWritten(const boost::system::error_code& error) {
   }
 
   virtual void OnForwardResponseReady() {}
@@ -57,7 +57,7 @@ public:
   BackendConn * backend_conn() {
     return backend_conn_;
   }
-  void OnForwardResponseFinished(size_t bytes, const boost::system::error_code& error);
+  void OnForwardResponseFinished(const boost::system::error_code& error);
 
 protected:
   bool is_forwarding_response_;
@@ -70,14 +70,12 @@ protected:
   std::shared_ptr<ClientConnection> client_conn_;
   boost::asio::io_service& io_service_;
 
-  ForwardResponseCallback WeakBindOnForwardResponseFinished(size_t forwarded_bytes);
-
-  template<class MemFun, class Arg1>
-  ForwardResponseCallback WeakBind1(MemFun&& mf, Arg1&& arg) {
+  template<class MemFun>
+  ForwardResponseCallback WeakBind(MemFun&& mf) { // TODO : refine it!
     std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
-    return [cmd_wptr, mf, arg](const boost::system::error_code& error) {
+    return [cmd_wptr, mf](const boost::system::error_code& error) {
           if (auto cmd_ptr = cmd_wptr.lock()) {
-            ((*cmd_ptr).*mf)(arg, error);
+            ((*cmd_ptr).*mf)(error);
           }
         };
   }
