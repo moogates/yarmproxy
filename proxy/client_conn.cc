@@ -75,7 +75,7 @@ void ClientConnection::RotateFirstCommand() {
 void ClientConnection::ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb) {
   forward_resp_callback_ = cb;
 
-  std::weak_ptr<ClientConnection> wptr = shared_from_this();
+  std::weak_ptr<ClientConnection> wptr(shared_from_this());
   auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
     LOG_DEBUG << "ClientConnection::ForwardResponse callback begin, bytes_transferred=" << bytes_transferred;
     if (!error && bytes_transferred < bytes) {

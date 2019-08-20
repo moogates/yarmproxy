@@ -44,13 +44,7 @@ private:
   }
 
 public:
-  bool backend_nomore_response() {
-    return backend_nomore_response_;
-  }
-  void set_backend_nomore_response() {
-    backend_nomore_response_ = true;
-  }
-//////////////////////////////////////
+  bool backend_nomore_response();
   // void AsyncRead();
   void Abort();
 public:
@@ -91,8 +85,6 @@ protected:
 private:
   timeval time_created_;
   bool loaded_;
-////////////////////////////
-  bool backend_nomore_response_;
 };
 
 }

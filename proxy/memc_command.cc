@@ -122,9 +122,7 @@ MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::end
   , client_conn_(owner)
   , io_service_(io_service)
   , loaded_(false)
-  , backend_nomore_response_(false)
 {
-  // backend_conn_ = owner->upconn_pool()->Allocate(backend_endpoint_);
 };
 
 // 0 : ok, 数据不够解析
@@ -202,6 +200,8 @@ void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
                                    WeakBindOnForwardResponseFinished(to_process_bytes));
       LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, unprocessed_bytes="
                 << backend_conn_->read_buffer_.unprocessed_bytes();
+      backend_conn_->read_buffer_.lock_memmove();
+      // backend_conn_->read_buffer_.update_processed_bytes(to_process_bytes);
     } else {
       LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
     }
@@ -221,6 +221,11 @@ MemcCommand::~MemcCommand() {
     client_conn_->upconn_pool()->Release(backend_conn_);
     // delete backend_conn_; // TODO : 需要连接池。暂时直接销毁
   }
+}
+
+bool MemcCommand::backend_nomore_response() {
+  LOG_WARN << "-============OnUpstreamResponse cmd ok";
+  return backend_conn_->read_buffer_.parsed_unreceived_bytes() == 0;
 }
 
 UpstreamReadCallback WrapOnUpstreamResponse(std::weak_ptr<MemcCommand> cmd_wptr) {
@@ -285,15 +290,14 @@ void MemcCommand::OnForwardResponseFinished(size_t forwarded_bytes, const boost:
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished (" << cmd_line_without_rn() << ") error=" << error;
     return;
   }
-
   backend_conn_->read_buffer_.update_processed_bytes(forwarded_bytes);
+  backend_conn_->read_buffer_.unlock_memmove();
 
   if (backend_nomore_response() && backend_conn_->read_buffer_.unprocessed_bytes() == 0) {
     client_conn_->RotateFirstCommand();
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished backend_nomore_response, and all data forwarded to client";
   } else {
-    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished backend transfered_bytes=" << forwarded_bytes
-              << " ready_to_transfer_bytes=" << backend_conn_->read_buffer_.unprocessed_bytes();
+    LOG_DEBUG << "WriteCommand::OnForwardResponseFinished ready_to_transfer_bytes=" << backend_conn_->read_buffer_.unprocessed_bytes();
     is_forwarding_response_ = false;
     if (!backend_nomore_response()) {
       backend_conn_->TryReadMoreData(); // 这里必须继续try
