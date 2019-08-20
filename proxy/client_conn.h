@@ -34,7 +34,7 @@ public:
     return upconn_pool_;
   }
 
-  void Start();
+  void StartRead();
 
   void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
 

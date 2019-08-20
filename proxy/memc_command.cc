@@ -199,12 +199,10 @@ void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
 MemcCommand::~MemcCommand() {
   if (backend_conn_) {
     client_conn_->upconn_pool()->Release(backend_conn_);
-    // delete backend_conn_; // TODO : 需要连接池。暂时直接销毁
   }
 }
 
 bool MemcCommand::backend_nomore_response() {
-  LOG_WARN << "-============OnUpstreamResponse cmd ok";
   return backend_conn_->read_buffer_.parsed_unreceived_bytes() == 0;
 }
 

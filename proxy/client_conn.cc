@@ -38,7 +38,7 @@ ClientConnection::~ClientConnection() {
   LOG_INFO << "ClientConnection destroyed." << --g_cc_count;
 }
 
-void ClientConnection::Start() {
+void ClientConnection::StartRead() {
   ip::tcp::no_delay nodelay(true);
   socket_.set_option(nodelay);
 

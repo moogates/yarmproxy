@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <boost/asio.hpp>
+#include "base/logging.h"
 
 namespace mcproxy {
 
@@ -11,6 +12,56 @@ using namespace boost::asio;
 
 class BackendConnPool;
 class ClientConnection;
+
+class WorkerPool {
+public:
+  explicit WorkerPool(size_t concurrency)
+      : concurrency_(concurrency)
+      , workers_(new Worker[concurrency])
+      , next_worker_(0) { 
+  }
+
+  ClientConnection* NewClientConntion();
+
+  void StartDispatching() {
+    for(size_t i = 0; i < concurrency_; ++i) {
+      Worker& woker = workers_[i];
+      std::thread th([&woker]() {
+            try {
+              woker.io_service_.run();
+            } catch (std::exception& e) {
+              LOG_ERROR << "WorkerThread io_service.run error:" << e.what();
+            }
+          });
+      th.detach();
+      woker.thread_ = std::move(th); // what to to with the socket?
+    }
+  }
+
+  void StopDispatching() {
+    for(size_t i = 0; i < concurrency_; ++i) {
+      workers_[i].io_service_.stop();
+    }
+  }
+private:
+  struct Worker {
+    Worker();
+  //Worker() : work_(io_service_), upconn_pool_(new BackendConnPool(io_service_)) {
+  //}
+    std::thread thread_;
+    io_service io_service_;
+    io_service::work work_;
+    BackendConnPool* upconn_pool_;
+  };
+
+  size_t concurrency_;
+  Worker* workers_; // TODO : use std::unique_ptr
+
+  Worker& NextWorker() {
+    return workers_[next_worker_++ % concurrency_];
+  }
+  size_t next_worker_;
+};
 
 class RequestDispatcher {
 public:
@@ -27,6 +78,7 @@ public:
 
 private:
   int id_;
+  std::thread thread_;
   io_service io_service_;
   io_service::work work_;
   BackendConnPool* upconn_pool_;

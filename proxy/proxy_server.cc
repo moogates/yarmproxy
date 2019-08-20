@@ -11,6 +11,14 @@
 
 namespace mcproxy {
 
+WorkerPool::Worker::Worker() : work_(io_service_), upconn_pool_(new BackendConnPool(io_service_)) {
+}
+
+ClientConnection* WorkerPool::NewClientConntion() {
+  Worker& worker = NextWorker();
+  return new ClientConnection(worker.io_service_, worker.upconn_pool_);
+}
+
 RequestDispatcher::RequestDispatcher(int id) : id_(id), work_(io_service_) {
   upconn_pool_ = new BackendConnPool(io_service_); // TODO : 
 }
@@ -20,7 +28,7 @@ ClientConnection* RequestDispatcher::NewClientConntion() {
 }
 
 static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
-  size_t pos = ep.find_first_of(':');
+  size_t pos = ep.find(':');
   std::string host = ep.substr(0, pos);
   int port = std::stoi(ep.substr(pos + 1));
   return ip::tcp::endpoint(ip::address::from_string(host), port);
@@ -68,7 +76,7 @@ void ProxyServer::Run() {
   try {
     io_service_.run();
   } catch (std::exception& e) {
-    LOG_WARN << "io_service.run error : " << e.what();
+    LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
   }
 }
 
@@ -91,10 +99,10 @@ void ProxyServer::StartAccept() {
 
 void ProxyServer::HandleAccept(std::shared_ptr<ClientConnection> client_conn, const boost::system::error_code& error) {
   if (!error) {
-    client_conn->Start();
+    client_conn->StartRead();
     StartAccept();
   } else {
-    LOG_WARN << "io_service accept error!";
+    LOG_ERROR << "ProxyServer accept error!";
   }
 }
 
