@@ -8,18 +8,18 @@ namespace mcproxy {
 // TODO: 更好的容错，以及错误返回信息, 例如
 //   客户端格式错误时候，memcached返回错误信息: "CLIENT_ERROR bad data chunk\r\n"
 
-std::atomic_int upstream_conn_count;
+std::atomic_int backend_conn_count;
 
 BackendConn::BackendConn(boost::asio::io_service& io_service,
                            const ip::tcp::endpoint& upendpoint)
-  : upstream_endpoint_(upendpoint)
+  : backend_endpoint_(upendpoint)
   , socket_(io_service) 
   , is_reading_more_(false) {
-  LOG_DEBUG << "BackendConn ctor, upstream_conn_count=" << ++upstream_conn_count;
+  LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
 }
 
 BackendConn::~BackendConn() {
-  LOG_DEBUG << "BackendConn dtor, upstream_conn_count=" << --upstream_conn_count;
+  LOG_DEBUG << "BackendConn dtor, backend_conn_count=" << --backend_conn_count;
 }
 
 void BackendConn::ReadResponse() {
@@ -50,7 +50,7 @@ void BackendConn::ForwardRequest(const char* data, size_t bytes, bool has_more_d
     LOG_DEBUG << "BackendConn::ForwardRequest open socket, req="
               // << std::string(data, bytes - 2) << " size=" << bytes
               << " has_more_data=" << has_more_data << " conn=" << this;
-    socket_.async_connect(upstream_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
+    socket_.async_connect(backend_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
         data, bytes, has_more_data, std::placeholders::_1));
     return;
   }
@@ -72,16 +72,16 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
   if (error) {
     // TODO : 如何通知给command?
     LOG_WARN << "HandleWrite error, upconn=" << this << " ep="
-             << upstream_endpoint_ << " err=" << error.message();
+             << backend_endpoint_ << " err=" << error.message();
     socket_.close();
     return;
   }
 
-  LOG_DEBUG << "HandleWrite ok, upconn=" << this << " ep=" << upstream_endpoint_
-            << " " << bytes << " bytes transfered to upstream";
+  LOG_DEBUG << "HandleWrite ok, upconn=" << this << " ep=" << backend_endpoint_
+            << " " << bytes << " bytes transfered to backend";
 
   if (bytes_transferred < bytes) {
-    LOG_DEBUG << "HandleWrite 向 upstream 没写完, 继续写.";
+    LOG_DEBUG << "HandleWrite 向 backend 没写完, 继续写.";
     boost::asio::async_write(socket_,
         boost::asio::buffer(data + bytes_transferred, bytes - bytes_transferred),
         std::bind(&BackendConn::HandleWrite, this, data + bytes_transferred, request_has_more_data,
@@ -95,7 +95,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
       LOG_WARN << "BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
       uptream_write_callback_(bytes, error);
     } else {
-      LOG_DEBUG << "BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 upstream 的响应.";
+      LOG_DEBUG << "BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 backend 的响应.";
       // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
       read_buffer_.Reset();  // TODO : 这里还需要吗？
     
@@ -108,19 +108,19 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    LOG_WARN << "BackendConn::HandleRead upstream read error, upconn=" << this
-             << " ep=" << upstream_endpoint_ << " err=" << error.message();
+    LOG_WARN << "BackendConn::HandleRead backend read error, upconn=" << this
+             << " ep=" << backend_endpoint_ << " err=" << error.message();
     // socket_.close();
     // TODO : 如何通知给外界?
   } else {
-    LOG_DEBUG << "BackendConn::HandleRead upstream read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
+    LOG_DEBUG << "BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
     if (is_reading_more_) {
       is_reading_more_ = false;  // finish reading, you could memmove now
       read_buffer_.unlock_memmove();
     }
     // pushed_bytes_ += bytes_transferred;
     read_buffer_.update_received_bytes(bytes_transferred);
-    upstream_read_callback_(error); // TODO : error总是false，所以这个参数应当去掉
+    backend_read_callback_(error); // TODO : error总是false，所以这个参数应当去掉
   }
 }
 

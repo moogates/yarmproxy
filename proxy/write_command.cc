@@ -35,7 +35,7 @@ size_t WriteCommand::request_body_upcoming_bytes() const {
 void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) {
   client_conn_->read_buffer_.lock_memmove();
   bytes_forwarding_ = std::min(client_buf_received_bytes, request_cmd_len_ + request_body_bytes_); // FIXME
-  upstream_conn_->ForwardRequest(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
+  backend_conn_->ForwardRequest(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
 }
 
 void WriteCommand::OnUpstreamRequestWritten(size_t, const boost::system::error_code& error) {
@@ -51,25 +51,25 @@ void WriteCommand::OnUpstreamRequestWritten(size_t, const boost::system::error_c
     client_conn_->TryReadMoreRequest();
   } else {
     // TODO ?
-    upstream_conn_->ReadResponse();
+    backend_conn_->ReadResponse();
   }
   request_forwarded_bytes_ += bytes_forwarding_;
   bytes_forwarding_ = 0;
 }
 
 bool WriteCommand::ParseUpstreamResponse() {
-  const char * entry = upstream_conn_->read_buffer_.unparsed_data();
-  const char * p = GetLineEnd(entry, upstream_conn_->read_buffer_.unparsed_bytes());
+  const char * entry = backend_conn_->read_buffer_.unparsed_data();
+  const char * p = GetLineEnd(entry, backend_conn_->read_buffer_.unparsed_bytes());
   if (p == nullptr) {
     // TODO : no enough data for parsing, please read more
     LOG_DEBUG << "WriteCommand ParseUpstreamResponse no enough data for parsing, please read more"
-              << " data=" << std::string(entry, upstream_conn_->read_buffer_.unparsed_bytes())
-              << " bytes=" << upstream_conn_->read_buffer_.unparsed_bytes();
+              << " data=" << std::string(entry, backend_conn_->read_buffer_.unparsed_bytes())
+              << " bytes=" << backend_conn_->read_buffer_.unparsed_bytes();
     return true;
   }
 
-  set_upstream_nomore_response();
-  upstream_conn_->read_buffer_.update_parsed_bytes(p - entry + 1);
+  set_backend_nomore_response();
+  backend_conn_->read_buffer_.update_parsed_bytes(p - entry + 1);
   LOG_WARN << "WriteCommand ParseUpstreamResponse resp=[" << std::string(entry, p - entry - 1) << "]";
   return true;
 }

@@ -33,7 +33,7 @@ public:
   }
 
   void SetReadWriteCallback(const UpstreamReadCallback& read_callback, const UpstreamWriteCallback& write_callback) {
-    upstream_read_callback_ = read_callback;
+    backend_read_callback_ = read_callback;
     uptream_write_callback_ = write_callback;
   }
 private:
@@ -44,9 +44,9 @@ private:
 public:
   ReadBuffer read_buffer_;
 private:
-  ip::tcp::endpoint upstream_endpoint_;
+  ip::tcp::endpoint backend_endpoint_;
   ip::tcp::socket socket_;
-  UpstreamReadCallback upstream_read_callback_;
+  UpstreamReadCallback backend_read_callback_;
   UpstreamWriteCallback uptream_write_callback_;
 
   bool is_reading_more_;

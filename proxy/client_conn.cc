@@ -195,7 +195,6 @@ void ClientConnection::OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, con
   timer_.cancel();
   // TODO : 销毁工作
   // TODO : 如果是最后一个error, 要负责client的收尾工作
-  LOG_WARN << "ClientConnection::OnCommandError --> set_upstream_conn " << memc_cmd.operator->()<< " upconn:0";
 }
 
 }
