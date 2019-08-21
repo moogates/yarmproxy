@@ -7,6 +7,7 @@
 
 #include "base/logging.h"
 
+#include "worker_pool.h"
 #include "client_conn.h"
 #include "memcached_locator.h"
 #include "backend_conn.h"
@@ -54,14 +55,6 @@ bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip
     p = q;
   }
   LOG_DEBUG << "GroupKeysByEndpoint exit, endpoint_key_map.size=" << endpoint_key_map->size();
-
-//for (auto it = cmd_line_map.begin(); it != cmd_line_map.end(); ++it) {
-//  LOG_DEBUG << "GroupGetKeys " << it->first << " get_keys=" << it->second;
-//  it->second += "\r\n";
-//  std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(io_service_, it->first, client_conn_, it->second.c_str(), it->second.size()));
-//  // fetching_cmd_set_.insert(cmd);
-//  subcommands.push_back(cmd);
-//}
   return true;
 }
 
@@ -94,13 +87,13 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 
 
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
+MemcCommand::MemcCommand(const ip::tcp::endpoint & ep, 
     std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len) 
   : is_forwarding_response_(false)
   , backend_endpoint_(ep)
   , backend_conn_(nullptr)
   , client_conn_(owner)
-  , io_service_(io_service)
+  , io_service_(owner->context().io_service_)
   , loaded_(false)
 {
 };
@@ -108,8 +101,7 @@ MemcCommand::MemcCommand(boost::asio::io_service& io_service, const ip::tcp::end
 // 0 : ok, 数据不够解析
 // >0 : ok, 解析成功，返回已解析的字节数
 // <0 : error, 未知命令
-int MemcCommand::CreateCommand(boost::asio::io_service& asio_service,
-          std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
+int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
           std::list<std::shared_ptr<MemcCommand>>* sub_commands) {
   const char * p = GetLineEnd(buf, size);
   if (p == nullptr) {
@@ -123,7 +115,7 @@ int MemcCommand::CreateCommand(boost::asio::io_service& asio_service,
 #define DONT_USE_MAP 0
 #if DONT_USE_MAP
     auto ep = MemcachedLocator::Instance().GetEndpointByKey("1");
-    std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(asio_service,
+    std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(owner->context().io_service_,
                      ep, owner, buf, cmd_line_bytes));
     sub_commands->push_back(cmd);
     LOG_DEBUG << "DONT_USE_MAP ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
@@ -134,7 +126,7 @@ int MemcCommand::CreateCommand(boost::asio::io_service& asio_service,
     for (auto it = endpoint_key_map.begin(); it != endpoint_key_map.end(); ++it) {
       LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first << " keys=" << it->second;
       it->second += "\r\n";
-      std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(asio_service, it->first, owner, it->second.c_str(), it->second.size()));
+      std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(it->first, owner, it->second.c_str(), it->second.size()));
       // fetching_cmd_set_.insert(cmd);
       // subcommands.push_back(cmd);
       sub_commands->push_back(cmd);
@@ -146,8 +138,7 @@ int MemcCommand::CreateCommand(boost::asio::io_service& asio_service,
     ParseWriteCommandLine(buf, cmd_line_bytes, &key, &body_bytes);
 
     //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-    std::shared_ptr<MemcCommand> cmd(new WriteCommand(asio_service,
-              MemcachedLocator::Instance().GetEndpointByKey(key),
+    std::shared_ptr<MemcCommand> cmd(new WriteCommand(MemcachedLocator::Instance().GetEndpointByKey(key),
               owner, buf, cmd_line_bytes, body_bytes));
     sub_commands->push_back(cmd);
     return cmd_line_bytes + body_bytes;
@@ -212,6 +203,7 @@ bool MemcCommand::IsFormostCommand() {
 
 void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
   if (backend_conn_ == nullptr) {
+    // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = client_conn_->upconn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnUpstreamResponse),

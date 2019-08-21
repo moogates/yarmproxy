@@ -18,11 +18,9 @@ class ClientConnection;
 
 class MemcCommand : public std::enable_shared_from_this<MemcCommand> {
 public:
-  static int CreateCommand(boost::asio::io_service& io_service,
-                           std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
+  static int CreateCommand(std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
                            std::list<std::shared_ptr<MemcCommand>>* sub_cmds);
-  MemcCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
-      std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
+  MemcCommand(const ip::tcp::endpoint & ep, std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
 
 public:
   virtual ~MemcCommand();

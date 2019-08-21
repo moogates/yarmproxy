@@ -1,7 +1,0 @@
-1. error handling
-
-2. use libevent
-
-3. cleaner buffer related code
-
-4. namespace cleanup

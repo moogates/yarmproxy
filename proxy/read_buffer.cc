@@ -5,8 +5,6 @@
 namespace mcproxy {
 
 size_t ReadBuffer::unparsed_bytes() const {
-  LOG_DEBUG << "ReadBuffer::unparsed_bytes pushed="
-              << received_offset_ << " parsed=" << parsed_offset_;
   if (received_offset_ > parsed_offset_) {
     return received_offset_ - parsed_offset_;
   }

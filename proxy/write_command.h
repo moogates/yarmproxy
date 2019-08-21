@@ -19,7 +19,7 @@ private:
   size_t bytes_forwarding_;
 
 public:
-  WriteCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
+  WriteCommand(const ip::tcp::endpoint & ep, 
           std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len, size_t body_bytes);
 
   virtual ~WriteCommand();

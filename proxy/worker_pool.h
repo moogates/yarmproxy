@@ -9,11 +9,19 @@ using namespace boost::asio;
 class ClientConnection;
 class BackendConnPool;
 
+struct WorkerContext {
+  WorkerContext();
+  std::thread thread_;
+  io_service io_service_;
+  io_service::work work_;
+  BackendConnPool* backend_conn_pool_;
+};
+
 class WorkerPool {
 public:
   explicit WorkerPool(size_t concurrency)
       : concurrency_(concurrency)
-      , workers_(new Worker[concurrency])
+      , workers_(new WorkerContext[concurrency])
       , next_worker_(0) { 
   }
 
@@ -22,18 +30,12 @@ public:
 
   ClientConnection* NewClientConntion();
 private:
-  struct Worker {
-    Worker();
-    std::thread thread_;
-    io_service io_service_;
-    io_service::work work_;
-    BackendConnPool* upconn_pool_;
-  };
+  static thread_local int worker_id_;
 
   size_t concurrency_;
-  Worker* workers_; // TODO : use std::unique_ptr
+  WorkerContext* workers_; // TODO : use std::unique_ptr
 
-  Worker& NextWorker() {
+  WorkerContext& NextWorker() {
     return workers_[next_worker_++ % concurrency_];
   }
   size_t next_worker_;

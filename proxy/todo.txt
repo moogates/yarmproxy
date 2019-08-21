@@ -1,0 +1,11 @@
+1. error handling
+
+2. use libevent
+
+3. cleaner buffer related naming
+
+4. namespace & header files cleanup
+
+5. timeout
+
+6. cleanup TODO in source code

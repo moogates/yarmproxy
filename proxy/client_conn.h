@@ -11,6 +11,7 @@
 
 #include "base/logging.h"
 #include "read_buffer.h"
+#include "worker_pool.h"
 
 using namespace boost::asio;
 
@@ -18,24 +19,24 @@ namespace mcproxy {
 
 class BackendConnPool;
 class MemcCommand;
+struct WorkerContext;
 
 typedef std::function<void(const boost::system::error_code& error)> ForwardResponseCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
 public:
-  ClientConnection(boost::asio::io_service& io_service, BackendConnPool* pool);
+  ClientConnection(WorkerContext& context);
   ~ClientConnection();
+
+  WorkerContext& context() {
+    return context_;
+  }
 
   ip::tcp::socket& socket() {
     return socket_;
   }
-
-  BackendConnPool* upconn_pool() {
-    return upconn_pool_;
-  }
-
+  BackendConnPool* upconn_pool();
   void StartRead();
-
   void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
 
 public:
@@ -46,15 +47,14 @@ public:
   void RotateFirstCommand();
   void TryReadMoreRequest();
 
-protected:
-  boost::asio::io_service& io_service_;
+  // boost::asio::io_service& io_service_;
 private:
   ip::tcp::socket socket_;
 public:
   ReadBuffer read_buffer_;
 
 protected:
-  BackendConnPool* upconn_pool_;
+  WorkerContext& context_;
 
 private:
   ForwardResponseCallback forward_resp_callback_;

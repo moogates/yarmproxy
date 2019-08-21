@@ -9,9 +9,9 @@ namespace mcproxy {
 const char * GetLineEnd(const char * buf, size_t len);
 
 std::atomic_int write_cmd_count;
-WriteCommand::WriteCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
+WriteCommand::WriteCommand(const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len, size_t body_bytes)
-    : MemcCommand(io_service, ep, owner, buf, cmd_len) 
+    : MemcCommand(ep, owner, buf, cmd_len) 
     , request_cmd_line_(buf)
     , request_cmd_len_(cmd_len)
     , request_forwarded_bytes_(0)
