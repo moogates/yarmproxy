@@ -66,7 +66,7 @@ protected:
   BackendConn * backend_conn_;
 
   std::shared_ptr<ClientConnection> client_conn_;
-  boost::asio::io_service& io_service_;
+  WorkerContext& context_;
 
   template<class MemFun>
   ForwardResponseCallback WeakBind(MemFun&& mf) { // TODO : refine it!

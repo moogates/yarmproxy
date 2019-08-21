@@ -51,10 +51,6 @@ void ClientConnection::StartRead() {
   AsyncRead();
 }
 
-BackendConnPool* ClientConnection::upconn_pool() {
-  return context_.backend_conn_pool_;
-}
-
 void ClientConnection::TryReadMoreRequest() {
   // TODO : add preconditions check
   AsyncRead();

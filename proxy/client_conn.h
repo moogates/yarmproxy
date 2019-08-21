@@ -11,7 +11,6 @@
 
 #include "base/logging.h"
 #include "read_buffer.h"
-#include "worker_pool.h"
 
 using namespace boost::asio;
 
@@ -35,7 +34,6 @@ public:
   ip::tcp::socket& socket() {
     return socket_;
   }
-  BackendConnPool* upconn_pool();
   void StartRead();
   void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
 

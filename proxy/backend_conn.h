@@ -19,8 +19,7 @@ typedef std::function<void(const boost::system::error_code& error)> UpstreamWrit
 
 class BackendConn {
 public:
-  BackendConn(boost::asio::io_service& io_service, 
-      const ip::tcp::endpoint& upendpoint);
+  BackendConn(boost::asio::io_service& io_service, const ip::tcp::endpoint& upendpoint);
   ~BackendConn();
 
   void ForwardRequest(const char* data, size_t bytes, bool has_more_data);

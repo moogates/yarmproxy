@@ -93,7 +93,7 @@ MemcCommand::MemcCommand(const ip::tcp::endpoint & ep,
   , backend_endpoint_(ep)
   , backend_conn_(nullptr)
   , client_conn_(owner)
-  , io_service_(owner->context().io_service_)
+  , context_(owner->context())
   , loaded_(false)
 {
 };
@@ -115,7 +115,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
 #define DONT_USE_MAP 0
 #if DONT_USE_MAP
     auto ep = MemcachedLocator::Instance().GetEndpointByKey("1");
-    std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(owner->context().io_service_,
+    std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(context_.io_service_,
                      ep, owner, buf, cmd_line_bytes));
     sub_commands->push_back(cmd);
     LOG_DEBUG << "DONT_USE_MAP ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
@@ -189,7 +189,7 @@ void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
 
 MemcCommand::~MemcCommand() {
   if (backend_conn_) {
-    client_conn_->upconn_pool()->Release(backend_conn_);
+    context_.backend_conn_pool_->Release(backend_conn_);
   }
 }
 
@@ -205,7 +205,7 @@ void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
   if (backend_conn_ == nullptr) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
-    backend_conn_ = client_conn_->upconn_pool()->Allocate(backend_endpoint_);
+    backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnUpstreamResponse),
                                    WeakBind(&MemcCommand::OnUpstreamRequestWritten));
   }
