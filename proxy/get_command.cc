@@ -26,9 +26,9 @@ size_t GetValueBytes(const char * data, const char * end) {
 }
 
 
-SingleGetCommand::SingleGetCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
+SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
-    : MemcCommand(io_service, ep, owner, buf, cmd_len) 
+    : MemcCommand(ep, owner, buf, cmd_len) 
     , cmd_line_(buf, cmd_len)
 {
   LOG_DEBUG << "SingleGetCommand ctor " << ++single_get_cmd_count;

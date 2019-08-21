@@ -5,13 +5,16 @@
 
 namespace mcproxy {
 
-WorkerPool::Worker::Worker() : work_(io_service_), upconn_pool_(new BackendConnPool(io_service_)) {
+WorkerContext::WorkerContext() : work_(io_service_), backend_conn_pool_(new BackendConnPool(io_service_)) {
 }
+
+thread_local int WorkerPool::worker_id_;
 
 void WorkerPool::StartDispatching() {
   for(size_t i = 0; i < concurrency_; ++i) {
-    Worker& woker = workers_[i];
-    std::thread th([&woker]() {
+    WorkerContext& woker = workers_[i];
+    std::thread th([&woker, i]() {
+          WorkerPool::worker_id_ = i;
           try {
             woker.io_service_.run();
           } catch (std::exception& e) {
@@ -30,8 +33,8 @@ void WorkerPool::StopDispatching() {
 }
 
 ClientConnection* WorkerPool::NewClientConntion() {
-  Worker& worker = NextWorker();
-  return new ClientConnection(worker.io_service_, worker.upconn_pool_);
+  WorkerContext& worker = NextWorker();
+  return new ClientConnection(worker);
 }
 
 }

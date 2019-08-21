@@ -1,5 +1,5 @@
-#ifndef _UPSTREAM_CONN_H_
-#define _UPSTREAM_CONN_H_
+#ifndef _BACKEND_CONN_H_
+#define _BACKEND_CONN_H_
 
 #include <map>
 #include <queue>
@@ -67,4 +67,4 @@ public:
 
 }
 
-#endif // _UPSTREAM_CONN_H_
+#endif // _BACKEND_CONN_H_

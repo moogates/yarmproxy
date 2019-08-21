@@ -5,6 +5,7 @@
 
 #include "base/logging.h"
 
+#include "worker_pool.h"
 #include "memc_command.h"
 #include "backend_conn.h"
 
@@ -18,14 +19,13 @@ namespace mcproxy {
 
 std::atomic_int g_cc_count;
 
-ClientConnection::ClientConnection(boost::asio::io_service& io_service, BackendConnPool* pool)
-  : io_service_(io_service)
-  , socket_(io_service)
-  , upconn_pool_(pool)
+ClientConnection::ClientConnection(WorkerContext& context)
+  : socket_(context.io_service_)
+  , context_(context)
   , timeout_(0) // TODO : timeout timer 
-  , timer_(io_service)
+  , timer_(context.io_service_)
 {
-  LOG_INFO << "ClientConnection destroyed." << ++g_cc_count;
+  LOG_INFO << "ClientConnection created." << ++g_cc_count;
 }
 
 ClientConnection::~ClientConnection() {
@@ -49,6 +49,10 @@ void ClientConnection::StartRead() {
   socket_.set_option(send_buf_size);
 
   AsyncRead();
+}
+
+BackendConnPool* ClientConnection::upconn_pool() {
+  return context_.backend_conn_pool_;
 }
 
 void ClientConnection::TryReadMoreRequest() {
@@ -126,8 +130,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   while(read_buffer_.unparsed_received_bytes() > 0) { // TODO : 提取buffer对象
     std::list<std::shared_ptr<MemcCommand>> sub_commands;
-    int parsed_bytes = MemcCommand::CreateCommand(io_service_,
-          shared_from_this(), read_buffer_.unprocessed_data(), read_buffer_.received_bytes(),
+    int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(), read_buffer_.unprocessed_data(), read_buffer_.received_bytes(),
           &sub_commands);
 
     if (parsed_bytes < 0) {

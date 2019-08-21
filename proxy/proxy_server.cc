@@ -5,7 +5,6 @@
 
 #include "base/logging.h"
 
-#include "backend_conn.h"
 #include "client_conn.h"
 #include "worker_pool.h"
 #include "memcached_locator.h"
