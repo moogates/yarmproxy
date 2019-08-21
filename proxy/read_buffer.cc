@@ -1,5 +1,7 @@
 #include "read_buffer.h"
 
+#include <cstring>
+
 #include "base/logging.h"
 
 namespace mcproxy {
