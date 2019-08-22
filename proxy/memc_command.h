@@ -60,9 +60,7 @@ public:
 protected:
   bool is_forwarding_response_;
 
-protected:
   ip::tcp::endpoint backend_endpoint_;
-protected:
   BackendConn * backend_conn_;
 
   std::shared_ptr<ClientConnection> client_conn_;
@@ -77,16 +75,6 @@ protected:
           }
         };
   }
-
-//template<class MemFun>
-//ForwardResponseCallback WeakBind(MemFun&& mf) { // TODO : refine it!
-//  std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
-//  return [cmd_wptr, mf](const boost::system::error_code& error) {
-//        if (auto cmd_ptr = cmd_wptr.lock()) {
-//          ((*cmd_ptr).*mf)(error);
-//        }
-//      };
-//}
 
 private:
   timeval time_created_;

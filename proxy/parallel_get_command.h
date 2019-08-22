@@ -1,54 +1,42 @@
+#ifndef _PARALLEL_GET_COMMAND_H_
+#define _PARALLEL_GET_COMMAND_H_
 
+#include <unordered_map>
 
-    ParallelGetCommand* parallel_cmd = new ParallelGetCommand(asio_service, owner, buf, cmd_len);
-    parallel_cmd ->GroupGetKeys();
-    (*cmd).reset(parallel_cmd);
+#include "memc_command.h"
+
+using namespace boost::asio;
+
+namespace mcproxy {
 
 class ParallelGetCommand : public MemcCommand {
 public:
-  ParallelGetCommand(boost::asio::io_service& io_service, std::shared_ptr<ClientConnection> owner, const char* buf, size_t size)
-    : MemcCommand(io_service,
-        MemcachedLocator::Instance().GetEndpointByKey("1"), // FIXME
-        owner, buf, size) {
+  ParallelGetCommand(const ip::tcp::endpoint & ep, 
+          std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
+  virtual ~ParallelGetCommand();
+
+  void OnForwardResponseReady() override;
+  void OnUpstreamRequestWritten(const boost::system::error_code& error) override {
+    // 不需要再通知Client Conn
   }
-  std::vector<std::shared_ptr<MemcCommand>> single_get_commands_;
+private:
+  struct BackendTask {
+    std::string sub_cmd_line_;
+    BackendConn* backend_;
+  };
+  std::unordered_map<ip::tcp::endpoint, BackendTask> backend_map_;
 
-  // TODO : refinement
-  bool GroupGetKeys() {
-    std::vector<std::string> keys;
-    std::string key_list = cmd_line().substr(4, cmd_line().size() - 6);
-    boost::split(keys, key_list, boost::is_any_of(" "), boost::token_compress_on);
+  void DoForwardRequest(const char *, size_t) override;
+  bool ParseUpstreamResponse() override;
 
-    std::map<ip::tcp::endpoint, std::string> cmd_line_map;
-    
-    for (size_t i = 0; i < keys.size(); ++i) {
-      if (keys[i].empty()) {
-        continue;
-      }
-      ip::tcp::endpoint ep = MemcachedLocator::Instance().GetEndpointByKey(keys[i].c_str(), keys[i].size());
-
-      auto it = cmd_line_map.find(ep);
-      if (it == cmd_line_map.end()) {
-        it = cmd_line_map.insert(make_pair(ep, std::string("get"))).first;
-      }
-      it->second += ' ';
-      it->second += keys[i];
-    }
-
-    for (auto it = cmd_line_map.begin(); it != cmd_line_map.end(); ++it) {
-      LOG_DEBUG << "GroupGetKeys " << it->first << " get_keys=" << it->second;
-      it->second += "\r\n";
-      std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(io_service_, it->first, client_conn_, it->second.c_str(), it->second.size()));
-      // fetching_cmd_set_.insert(cmd);
-      single_get_commands_.push_back(cmd);
-    }
-    return true;
+  std::string cmd_line_without_rn() const override {
+    return cmd_line_.substr(0, cmd_line_.size() - 2);
   }
 
-  virtual void ForwardData(const char *, size_t) {
-    for(auto cmd : single_get_commands_) {
-      cmd->ForwardData(nullptr, 0);
-    }
-  }
+  // std::string cmd_line_;
 };
+
+}
+
+#endif  // _PARALLEL_GET_COMMAND_H_
 
