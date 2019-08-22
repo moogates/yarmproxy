@@ -12,7 +12,7 @@ std::atomic_int backend_conn_count;
 
 BackendConn::BackendConn(boost::asio::io_service& io_service,
                            const ip::tcp::endpoint& upendpoint)
-  : backend_endpoint_(upendpoint)
+  : remote_endpoint_(upendpoint)
   , socket_(io_service) 
   , is_reading_more_(false) {
   LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
@@ -50,7 +50,7 @@ void BackendConn::ForwardRequest(const char* data, size_t bytes, bool has_more_d
     LOG_DEBUG << "BackendConn::ForwardRequest open socket, req="
               // << std::string(data, bytes - 2) << " size=" << bytes
               << " has_more_data=" << has_more_data << " conn=" << this;
-    socket_.async_connect(backend_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
+    socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
         data, bytes, has_more_data, std::placeholders::_1));
     return;
   }
@@ -72,12 +72,12 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
   if (error) {
     // TODO : 如何通知给command?
     LOG_WARN << "HandleWrite error, upconn=" << this << " ep="
-             << backend_endpoint_ << " err=" << error.message();
+             << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     return;
   }
 
-  LOG_DEBUG << "HandleWrite ok, upconn=" << this << " ep=" << backend_endpoint_
+  LOG_DEBUG << "HandleWrite ok, upconn=" << this << " ep=" << remote_endpoint_
             << " " << bytes << " bytes transfered to backend";
 
   if (bytes_transferred < bytes) {
@@ -93,7 +93,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
   {
     if (request_has_more_data) {
       LOG_WARN << "BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
-      uptream_write_callback_(error);
+      request_sent_callback_(error);
     } else {
       LOG_DEBUG << "BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 backend 的响应.";
       // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
@@ -109,7 +109,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
     LOG_WARN << "BackendConn::HandleRead backend read error, upconn=" << this
-             << " ep=" << backend_endpoint_ << " err=" << error.message();
+             << " ep=" << remote_endpoint_ << " err=" << error.message();
     // socket_.close();
     // TODO : 如何通知给外界?
   } else {
@@ -120,7 +120,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
     }
     // pushed_bytes_ += bytes_transferred;
     read_buffer_.update_received_bytes(bytes_transferred);
-    backend_read_callback_(error); // TODO : error总是false，所以这个参数应当去掉
+    response_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
   }
 }
 

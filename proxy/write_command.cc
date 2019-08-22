@@ -35,13 +35,13 @@ void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf
   backend_conn_->ForwardRequest(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
 }
 
-void WriteCommand::OnUpstreamRequestWritten(const boost::system::error_code& error) {
+void WriteCommand::OnForwardMoreRequest(const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_WARN << "WriteCommand OnUpstreamRequestWritten error";
+    LOG_WARN << "WriteCommand OnForwardMoreRequest error";
     return;
   }
-  LOG_INFO << "WriteCommand OnUpstreamRequestWritten ok, bytes_forwarding_=" << bytes_forwarding_;
+  LOG_INFO << "WriteCommand OnForwardMoreRequest ok, bytes_forwarding_=" << bytes_forwarding_;
   client_conn_->read_buffer_.unlock_memmove();
 
   if (bytes_forwarding_ < request_cmd_len_ + request_body_bytes_) {
@@ -54,7 +54,8 @@ void WriteCommand::OnUpstreamRequestWritten(const boost::system::error_code& err
   bytes_forwarding_ = 0;
 }
 
-bool WriteCommand::ParseUpstreamResponse() {
+bool WriteCommand::ParseUpstreamResponse(BackendConn* backend) {
+  assert(backend_conn_ == backend);
   const char * entry = backend_conn_->read_buffer_.unparsed_data();
   const char * p = GetLineEnd(entry, backend_conn_->read_buffer_.unparsed_bytes());
   if (p == nullptr) {

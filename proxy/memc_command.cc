@@ -89,7 +89,7 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 MemcCommand::MemcCommand(const ip::tcp::endpoint & ep, 
     std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len) 
-  : is_forwarding_response_(false)
+  : is_transfering_response_(false)
   , backend_endpoint_(ep)
   , backend_conn_(nullptr)
   , client_conn_(owner)
@@ -149,37 +149,27 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
   }
 }
 
-void MemcCommand::OnUpstreamResponse(const boost::system::error_code& error) {
+void MemcCommand::OnUpstreamResponseReceived(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
-    LOG_WARN << "MemcCommand::OnUpstreamResponse " << cmd_line_without_rn()
-             << " backend read error : " << backend_endpoint_ << " - "  << error << " " << error.message();
+    LOG_WARN << "MemcCommand::OnUpstreamResponseReceived " << cmd_line_without_rn()
+             << " backend read error : " << backend->remote_endpoint() << " - "  << error << " " << error.message();
     client_conn_->OnCommandError(shared_from_this(), error);
     return;
   }
-  LOG_DEBUG << "SingleGetCommand OnUpstreamResponse data";
 
-  bool valid = ParseUpstreamResponse();
+  bool valid = ParseUpstreamResponse(backend);
   if (!valid) {
-    LOG_WARN << "SingleGetCommand parsing error! valid=false";
+    LOG_WARN << "MemcCommand parsing error! valid=false";
     // TODO : error handling
+    client_conn_->OnCommandError(shared_from_this(), error);
+    return;
   }
+
   if (IsFormostCommand()) {
-    if (!is_forwarding_response_) {
-      is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-      size_t to_process_bytes = backend_conn_->read_buffer_.unprocessed_bytes();
-      client_conn_->ForwardResponse(backend_conn_->read_buffer_.unprocessed_data(), to_process_bytes,
-                                   WeakBind(&MemcCommand::OnForwardResponseFinished));
-      LOG_DEBUG << "SingleGetCommand IsFirstCommand, call ForwardResponse, unprocessed_bytes="
-                << backend_conn_->read_buffer_.unprocessed_bytes();
-      backend_conn_->read_buffer_.lock_memmove();
-      backend_conn_->read_buffer_.update_processed_bytes(to_process_bytes);
-    } else {
-      LOG_WARN << "SingleGetCommand IsFirstCommand, but is forwarding response, don't call ForwardResponse";
-    }
+    TryForwardResponse(backend_conn_);
   } else {
     // TODO : do nothing, just wait
-    LOG_WARN << "SingleGetCommand IsFirstCommand false! unprocessed_bytes="
-             << backend_conn_->read_buffer_.unprocessed_bytes();
+    LOG_DEBUG << "MemcCommand IsFirstCommand false!";
   }
 
   if (!backend_nomore_response()) {
@@ -201,16 +191,16 @@ bool MemcCommand::IsFormostCommand() {
   return client_conn_->IsFirstCommand(shared_from_this());
 }
 
-void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
+void MemcCommand::ForwardRequest(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnUpstreamResponse),
-                                        WeakBind(&MemcCommand::OnUpstreamRequestWritten));
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardMoreRequest),
+                               WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
   }
 
-  DoForwardRequest(buf, bytes);
+  DoForwardRequest(data, bytes);
 }
 
 void MemcCommand::Abort() {
@@ -238,12 +228,27 @@ void MemcCommand::OnForwardResponseFinished(const boost::system::error_code& err
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished backend_nomore_response, and all data forwarded to client";
   } else {
     LOG_DEBUG << "WriteCommand::OnForwardResponseFinished ready_to_transfer_bytes=" << backend_conn_->read_buffer_.unprocessed_bytes();
-    is_forwarding_response_ = false;
+    is_transfering_response_ = false;
     if (!backend_nomore_response()) {
       backend_conn_->TryReadMoreData(); // 这里必须继续try
     }
 
     OnForwardResponseReady(); // 可能已经有新读到的数据，因而要尝试转发更多
+  }
+}
+
+void MemcCommand::TryForwardResponse(BackendConn* backend) {
+  size_t unprocessed = backend->read_buffer_.unprocessed_bytes();
+  if (!is_transfering_response_ && unprocessed > 0) {
+    is_transfering_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
+    client_conn_->ForwardResponse(backend->read_buffer_.unprocessed_data(), unprocessed,
+                                  WeakBind(&MemcCommand::OnForwardResponseFinished));
+    backend->read_buffer_.lock_memmove();
+    backend->read_buffer_.update_processed_bytes(unprocessed);
+    LOG_DEBUG << "MemcCommand::TryForwardResponse to_process_bytes=" << unprocessed;
+  } else {
+    LOG_DEBUG << "MemcCommand::TryForwardResponse do nothing, unprocessed_bytes=" << unprocessed
+              << " is_transfering_response=" << is_transfering_response_;
   }
 }
 

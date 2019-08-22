@@ -25,13 +25,13 @@ public:
   virtual ~WriteCommand();
 
   size_t request_body_upcoming_bytes() const override;
-  void OnUpstreamRequestWritten(const boost::system::error_code& error) override;
+  void OnForwardMoreRequest(const boost::system::error_code& error) override;
 
   size_t request_body_bytes() const override {  // for debug info only
     return request_body_bytes_;
   }
 private:
-  bool ParseUpstreamResponse() override;
+  bool ParseUpstreamResponse(BackendConn* backend) override;
   void DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) override;
 
   std::string cmd_line_without_rn() const override {

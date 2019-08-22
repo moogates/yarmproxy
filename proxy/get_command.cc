@@ -38,8 +38,9 @@ SingleGetCommand::~SingleGetCommand() {
   LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
 }
 
-bool SingleGetCommand::ParseUpstreamResponse() {
+bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   bool valid = true;
+  assert(backend_conn_ == backend);
   while(backend_conn_->read_buffer_.unparsed_bytes() > 0) {
     const char * entry = backend_conn_->read_buffer_.unparsed_data();
     const char * p = GetLineEnd(entry, backend_conn_->read_buffer_.unparsed_bytes());
@@ -57,7 +58,7 @@ bool SingleGetCommand::ParseUpstreamResponse() {
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
 
       backend_conn_->read_buffer_.update_parsed_bytes(entry_bytes);
-      break; // TODO : 每次转发一条，only for test
+      // break; // TODO : 每次转发一条，only for test
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
@@ -81,20 +82,10 @@ bool SingleGetCommand::ParseUpstreamResponse() {
 }
 
 void SingleGetCommand::OnForwardResponseReady() {
-  if (backend_conn_->read_buffer_.unprocessed_bytes() == 0) { // TODO : for test only, 正常这里不触发解析, 在收到数据时候触发的解析，会一次解析所有可解析的
-     ParseUpstreamResponse();
-  }
-
-  if (!is_forwarding_response_ && backend_conn_->read_buffer_.unprocessed_bytes() > 0) {
-    is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-    client_conn_->ForwardResponse(backend_conn_->read_buffer_.unprocessed_data(),
-                                  backend_conn_->read_buffer_.unprocessed_bytes(),
-                                  WeakBind(&MemcCommand::OnForwardResponseFinished));
-    backend_conn_->read_buffer_.lock_memmove();
-    backend_conn_->read_buffer_.update_processed_bytes(backend_conn_->read_buffer_.unprocessed_bytes());
-  } else {
-    LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, backend no data ready to_transfer, waiting to read more data then write down";
-  }
+//if (backend_conn_->read_buffer_.unprocessed_bytes() == 0) { // TODO : for test only, 正常这里不触发解析, 在收到数据时候触发的解析，会一次解析所有可解析的
+//   ParseUpstreamResponse(backend_conn_);
+//}
+  TryForwardResponse(backend_conn_);
 }
 
 void SingleGetCommand::DoForwardRequest(const char *, size_t) {

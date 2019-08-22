@@ -55,9 +55,8 @@ protected:
   WorkerContext& context_;
 
 private:
-  ForwardResponseCallback forward_resp_callback_;
-
   std::list<std::shared_ptr<MemcCommand>> poly_cmd_queue_; // 新版支持多态的cmd
+  ForwardResponseCallback forward_resp_callback_;
 
   size_t timeout_;
   boost::asio::deadline_timer timer_;

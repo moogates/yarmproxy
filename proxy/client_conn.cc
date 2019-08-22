@@ -75,6 +75,7 @@ void ClientConnection::RotateFirstCommand() {
 void ClientConnection::ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb) {
   forward_resp_callback_ = cb;
 
+  // TODO : 成员函数化
   std::weak_ptr<ClientConnection> wptr(shared_from_this());
   auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
     LOG_DEBUG << "ClientConnection::ForwardResponse callback begin, bytes_transferred=" << bytes_transferred;
@@ -119,8 +120,9 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   // TODO : bytes_transferred == 0, 如何处理? 此时会eof，前面已经处理
   read_buffer_.update_received_bytes(bytes_transferred);
 
-  if (last_parsed_unreceived_bytes > 0 && ForwardParsedUnreceivedRequest(last_parsed_unreceived_bytes)) {
-    // 要不要AsyncRead() ?
+  if (last_parsed_unreceived_bytes > 0
+      && ForwardParsedUnreceivedRequest(last_parsed_unreceived_bytes)) {
+    // TODO : 要不要AsyncRead() ?
     return;
   }
 

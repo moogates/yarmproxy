@@ -14,14 +14,15 @@ public:
   virtual ~SingleGetCommand();
 
   void OnForwardResponseReady() override;
-  void OnUpstreamRequestWritten(const boost::system::error_code& error) override {
-    // 不需要再通知Client Conn
-  }
 private:
   void DoForwardRequest(const char *, size_t) override;
-  bool ParseUpstreamResponse() override;
+  bool ParseUpstreamResponse(BackendConn* backend) override;
+
   std::string cmd_line_without_rn() const override {
     return cmd_line_.substr(0, cmd_line_.size() - 2);
+  }
+  size_t request_body_upcoming_bytes() const override {
+    return 0;
   }
 
   std::string cmd_line_;
