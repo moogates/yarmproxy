@@ -68,8 +68,8 @@ protected:
   std::shared_ptr<ClientConnection> client_conn_;
   WorkerContext& context_;
 
-  template<class MemFun>
-  ForwardResponseCallback WeakBind(MemFun&& mf) { // TODO : refine it!
+  typedef void(MemcCommand::*FuncType)(const boost::system::error_code& error);
+  ForwardResponseCallback WeakBind(FuncType mf) {
     std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
     return [cmd_wptr, mf](const boost::system::error_code& error) {
           if (auto cmd_ptr = cmd_wptr.lock()) {
@@ -77,6 +77,16 @@ protected:
           }
         };
   }
+
+//template<class MemFun>
+//ForwardResponseCallback WeakBind(MemFun&& mf) { // TODO : refine it!
+//  std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
+//  return [cmd_wptr, mf](const boost::system::error_code& error) {
+//        if (auto cmd_ptr = cmd_wptr.lock()) {
+//          ((*cmd_ptr).*mf)(error);
+//        }
+//      };
+//}
 
 private:
   timeval time_created_;

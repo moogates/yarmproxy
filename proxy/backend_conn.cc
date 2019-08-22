@@ -97,7 +97,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
     } else {
       LOG_DEBUG << "BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 backend 的响应.";
       // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
-      read_buffer_.Reset();  // TODO : 这里还需要吗？
+      // read_buffer_.Reset();  // TODO : 这里还需要吗？
     
       // socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
       socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),

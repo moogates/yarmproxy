@@ -207,7 +207,7 @@ void MemcCommand::ForwardRequest(const char * buf, size_t bytes) {
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnUpstreamResponse),
-                                   WeakBind(&MemcCommand::OnUpstreamRequestWritten));
+                                        WeakBind(&MemcCommand::OnUpstreamRequestWritten));
   }
 
   DoForwardRequest(buf, bytes);
