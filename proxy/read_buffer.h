@@ -49,17 +49,10 @@ public:
   const char* unprocessed_data() const {
     return data_ + processed_offset_;
   }
-  size_t unprocessed_bytes() const {  // 已经接收，且已经解析，但尚未处理的数据
-    LOG_DEBUG << "ReadBuffer::unprocessed_bytes pushed="
-              << received_offset_ << " parsed=" << parsed_offset_
-              << " processed=" << processed_offset_;
-    return std::min(received_offset_, parsed_offset_) - processed_offset_;
-  }
+  size_t unprocessed_bytes() const;  // 已经接收，且已经解析，但尚未处理的数据
 
   void update_processed_bytes(size_t processes_bytes);
-  void update_received_bytes(size_t received_bytes) {
-    received_offset_ += received_bytes;
-  }
+  void update_received_bytes(size_t received_bytes);
 
   void update_parsed_bytes(size_t parsed_bytes) {
     parsed_offset_ += parsed_bytes;

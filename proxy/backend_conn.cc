@@ -23,7 +23,9 @@ BackendConn::~BackendConn() {
 }
 
 void BackendConn::ReadResponse() {
-  // socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
+  // TryReadMoreData();
+  // return;
+  read_buffer_.lock_memmove();
   socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
       std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
 }
@@ -99,6 +101,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
       // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
       // read_buffer_.Reset();  // TODO : 这里还需要吗？
     
+      read_buffer_.lock_memmove();
       // socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
       socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
           std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
@@ -110,15 +113,13 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
   if (error) {
     LOG_WARN << "BackendConn::HandleRead backend read error, upconn=" << this
              << " ep=" << remote_endpoint_ << " err=" << error.message();
-    // socket_.close();
+    socket_.close();
     // TODO : 如何通知给外界?
   } else {
     LOG_DEBUG << "BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
-    if (is_reading_more_) {
-      is_reading_more_ = false;  // finish reading, you could memmove now
-      read_buffer_.unlock_memmove();
-    }
-    // pushed_bytes_ += bytes_transferred;
+    is_reading_more_ = false;  // finish reading, you could memmove now
+    // read_buffer_.unlock_memmove(); // FIXME can't unlock here! because the data is not sent to client  
+
     read_buffer_.update_received_bytes(bytes_transferred);
     response_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
   }

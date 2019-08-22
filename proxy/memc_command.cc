@@ -243,12 +243,15 @@ void MemcCommand::TryForwardResponse(BackendConn* backend) {
     is_transfering_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
     client_conn_->ForwardResponse(backend->read_buffer_.unprocessed_data(), unprocessed,
                                   WeakBind(&MemcCommand::OnForwardResponseFinished));
-    backend->read_buffer_.lock_memmove();
+    // backend->read_buffer_.lock_memmove(); // FIXME : lock begin at read-start, finishes at sent-done
     backend->read_buffer_.update_processed_bytes(unprocessed);
-    LOG_DEBUG << "MemcCommand::TryForwardResponse to_process_bytes=" << unprocessed;
+    LOG_WARN << "MemcCommand::TryForwardResponse to_process_bytes=" << unprocessed
+              << " new_unprocessed=" << backend->read_buffer_.unprocessed_bytes()
+              << " client=" << this << " backend=" << backend;
   } else {
     LOG_DEBUG << "MemcCommand::TryForwardResponse do nothing, unprocessed_bytes=" << unprocessed
-              << " is_transfering_response=" << is_transfering_response_;
+              << " is_transfering_response=" << is_transfering_response_
+              << " client=" << this << " backend=" << backend;
   }
 }
 
