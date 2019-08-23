@@ -20,6 +20,7 @@ BackendConn::BackendConn(boost::asio::io_service& io_service,
 
 BackendConn::~BackendConn() {
   LOG_DEBUG << "BackendConn dtor, backend_conn_count=" << --backend_conn_count;
+  socket_.close();
 }
 
 void BackendConn::ReadResponse() {
@@ -168,8 +169,11 @@ BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
 }
 
 void BackendConnPool::Release(BackendConn * conn) {
-  delete conn;
-  return;
+  {
+    LOG_DEBUG << "BackendConnPool::Release delete dtor";
+    delete conn;
+    return;
+  }
 
   if (conn == nullptr) {
     return;

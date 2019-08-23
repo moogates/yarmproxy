@@ -151,7 +151,7 @@ bool Continuum::SetCacheNodes(const std::string & cache_nodes) {
 
 void Continuum::Dump() {
   boost::shared_lock<boost::shared_mutex> rlock(cache_points_mutex_);
-  for(auto entry : cache_points_) {
+  for(auto& entry : cache_points_) {
     LOG_INFO << "cache point dump - " << entry.endpoint << " : " << entry.hash_point;
   }
 }

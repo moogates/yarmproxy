@@ -10,20 +10,6 @@ namespace mcproxy {
 
 class ParallelGetCommand : public MemcCommand {
 public:
-  struct BackendQuery {
-    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
-        : query_line_(query_line)
-        , backend_addr_(ep)
-        , backend_conn_(nullptr) {
-    }
-    std::string query_line_;
-    ip::tcp::endpoint backend_addr_;
-    BackendConn* backend_conn_;
-  };
-
-  ParallelGetCommand(const ip::tcp::endpoint & ep, 
-          std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
-
   ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
                      std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
 
@@ -68,7 +54,20 @@ private:
     return 0;
   }
 
-  std::set<BackendQuery*> query_set_;
+  struct BackendQuery {
+    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
+        : query_line_(query_line)
+        , backend_addr_(ep)
+        , backend_conn_(nullptr) {
+    }
+    ~BackendQuery();
+    std::string query_line_;
+    ip::tcp::endpoint backend_addr_;
+    BackendConn* backend_conn_;
+  };
+
+  // std::vector<std::unique_ptr<BackendQuery>> query_set_;
+  std::vector<BackendQuery*> query_set_;
   std::queue<BackendConn*> ready_queue_;
   size_t finished_count_;
 };
