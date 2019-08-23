@@ -66,8 +66,8 @@ private:
     BackendConn* backend_conn_;
   };
 
-  // std::vector<std::unique_ptr<BackendQuery>> query_set_;
-  std::vector<BackendQuery*> query_set_;
+  std::vector<std::unique_ptr<BackendQuery>> query_set_;
+  // std::vector<BackendQuery*> query_set_;
   std::queue<BackendConn*> ready_queue_;
   size_t finished_count_;
 };

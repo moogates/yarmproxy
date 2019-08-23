@@ -20,7 +20,7 @@ ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
     : MemcCommand(owner)
     , finished_count_(0)
 {
-  for(auto it : endpoint_query_map) {
+  for(auto& it : endpoint_query_map) {
     LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first << " query=" << it.second;
     query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
   }

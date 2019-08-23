@@ -55,9 +55,9 @@ bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip
 
     p = q;
   }
-  for(auto it = endpoint_key_map->begin(); it != endpoint_key_map->end(); ++it) {
-    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first << " keys=" << it->second;
-    it->second.append("\r\n");
+  for(auto& it : *endpoint_key_map) {
+    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it.first << " keys=" << it.second;
+    it.second.append("\r\n");
   }
   LOG_DEBUG << "GroupKeysByEndpoint end, endpoint_key_map.size=" << endpoint_key_map->size();
   return true;
@@ -105,7 +105,7 @@ MemcCommand::MemcCommand(std::shared_ptr<ClientConnection> owner)
 // >0 : ok, 解析成功，返回已解析的字节数
 // <0 : error, 未知命令
 int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
-          std::shared_ptr<MemcCommand>* sub_commands) {
+          std::shared_ptr<MemcCommand>* command) {
   const char * p = GetLineEnd(buf, size);
   if (p == nullptr) {
     LOG_DEBUG << "CreateCommand no complete cmd line found";
@@ -115,13 +115,13 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
 
   if (strncmp(buf, "get ", 4) == 0) {
-#define DONT_USE_MAP 0
+#define DONT_USE_MAP 1
 #if DONT_USE_MAP
     auto ep = MemcachedLocator::Instance().GetEndpointByKey("1");
-    std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(context_.io_service_,
+    std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(
                      ep, owner, buf, cmd_line_bytes));
-    // sub_commands->push_back(cmd);
-    *sub_commands = cmd;
+    // command->push_back(cmd);
+    *command = cmd;
     LOG_DEBUG << "DONT_USE_MAP ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
     return cmd_line_bytes;
 #endif
@@ -130,23 +130,12 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
     if (false && endpoint_key_map.size() == 1) {
       auto it = endpoint_key_map.begin();
       std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(it->first, owner, it->second.c_str(), it->second.size()));
-      // sub_commands->push_back(cmd);
-      *sub_commands = cmd;
+      *command = cmd;
     } else {
       std::shared_ptr<MemcCommand> cmd(new ParallelGetCommand(owner, std::move(endpoint_key_map)));
-      // sub_commands->push_back(cmd);
-      *sub_commands = cmd;
+      *command = cmd;
     }
     return cmd_line_bytes;
-
-  //for (auto it : endpoint_key_map) {
-  //  LOG_DEBUG << "GroupKeysByEndpoint ep=" << it.first << " keys=" << it.second;
-  //  // it.second += "\r\n";
-
-  //  std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(it.first, owner, it.second.c_str(), it.second.size()));
-  //  sub_commands->push_back(cmd);
-  //}
-  //return cmd_line_bytes;
   } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0 || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
     std::string key;
     size_t body_bytes;
@@ -155,8 +144,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
     //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
     std::shared_ptr<MemcCommand> cmd(new WriteCommand(MemcachedLocator::Instance().GetEndpointByKey(key),
               owner, buf, cmd_line_bytes, body_bytes));
-    // sub_commands->push_back(cmd);
-    *sub_commands = cmd;
+    *command = cmd;
     return cmd_line_bytes + body_bytes;
   } else {
     LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
