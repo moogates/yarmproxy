@@ -3,6 +3,7 @@
 #include "base/logging.h"
 #include "client_conn.h"
 #include "backend_conn.h"
+#include "worker_pool.h"
 
 namespace mcproxy {
 
@@ -28,14 +29,31 @@ size_t GetValueBytes(const char * data, const char * end) {
 
 SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
-    : MemcCommand(ep, owner, buf, cmd_len) 
+    : MemcCommand(owner) 
     , cmd_line_(buf, cmd_len)
+    , backend_endpoint_(ep)
+    , backend_conn_(nullptr)
 {
   LOG_DEBUG << "SingleGetCommand ctor " << ++single_get_cmd_count;
 }
 
 SingleGetCommand::~SingleGetCommand() {
+  if (backend_conn_) {
+    context_.backend_conn_pool_->Release(backend_conn_);
+  }
   LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
+}
+
+void SingleGetCommand::ForwardRequest(const char * data, size_t bytes) {
+  if (backend_conn_ == nullptr) {
+    // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
+    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
+    backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardMoreRequest),
+                               WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
+  }
+
+  DoForwardRequest(data, bytes);
 }
 
 bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {

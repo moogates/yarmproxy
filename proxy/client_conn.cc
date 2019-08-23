@@ -116,10 +116,10 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   }
 
   while(read_buffer_.unparsed_received_bytes() > 0) {
-    std::list<std::shared_ptr<MemcCommand>> sub_commands;
+    std::shared_ptr<MemcCommand> command;
     int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(),
                read_buffer_.unprocessed_data(), read_buffer_.received_bytes(),
-               &sub_commands);
+               &command);
 
     if (parsed_bytes < 0) {
       // TODO : error handling
@@ -130,15 +130,18 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       return;
     } else {
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_.received_bytes());
-      for(auto entry : sub_commands) { // TODO : 要控制单client的并发command数
-        LOG_DEBUG << "ClientConnection::HandleRead CreateCommand ok, cmd_line_size=" << entry->cmd_line_without_rn()
-                << " body_bytes=" << entry->request_body_bytes()
-                << " parsed_bytes=" << parsed_bytes
-                << " received_bytes=" << read_buffer_.received_bytes()
-                << " sub_commands.size=" << sub_commands.size();
-        entry->ForwardRequest(read_buffer_.unprocessed_data(), to_process_bytes);  
-      }
-      poly_cmd_queue_.splice(poly_cmd_queue_.end(), sub_commands);
+    //for(auto entry : sub_commands) { // TODO : 要控制单client的并发command数
+    //  LOG_DEBUG << "ClientConnection::HandleRead CreateCommand ok, cmd_line_size=" << entry->cmd_line_without_rn()
+    //          << " body_bytes=" << entry->request_body_bytes()
+    //          << " parsed_bytes=" << parsed_bytes
+    //          << " received_bytes=" << read_buffer_.received_bytes()
+    //          << " sub_commands.size=" << sub_commands.size();
+    //  entry->ForwardRequest(read_buffer_.unprocessed_data(), to_process_bytes);  
+    //}
+      command->ForwardRequest(read_buffer_.unprocessed_data(), to_process_bytes);  
+      // poly_cmd_queue_.splice(poly_cmd_queue_.end(), sub_commands);
+      poly_cmd_queue_.push_back(command);
+
       read_buffer_.update_parsed_bytes(parsed_bytes);
       read_buffer_.update_processed_bytes(to_process_bytes);
     }

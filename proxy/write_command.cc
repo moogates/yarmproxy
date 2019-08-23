@@ -3,6 +3,7 @@
 #include "base/logging.h"
 #include "client_conn.h"
 #include "backend_conn.h"
+#include "worker_pool.h"
 
 namespace mcproxy {
 
@@ -11,22 +12,39 @@ const char * GetLineEnd(const char * buf, size_t len);
 std::atomic_int write_cmd_count;
 WriteCommand::WriteCommand(const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len, size_t body_bytes)
-    : MemcCommand(ep, owner, buf, cmd_len) 
+    : MemcCommand(owner) 
     , request_cmd_line_(buf)
     , request_cmd_len_(cmd_len)
     , request_forwarded_bytes_(0)
     , request_body_bytes_(body_bytes)
     , bytes_forwarding_(0)
+    , backend_endpoint_(ep)
+    , backend_conn_(nullptr)
 {
   LOG_DEBUG << "WriteCommand ctor " << ++write_cmd_count;
 }
 
 WriteCommand::~WriteCommand() {
+  if (backend_conn_) {
+    context_.backend_conn_pool_->Release(backend_conn_);
+  }
   LOG_DEBUG << "WriteCommand dtor " << --write_cmd_count;
 }
 
 size_t WriteCommand::request_body_upcoming_bytes() const {
   return request_cmd_len_ + request_body_bytes_ - bytes_forwarding_ - request_forwarded_bytes_;
+}
+
+void WriteCommand::ForwardRequest(const char * data, size_t bytes) {
+  if (backend_conn_ == nullptr) {
+    // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
+    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
+    backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardMoreRequest),
+                               WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
+  }
+
+  DoForwardRequest(data, bytes);
 }
 
 void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) {

@@ -14,6 +14,11 @@ public:
   virtual ~SingleGetCommand();
 
 private:
+  void ForwardRequest(const char * data, size_t bytes) override;
+  void OnForwardReplyEnabled() override {
+    TryForwardResponse(backend_conn_);
+  }
+
   void DoForwardRequest(const char *, size_t) override;
   bool ParseUpstreamResponse(BackendConn* backend) override;
 
@@ -25,6 +30,8 @@ private:
   }
 
   std::string cmd_line_;
+  ip::tcp::endpoint backend_endpoint_;
+  BackendConn* backend_conn_;
 };
 
 }

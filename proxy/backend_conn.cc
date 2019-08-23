@@ -49,19 +49,19 @@ void BackendConn::TryReadMoreData() {
 
 void BackendConn::ForwardRequest(const char* data, size_t bytes, bool has_more_data) {
   if (!socket_.is_open()) {
-    LOG_DEBUG << "BackendConn::ForwardRequest open socket, req="
-              // << std::string(data, bytes - 2) << " size=" << bytes
-              << " has_more_data=" << has_more_data << " conn=" << this;
+    LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardRequest open socket, req="
+              << std::string(data, bytes - 2) << " size=" << bytes
+              << " has_more_data=" << has_more_data << " backend=" << this;
     socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
         data, bytes, has_more_data, std::placeholders::_1));
     return;
   }
 
-  LOG_DEBUG << "BackendConn::ForwardRequest write data, bytes=" << bytes
+  LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardRequest write data, bytes=" << bytes
             << " has_more_data=" << has_more_data
             // << " req_ptr=" << (void*)data
             // << " req_data=" << std::string(data, bytes - 2)
-            << " conn=" << this;
+            << " backend=" << this;
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, this, data, bytes, has_more_data,
           std::placeholders::_1, std::placeholders::_2));
@@ -79,7 +79,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
     return;
   }
 
-  LOG_DEBUG << "HandleWrite ok, upconn=" << this << " ep=" << remote_endpoint_
+  LOG_DEBUG << "ParallelGetCommand HandleWrite ok, upconn=" << this << " ep=" << remote_endpoint_
             << " " << bytes << " bytes transfered to backend";
 
   if (bytes_transferred < bytes) {
@@ -94,10 +94,10 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
 
   {
     if (request_has_more_data) {
-      LOG_WARN << "BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
+      LOG_WARN << "ParallelGetCommand BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
       request_sent_callback_(error);
     } else {
-      LOG_DEBUG << "BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 backend 的响应.";
+      LOG_DEBUG << "ParallelGetCommand BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 backend 的响应.";
       // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
       // read_buffer_.Reset();  // TODO : 这里还需要吗？
     
@@ -116,7 +116,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
     socket_.close();
     // TODO : 如何通知给外界?
   } else {
-    LOG_DEBUG << "BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
+    LOG_DEBUG << "ParallelGetCommand BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
     is_reading_more_ = false;  // finish reading, you could memmove now
     // read_buffer_.dec_recycle_lock(); // FIXME can't unlock here! because the data is not sent to client  
 

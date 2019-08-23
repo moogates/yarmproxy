@@ -2,6 +2,7 @@
 
 #include "base/logging.h"
 #include "client_conn.h"
+#include "worker_pool.h"
 #include "backend_conn.h"
 
 namespace mcproxy {
@@ -11,12 +12,24 @@ std::atomic_int parallel_get_cmd_count;
 const char * GetLineEnd(const char * buf, size_t len);
 size_t GetValueBytes(const char * data, const char * end);
 
-
 ParallelGetCommand::ParallelGetCommand(const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
-    : MemcCommand(ep, owner, buf, cmd_len) 
-    , cmd_line_(buf, cmd_len)
+    : MemcCommand(owner) 
+    , finished_count_(0)
 {
+  LOG_DEBUG << "ParallelGetCommand ctor " << ++parallel_get_cmd_count;
+}
+
+ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
+                   std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map)
+    : MemcCommand(owner)
+    , finished_count_(0)
+{
+  for(auto it : endpoint_query_map) {
+    LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first << " query=" << it.second;
+    BackendQuery* q = new BackendQuery(it.first, std::move(it.second));
+    query_set_.insert(q);
+  }
   LOG_DEBUG << "ParallelGetCommand ctor " << ++parallel_get_cmd_count;
 }
 
@@ -24,17 +37,24 @@ ParallelGetCommand::~ParallelGetCommand() {
   LOG_DEBUG << "ParallelGetCommand dtor " << --parallel_get_cmd_count;
 }
 
+void ParallelGetCommand::ForwardRequest(const char *, size_t) {
+  DoForwardRequest(nullptr, 0);
+}
+
+void ParallelGetCommand::PushReadyQueue(BackendConn* backend) {
+  LOG_DEBUG << "ParallelGetCommand PushReadyQueue, backend=" << backend;
+  ready_queue_.push(backend);
+}
+
 bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   bool valid = true;
-  assert(backend_conn_ == backend);
-  while(backend_conn_->read_buffer_.unparsed_bytes() > 0) {
-    const char * entry = backend_conn_->read_buffer_.unparsed_data();
-    const char * p = GetLineEnd(entry, backend_conn_->read_buffer_.unparsed_bytes());
+  while(backend->read_buffer_.unparsed_bytes() > 0) {
+    const char * entry = backend->read_buffer_.unparsed_data();
+    const char * p = GetLineEnd(entry, backend->read_buffer_.unparsed_bytes());
     if (p == nullptr) {
       // TODO : no enough data for parsing, please read more
       LOG_DEBUG << "ParseUpstreamResponse no enough data for parsing, please read more"
-                << " data=" << std::string(entry, backend_conn_->read_buffer_.unparsed_bytes())
-                << " bytes=" << backend_conn_->read_buffer_.unparsed_bytes();
+                << " bytes=" << backend->read_buffer_.unparsed_bytes();
       return true;
     }
 
@@ -43,13 +63,13 @@ bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
       size_t body_bytes = GetValueBytes(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
 
-      backend_conn_->read_buffer_.update_parsed_bytes(entry_bytes);
+      backend->read_buffer_.update_parsed_bytes(entry_bytes);
       // break; // TODO : 每次转发一条，only for test
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-        backend_conn_->read_buffer_.update_parsed_bytes(sizeof("END\r\n") - 1);
-        if (backend_conn_->read_buffer_.unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
+        backend->read_buffer_.update_parsed_bytes(sizeof("END\r\n") - 1);
+        if (backend->read_buffer_.unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
           LOG_WARN << "ParseUpstreamResponse END not really end!";
         } else {
@@ -68,7 +88,17 @@ bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
 }
 
 void ParallelGetCommand::DoForwardRequest(const char *, size_t) {
-  backend_conn_->ForwardRequest(cmd_line_.data(), cmd_line_.size(), false);
+  for(auto query : query_set_) {
+    BackendConn* backend = query->backend_conn_;
+    if (backend == nullptr) {
+      // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
+      LOG_DEBUG << "ParallelGetCommand sub query(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ") create backend conn";
+      backend = context_.backend_conn_pool_->Allocate(query->backend_addr_);
+      backend->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardMoreRequest),
+                                 WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend));
+    }
+    backend->ForwardRequest(query->query_line_.data(), query->query_line_.size(), false);
+  }
 }
 
 }

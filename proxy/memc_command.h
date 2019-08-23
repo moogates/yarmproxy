@@ -19,36 +19,50 @@ class ClientConnection;
 class MemcCommand : public std::enable_shared_from_this<MemcCommand> {
 public:
   static int CreateCommand(std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
-                           std::list<std::shared_ptr<MemcCommand>>* sub_cmds);
-  MemcCommand(const ip::tcp::endpoint & ep, std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
+                           std::shared_ptr<MemcCommand>* sub_cmds);
+  MemcCommand(std::shared_ptr<ClientConnection> owner);
 
 public:
   virtual ~MemcCommand();
 
-  void ForwardRequest(const char * data, size_t bytes);
+  virtual void ForwardRequest(const char * data, size_t bytes) = 0;
   // backend_conn转发完毕ForwardRequest()指定的数据后，如果发现当前command请求还有更多数据，则调用OnForwardMoreRequest()继续转发
   virtual void OnForwardMoreRequest(const boost::system::error_code& error) {}
 
   // backend_conn收到reply数据后, 调用OnUpstreamResponseReceived()
   void OnUpstreamResponseReceived(BackendConn* backend, const boost::system::error_code& error);
-  void OnForwardReplyEnabled() {
-    TryForwardResponse(backend_conn_);
-  }
-  void OnForwardReplyFinished(const boost::system::error_code& error);
+  virtual void OnForwardReplyEnabled() = 0;
+  void OnForwardReplyFinished(BackendConn* backend, const boost::system::error_code& error);
 
 public:
-  bool backend_nomore_response();
   // void AsyncRead();
   void Abort();
   virtual std::string cmd_line_without_rn() const = 0; // for debug info only
   virtual size_t request_body_bytes() const {  // for debug info only
     return 0;
   }
-  BackendConn * backend_conn() {
-    return backend_conn_;
-  }
 
 private:
+  virtual bool HasMoreBackend() const {
+    return false;
+  }
+  virtual void RotateFirstBackend() {}
+
+  void DeactivateReplyingBackend(BackendConn* backend) {
+    assert(backend == replying_backend_);
+    replying_backend_ = nullptr;
+  }
+  bool TryActivateReplyingBackend(BackendConn* backend) {
+    if (backend == replying_backend_) {
+      return true;
+    }
+    if (replying_backend_ == nullptr) {
+      replying_backend_ = backend;
+      return true;
+    }
+    return false;
+  }
+
   // 判断是否最靠前的command, 是才可以转发
   bool IsFormostCommand();
   virtual void DoForwardRequest(const char * data, size_t bytes) = 0;
@@ -56,14 +70,13 @@ private:
   virtual size_t request_body_upcoming_bytes() const = 0;
 protected:
   bool is_transfering_response_;
-
-  ip::tcp::endpoint backend_endpoint_;
-  BackendConn* backend_conn_;
+  BackendConn* replying_backend_;
 
   std::shared_ptr<ClientConnection> client_conn_;
   WorkerContext& context_;
 
   void TryForwardResponse(BackendConn* backend);
+  virtual void PushReadyQueue(BackendConn* backend) {}
 
   typedef void(MemcCommand::*FuncType)(const boost::system::error_code& error);
   ForwardResponseCallback WeakBind(FuncType mf) {
