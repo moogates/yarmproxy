@@ -25,7 +25,7 @@ BackendConn::~BackendConn() {
 void BackendConn::ReadResponse() {
   // TryReadMoreData();
   // return;
-  read_buffer_.lock_memmove();
+  read_buffer_.inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
       std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
 }
@@ -35,7 +35,7 @@ void BackendConn::TryReadMoreData() {
       // && pushed_bytes_ * 3 <  BUFFER_SIZE * 2) {// there is still more than 1/3 buffer space free
       && read_buffer_.has_much_free_space()) {
     is_reading_more_ = true; // memmove cause read data offset drift
-    read_buffer_.lock_memmove();
+    read_buffer_.inc_recycle_lock();
 
     // socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
     socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
@@ -101,7 +101,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
       // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
       // read_buffer_.Reset();  // TODO : 这里还需要吗？
     
-      read_buffer_.lock_memmove();
+      read_buffer_.inc_recycle_lock();
       // socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
       socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
           std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
@@ -118,7 +118,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
   } else {
     LOG_DEBUG << "BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
     is_reading_more_ = false;  // finish reading, you could memmove now
-    // read_buffer_.unlock_memmove(); // FIXME can't unlock here! because the data is not sent to client  
+    // read_buffer_.dec_recycle_lock(); // FIXME can't unlock here! because the data is not sent to client  
 
     read_buffer_.update_received_bytes(bytes_transferred);
     response_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉

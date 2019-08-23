@@ -31,9 +31,10 @@ public:
 
   // backend_conn收到reply数据后, 调用OnUpstreamResponseReceived()
   void OnUpstreamResponseReceived(BackendConn* backend, const boost::system::error_code& error);
-
-  virtual void OnForwardResponseReady() {}
-  void OnForwardResponseFinished(const boost::system::error_code& error);
+  void OnForwardReplyEnabled() {
+    TryForwardResponse(backend_conn_);
+  }
+  void OnForwardReplyFinished(const boost::system::error_code& error);
 
 public:
   bool backend_nomore_response();

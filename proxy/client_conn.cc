@@ -68,7 +68,7 @@ void ClientConnection::AsyncRead() {
 void ClientConnection::RotateFirstCommand() {
   poly_cmd_queue_.pop_front();
   if (!poly_cmd_queue_.empty()) {
-    poly_cmd_queue_.front()->OnForwardResponseReady();
+    poly_cmd_queue_.front()->OnForwardReplyEnabled();
   }
 }
 
@@ -97,39 +97,29 @@ void ClientConnection::ForwardResponse(const char* data, size_t bytes, const For
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
-// return : true = command has still more data, false = no more data
-bool ClientConnection::ForwardParsedUnreceivedRequest(size_t last_parsed_unreceived_bytes) {
-  size_t to_process_bytes = std::min(last_parsed_unreceived_bytes, read_buffer_.received_bytes());
-  poly_cmd_queue_.back()->ForwardRequest(read_buffer_.unprocessed_data(), to_process_bytes);  
-  read_buffer_.update_processed_bytes(to_process_bytes);
-
-  bool has_still_more_data = last_parsed_unreceived_bytes > read_buffer_.received_bytes();
-  LOG_DEBUG << "ClientConnection::HandleRead.ForwardRequest last_parsed_unreceived_bytes="
-           << last_parsed_unreceived_bytes << " received_bytes=" << read_buffer_.received_bytes()
-           << " HAS_MORE_DATA=" << has_still_more_data << ". conn=" << this;
-  return has_still_more_data;
-}
-
 void ClientConnection::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
     LOG_INFO << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
     return;
   }
 
-  size_t last_parsed_unreceived_bytes = read_buffer_.parsed_unreceived_bytes();
-  // TODO : bytes_transferred == 0, 如何处理? 此时会eof，前面已经处理
   read_buffer_.update_received_bytes(bytes_transferred);
 
-  if (last_parsed_unreceived_bytes > 0
-      && ForwardParsedUnreceivedRequest(last_parsed_unreceived_bytes)) {
-    // TODO : 要不要AsyncRead() ?
-    return;
+  if (read_buffer_.parsed_unprocessed_bytes() > 0) {
+    // 上次解析后，本次才接受到的数据
+    poly_cmd_queue_.back()->ForwardRequest(read_buffer_.unprocessed_data(), read_buffer_.unprocessed_bytes());
+    read_buffer_.update_processed_bytes(read_buffer_.unprocessed_bytes());
+    if (read_buffer_.parsed_unreceived_bytes() > 0) {
+      // TODO : 要不要AsyncRead() ?
+      return;
+    }
   }
 
-  while(read_buffer_.unparsed_received_bytes() > 0) { // TODO : 提取buffer对象
+  while(read_buffer_.unparsed_received_bytes() > 0) {
     std::list<std::shared_ptr<MemcCommand>> sub_commands;
-    int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(), read_buffer_.unprocessed_data(), read_buffer_.received_bytes(),
-          &sub_commands);
+    int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(),
+               read_buffer_.unprocessed_data(), read_buffer_.received_bytes(),
+               &sub_commands);
 
     if (parsed_bytes < 0) {
       // TODO : error handling

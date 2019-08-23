@@ -40,9 +40,11 @@ public:
 public:
   void ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb);
   bool IsFirstCommand(std::shared_ptr<MemcCommand> cmd) {
+    // TODO : 能否作为一个标记，放在command里面？
     return cmd == poly_cmd_queue_.front();
   }
   void RotateFirstCommand();
+
   void TryReadMoreRequest();
 
   // boost::asio::io_service& io_service_;
@@ -64,7 +66,6 @@ private:
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  bool ForwardParsedUnreceivedRequest(size_t last_parsed_unreceived_bytes);
 
   void HandleMemcCommandTimeout(const boost::system::error_code& error);
   void HandleTimeoutWrite(const boost::system::error_code& error);

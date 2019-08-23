@@ -1,5 +1,5 @@
-#ifndef _GET_COMMAND_H_
-#define _GET_COMMAND_H_
+#ifndef _PARALLEL_GET_COMMAND_H_
+#define _PARALLEL_GET_COMMAND_H_
 
 #include "memc_command.h"
 
@@ -7,11 +7,11 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-class SingleGetCommand : public MemcCommand {
+class ParallelGetCommand : public MemcCommand {
 public:
-  SingleGetCommand(const ip::tcp::endpoint & ep, 
+  ParallelGetCommand(const ip::tcp::endpoint & ep, 
           std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
-  virtual ~SingleGetCommand();
+  virtual ~ParallelGetCommand();
 
 private:
   void DoForwardRequest(const char *, size_t) override;
@@ -29,5 +29,5 @@ private:
 
 }
 
-#endif  // _GET_COMMAND_H_
+#endif  // _PARALLEL_GET_COMMAND_H_
 

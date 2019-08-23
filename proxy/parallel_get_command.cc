@@ -1,4 +1,4 @@
-#include "get_command.h"
+#include "parallel_get_command.h"
 
 #include "base/logging.h"
 #include "client_conn.h"
@@ -6,39 +6,25 @@
 
 namespace mcproxy {
 
-std::atomic_int single_get_cmd_count;
+std::atomic_int parallel_get_cmd_count;
 
 const char * GetLineEnd(const char * buf, size_t len);
-
-size_t GetValueBytes(const char * data, const char * end) {
-  // "VALUE <key> <flag> <bytes>\r\n"
-  const char * p = data + sizeof("VALUE ");
-  int count = 0;
-  while(p != end) {
-    if (*p == ' ') {
-      if (++count == 2) {
-        return std::stoi(p + 1);
-      }
-    }
-    ++p;
-  }
-  return 0;
-}
+size_t GetValueBytes(const char * data, const char * end);
 
 
-SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep, 
+ParallelGetCommand::ParallelGetCommand(const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
     : MemcCommand(ep, owner, buf, cmd_len) 
     , cmd_line_(buf, cmd_len)
 {
-  LOG_DEBUG << "SingleGetCommand ctor " << ++single_get_cmd_count;
+  LOG_DEBUG << "ParallelGetCommand ctor " << ++parallel_get_cmd_count;
 }
 
-SingleGetCommand::~SingleGetCommand() {
-  LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
+ParallelGetCommand::~ParallelGetCommand() {
+  LOG_DEBUG << "ParallelGetCommand dtor " << --parallel_get_cmd_count;
 }
 
-bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
+bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   bool valid = true;
   assert(backend_conn_ == backend);
   while(backend_conn_->read_buffer_.unparsed_bytes() > 0) {
@@ -81,7 +67,7 @@ bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   return valid;
 }
 
-void SingleGetCommand::DoForwardRequest(const char *, size_t) {
+void ParallelGetCommand::DoForwardRequest(const char *, size_t) {
   backend_conn_->ForwardRequest(cmd_line_.data(), cmd_line_.size(), false);
 }
 

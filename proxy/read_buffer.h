@@ -15,17 +15,17 @@ private:
   size_t processed_offset_;
   size_t received_offset_;
   size_t parsed_offset_;
-  size_t memmove_lock_count_;
+  size_t recycle_lock_count_;
 public:
   ReadBuffer() : processed_offset_(0)
                , received_offset_(0)
                , parsed_offset_(0) 
-               , memmove_lock_count_(0) {
+               , recycle_lock_count_(0) {
   }
 
   void Reset() {
     received_offset_ = processed_offset_ = parsed_offset_ = 0; // TODO : 这里需要吗？
-    memmove_lock_count_ = 0;
+    recycle_lock_count_ = 0;
   }
 
   bool has_much_free_space() {
@@ -43,8 +43,8 @@ public:
     return received_offset_ - processed_offset_;
   }
 
-  void lock_memmove();
-  void unlock_memmove();
+  void inc_recycle_lock();
+  void dec_recycle_lock();
 
   const char* unprocessed_data() const {
     return data_ + processed_offset_;
@@ -62,13 +62,18 @@ public:
   }
   size_t unparsed_bytes() const;  // 尚未解析的数据
 
+  size_t parsed_unprocessed_bytes() const {
+    if (parsed_offset_ > processed_offset_) {
+      return parsed_offset_ - processed_offset_;
+    }
+    return 0;
+  }
   size_t parsed_unreceived_bytes() const {
     if (parsed_offset_ > received_offset_) {
       return parsed_offset_ - received_offset_;
     }
     return 0;
   }
-
   size_t unparsed_received_bytes() const {
     if (received_offset_ > parsed_offset_) {
       return received_offset_ - parsed_offset_;
@@ -76,7 +81,7 @@ public:
     return 0;
   }
 private:
-  void try_free_buffer_space();
+  void try_recycle_buffer();
 };
 
 }
