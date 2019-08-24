@@ -243,6 +243,7 @@ void MemcCommand::TryForwardResponse(BackendConn* backend) {
     LOG_WARN << "ParallelGetCommand TryForwardResponse, TryActivateReplyingBackend OK, backend=" << backend;
 
     is_transfering_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
+    backend->read_buffer_.inc_recycle_lock();
     client_conn_->ForwardResponse(backend->read_buffer_.unprocessed_data(), unprocessed,
                                   WeakBind2(&MemcCommand::OnForwardReplyFinished, backend));
     // backend->read_buffer_.lock_memmove(); // FIXME : lock begin at read-start, finishes at sent-done

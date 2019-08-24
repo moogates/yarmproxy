@@ -37,8 +37,7 @@ ParallelGetCommand::~ParallelGetCommand() {
     context_.backend_conn_pool_->Release(query->backend_conn_);
     }
   }
-  LOG_WARN << "ParallelGetCommand dtor " << --parallel_get_cmd_count
-           << "======================================================";
+  LOG_DEBUG << "ParallelGetCommand dtor " << --parallel_get_cmd_count;
 }
 
 void ParallelGetCommand::ForwardRequest(const char *, size_t) {
@@ -46,8 +45,12 @@ void ParallelGetCommand::ForwardRequest(const char *, size_t) {
 }
 
 void ParallelGetCommand::PushReadyQueue(BackendConn* backend) {
-  LOG_DEBUG << "ParallelGetCommand PushReadyQueue, backend=" << backend;
-  ready_queue_.push(backend);
+  if (ready_set_.insert(backend).second) {
+    ready_queue_.push(backend);
+    LOG_DEBUG << "ParallelGetCommand PushReadyQueue, backend=" << backend << " ready_queue_.size=" << ready_queue_.size();
+  } else {
+    LOG_DEBUG << "ParallelGetCommand PushReadyQueue already in queue, backend=" << backend << " ready_queue_.size=" << ready_queue_.size();
+  }
 }
 
 void ParallelGetCommand::OnForwardReplyEnabled() {

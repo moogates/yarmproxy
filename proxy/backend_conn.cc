@@ -74,7 +74,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
 {
   if (error) {
     // TODO : 如何通知给command?
-    LOG_WARN << "HandleWrite error, upconn=" << this << " ep="
+    LOG_INFO << "HandleWrite error, upconn=" << this << " ep="
              << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     return;
@@ -93,9 +93,11 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
     return;
   }
 
+  read_buffer_.dec_recycle_lock();
+
   {
     if (request_has_more_data) {
-      LOG_WARN << "ParallelGetCommand BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
+      LOG_DEBUG << "ParallelGetCommand BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
       request_sent_callback_(error);
     } else {
       LOG_DEBUG << "ParallelGetCommand BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 backend 的响应.";
@@ -112,16 +114,17 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    LOG_WARN << "BackendConn::HandleRead backend read error, upconn=" << this
+    LOG_INFO << "BackendConn::HandleRead backend read error, upconn=" << this
              << " ep=" << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     // TODO : 如何通知给外界?
   } else {
     LOG_DEBUG << "ParallelGetCommand BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
     is_reading_more_ = false;  // finish reading, you could memmove now
-    // read_buffer_.dec_recycle_lock(); // FIXME can't unlock here! because the data is not sent to client  
 
     read_buffer_.update_received_bytes(bytes_transferred);
+    read_buffer_.dec_recycle_lock();
+
     response_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
   }
 }

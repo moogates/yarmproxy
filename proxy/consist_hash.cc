@@ -28,7 +28,7 @@ bool Continuum::RebuildCachePoints() {
     //unsigned char digest[16];
     for(size_t k = 0; k < it->second; ++k)
     {
-      snprintf(ss, 63, "%lu-%lu-%u", k, it->first.address().to_v4().to_ulong(), it->first.port());
+      snprintf(ss, 63, "%u-%lu-%u", k, it->first.address().to_v4().to_ulong(), it->first.port());
       // TODO : use murmur
       //md5_digest(ss, digest);
       //uint32_t hash_point = (digest[3] << 24)

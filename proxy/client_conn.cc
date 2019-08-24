@@ -159,7 +159,7 @@ void ClientConnection::HandleTimeoutWrite(const boost::system::error_code& error
 void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code& error) {
   if (error) {
     if (error != boost::asio::error::operation_aborted) {
-      LOG_WARN << "ClientConnection::HandleMemcCommandTimeout timer error : " << error;
+      LOG_INFO << "ClientConnection::HandleMemcCommandTimeout timer error : " << error;
     }
     return;
   }
