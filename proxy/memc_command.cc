@@ -115,7 +115,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
 
   if (strncmp(buf, "get ", 4) == 0) {
-#define DONT_USE_MAP 1
+#define DONT_USE_MAP 0
 #if DONT_USE_MAP
     auto ep = MemcachedLocator::Instance().GetEndpointByKey("1");
     std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(
@@ -164,18 +164,19 @@ void MemcCommand::OnUpstreamResponseReceived(BackendConn* backend, const boost::
   LOG_WARN << "ParallelGetCommand OnUpstreamResponseReceived, backend=" << backend;
   bool valid = ParseUpstreamResponse(backend);
   if (!valid) {
-    LOG_WARN << "ParallelGetCommand MemcCommand parsing error! valid=false";
+    LOG_WARN << __func__ << " parsing error! valid=false";
     // TODO : error handling
     client_conn_->OnCommandError(shared_from_this(), error);
     return;
   }
 
   if (IsFormostCommand()) {
-    LOG_WARN << "ParallelGetCommand IsFormostCommand, TryForwardResponse, backend=" << backend;
+    LOG_WARN << __func__ << " IsFormostCommand true, TryForwardResponse, backend=" << backend;
     TryForwardResponse(backend);
   } else {
     // TODO : do nothing, just wait
-    LOG_WARN << "ParallelGetCommand IsFormostCommand, false, wait to ForwardResponse, backend=" << backend;
+    PushReadyQueue(backend); // TODO : ready queue 的push，貌似会有重复?
+    LOG_WARN << __func__ << " IsFormostCommand false, wait to ForwardResponse, backend=" << backend;
   }
 
   if (backend->read_buffer_.parsed_unreceived_bytes() > 0) {
@@ -214,8 +215,10 @@ void MemcCommand::OnForwardReplyFinished(BackendConn* backend, const boost::syst
       && backend->read_buffer_.unprocessed_bytes() == 0) {
     DeactivateReplyingBackend(backend);
     if (HasMoreBackend()) {
+       LOG_DEBUG << __func__ << " HasMoreBackend true";
        RotateFirstBackend();
     } else {
+       LOG_DEBUG << __func__ << " HasMoreBackend false, RotateFirstCommand";
     client_conn_->RotateFirstCommand();
     }
     LOG_DEBUG << "WriteCommand::OnForwardReplyFinished backend no more reply, and all data forwarded to client";

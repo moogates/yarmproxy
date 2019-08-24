@@ -37,7 +37,8 @@ ParallelGetCommand::~ParallelGetCommand() {
     context_.backend_conn_pool_->Release(query->backend_conn_);
     }
   }
-  LOG_DEBUG << "ParallelGetCommand dtor " << --parallel_get_cmd_count;
+  LOG_WARN << "ParallelGetCommand dtor " << --parallel_get_cmd_count
+           << "======================================================";
 }
 
 void ParallelGetCommand::ForwardRequest(const char *, size_t) {
@@ -47,6 +48,19 @@ void ParallelGetCommand::ForwardRequest(const char *, size_t) {
 void ParallelGetCommand::PushReadyQueue(BackendConn* backend) {
   LOG_DEBUG << "ParallelGetCommand PushReadyQueue, backend=" << backend;
   ready_queue_.push(backend);
+}
+
+void ParallelGetCommand::OnForwardReplyEnabled() {
+  if (ready_queue_.size() > 0) {
+    replying_backend_ = ready_queue_.front();
+    ready_queue_.pop();
+    LOG_DEBUG << __func__ << " activate ready backend,"
+              << " replying_backend_=" << replying_backend_;
+    TryForwardResponse(replying_backend_);
+  } else {
+    LOG_DEBUG << __func__ << " no ready backend to activate,"
+              << " replying_backend_=" << replying_backend_;
+  }
 }
 
 bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
@@ -65,7 +79,7 @@ bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
       // "VALUE <key> <flag> <bytes>\r\n"
       size_t body_bytes = GetValueBytes(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
-
+      LOG_DEBUG << __func__ << " recv_body=(" << std::string(entry, entry_bytes) << ")";
       backend->read_buffer_.update_parsed_bytes(entry_bytes);
       // break; // TODO : 每次转发一条，only for test
     } else {
@@ -101,6 +115,7 @@ void ParallelGetCommand::DoForwardRequest(const char *, size_t) {
                                  WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend));
       query->backend_conn_ = backend;
     }
+    LOG_DEBUG << __func__ << " ForwardRequest, query=(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
     backend->ForwardRequest(query->query_line_.data(), query->query_line_.size(), false);
   }
 }

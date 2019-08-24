@@ -16,9 +16,7 @@ public:
   virtual ~ParallelGetCommand();
 
   void ForwardRequest(const char * data, size_t bytes) override;
-  void OnForwardReplyEnabled() override {
-    // TryForwardResponse(backend_conn_);
-  }
+  void OnForwardReplyEnabled() override;
 
 private:
   void DoForwardRequest(const char *, size_t) override;

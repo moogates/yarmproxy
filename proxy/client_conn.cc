@@ -68,7 +68,10 @@ void ClientConnection::AsyncRead() {
 void ClientConnection::RotateFirstCommand() {
   poly_cmd_queue_.pop_front();
   if (!poly_cmd_queue_.empty()) {
+    LOG_DEBUG << __func__ << " poly_cmd_queue_.size=" << poly_cmd_queue_.size();
     poly_cmd_queue_.front()->OnForwardReplyEnabled();
+  } else {
+    LOG_DEBUG << __func__ << " poly_cmd_queue_ emptr";
   }
 }
 
@@ -130,17 +133,9 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       return;
     } else {
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_.received_bytes());
-    //for(auto entry : sub_commands) { // TODO : 要控制单client的并发command数
-    //  LOG_DEBUG << "ClientConnection::HandleRead CreateCommand ok, cmd_line_size=" << entry->cmd_line_without_rn()
-    //          << " body_bytes=" << entry->request_body_bytes()
-    //          << " parsed_bytes=" << parsed_bytes
-    //          << " received_bytes=" << read_buffer_.received_bytes()
-    //          << " sub_commands.size=" << sub_commands.size();
-    //  entry->ForwardRequest(read_buffer_.unprocessed_data(), to_process_bytes);  
-    //}
       command->ForwardRequest(read_buffer_.unprocessed_data(), to_process_bytes);  
       // poly_cmd_queue_.splice(poly_cmd_queue_.end(), sub_commands);
-      poly_cmd_queue_.push_back(command);
+      poly_cmd_queue_.emplace_back(std::move(command));// TODO : 要控制单client的并发command数
 
       read_buffer_.update_parsed_bytes(parsed_bytes);
       read_buffer_.update_processed_bytes(to_process_bytes);
