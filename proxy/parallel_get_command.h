@@ -19,6 +19,7 @@ public:
   void OnForwardReplyEnabled() override;
 
 private:
+  void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) override;
   void DoForwardRequest(const char *, size_t) override;
   bool ParseUpstreamResponse(BackendConn* backend) override;
 

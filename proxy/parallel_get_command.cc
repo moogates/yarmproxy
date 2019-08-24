@@ -44,6 +44,16 @@ void ParallelGetCommand::ForwardRequest(const char *, size_t) {
   DoForwardRequest(nullptr, 0);
 }
 
+void ParallelGetCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
+  if (error) {
+    // TODO : error handling
+    LOG_WARN << "ParallelGetCommand OnForwardRequestFinished error";
+    return;
+  }
+  LOG_DEBUG << "ParallelGetCommand::OnForwardRequestFinished 转发了当前命令, 等待backend的响应.";
+  backend->ReadResponse();
+}
+
 void ParallelGetCommand::PushReadyQueue(BackendConn* backend) {
   if (ready_set_.insert(backend).second) {
     ready_queue_.push(backend);
@@ -114,7 +124,7 @@ void ParallelGetCommand::DoForwardRequest(const char *, size_t) {
       // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
       LOG_DEBUG << "ParallelGetCommand sub query(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ") create backend conn";
       backend = context_.backend_conn_pool_->Allocate(query->backend_addr_);
-      backend->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardMoreRequest),
+      backend->SetReadWriteCallback(WeakBind2(&MemcCommand::OnForwardRequestFinished, backend),
                                  WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend));
       query->backend_conn_ = backend;
     }

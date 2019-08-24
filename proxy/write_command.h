@@ -28,7 +28,7 @@ public:
   virtual ~WriteCommand();
 
   size_t request_body_upcoming_bytes() const override;
-  void OnForwardMoreRequest(const boost::system::error_code& error) override;
+  void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) override;
 
   size_t request_body_bytes() const override {  // for debug info only
     return request_body_bytes_;

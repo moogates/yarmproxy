@@ -49,11 +49,22 @@ void SingleGetCommand::ForwardRequest(const char * data, size_t bytes) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardMoreRequest),
+    backend_conn_->SetReadWriteCallback(WeakBind2(&MemcCommand::OnForwardRequestFinished, backend_conn_),
                                WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
   }
 
   DoForwardRequest(data, bytes);
+}
+
+void SingleGetCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
+  if (error) {
+    // TODO : error handling
+    LOG_WARN << "WriteCommand OnForwardRequestFinished error";
+    return;
+  }
+  assert(backend == backend_conn_);
+  LOG_DEBUG << "SingleGetCommand::OnForwardRequestFinished 转发了当前命令, 等待backend的响应.";
+  backend_conn_->ReadResponse();
 }
 
 bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {

@@ -26,8 +26,8 @@ public:
   virtual ~MemcCommand();
 
   virtual void ForwardRequest(const char * data, size_t bytes) = 0;
-  // backend_conn转发完毕ForwardRequest()指定的数据后，如果发现当前command请求还有更多数据，则调用OnForwardMoreRequest()继续转发
-  virtual void OnForwardMoreRequest(const boost::system::error_code& error) {}
+  // backend_conn转发完毕ForwardRequest()指定的数据后，调用OnForwardRequestFinished()
+  virtual void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) = 0;
 
   // backend_conn收到reply数据后, 调用OnUpstreamResponseReceived()
   void OnUpstreamResponseReceived(BackendConn* backend, const boost::system::error_code& error);
@@ -78,15 +78,15 @@ protected:
   void TryForwardResponse(BackendConn* backend);
   virtual void PushReadyQueue(BackendConn* backend) {}
 
-  typedef void(MemcCommand::*FuncType)(const boost::system::error_code& error);
-  ForwardResponseCallback WeakBind(FuncType mf) {
-    std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
-    return [cmd_wptr, mf](const boost::system::error_code& error) {
-          if (auto cmd_ptr = cmd_wptr.lock()) {
-            ((*cmd_ptr).*mf)(error);
-          }
-        };
-  }
+//typedef void(MemcCommand::*FuncType)(const boost::system::error_code& error);
+//ForwardResponseCallback WeakBind(FuncType mf) {
+//  std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
+//  return [cmd_wptr, mf](const boost::system::error_code& error) {
+//        if (auto cmd_ptr = cmd_wptr.lock()) {
+//          ((*cmd_ptr).*mf)(error);
+//        }
+//      };
+//}
 
   typedef void(MemcCommand::*FuncType2)(BackendConn* backend, const boost::system::error_code& error);
   ForwardResponseCallback WeakBind2(FuncType2 mf, BackendConn* backend) {

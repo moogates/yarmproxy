@@ -212,14 +212,14 @@ void MemcCommand::OnForwardReplyFinished(BackendConn* backend, const boost::syst
   backend->read_buffer_.dec_recycle_lock();
 
   if (backend->read_buffer_.parsed_unreceived_bytes() == 0
-      && backend->read_buffer_.unprocessed_bytes() == 0) {
+          && backend->read_buffer_.unprocessed_bytes() == 0) {
     DeactivateReplyingBackend(backend);
     if (HasMoreBackend()) {
-       LOG_DEBUG << __func__ << " HasMoreBackend true";
-       RotateFirstBackend();
+      LOG_DEBUG << __func__ << " HasMoreBackend true";
+      RotateFirstBackend();
     } else {
-       LOG_DEBUG << __func__ << " HasMoreBackend false, RotateFirstCommand";
-    client_conn_->RotateFirstCommand();
+      LOG_DEBUG << __func__ << " HasMoreBackend false, RotateFirstCommand";
+      client_conn_->RotateFirstCommand();
     }
     LOG_DEBUG << "WriteCommand::OnForwardReplyFinished backend no more reply, and all data forwarded to client";
   } else {

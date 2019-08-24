@@ -52,7 +52,7 @@ void ClientConnection::StartRead() {
 }
 
 void ClientConnection::TryReadMoreRequest() {
-  // TODO : add preconditions check
+  // TODO : checking preconditions 
   AsyncRead();
 }
 
@@ -113,7 +113,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
     poly_cmd_queue_.back()->ForwardRequest(read_buffer_.unprocessed_data(), read_buffer_.unprocessed_bytes());
     read_buffer_.update_processed_bytes(read_buffer_.unprocessed_bytes());
     if (read_buffer_.parsed_unreceived_bytes() > 0) {
-      // TODO : 要不要AsyncRead() ?
+      // TryReadMoreRequest(); // 现在的做法是，这里不继续read, 而是在ForwardRequest的回调函数里面才继续read. 这并不是最佳方式
       return;
     }
   }
@@ -129,7 +129,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       socket_.close();
       return;
     }  else if (parsed_bytes == 0) {
-      AsyncRead(); // read more data
+      TryReadMoreRequest(); // read more data
       return;
     } else {
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_.received_bytes());

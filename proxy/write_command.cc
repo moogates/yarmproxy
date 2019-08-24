@@ -40,7 +40,7 @@ void WriteCommand::ForwardRequest(const char * data, size_t bytes) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardMoreRequest),
+    backend_conn_->SetReadWriteCallback(WeakBind2(&MemcCommand::OnForwardRequestFinished, backend_conn_),
                                WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
   }
 
@@ -53,23 +53,26 @@ void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf
   backend_conn_->ForwardRequest(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
 }
 
-void WriteCommand::OnForwardMoreRequest(const boost::system::error_code& error) {
+void WriteCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_WARN << "WriteCommand OnForwardMoreRequest error";
+    LOG_WARN << "WriteCommand OnForwardRequestFinished error";
     return;
   }
-  LOG_INFO << "WriteCommand OnForwardMoreRequest ok, bytes_forwarding_=" << bytes_forwarding_;
+  assert(backend == backend_conn_);
+  LOG_INFO << "WriteCommand OnForwardRequestFinished ok, bytes_forwarding_=" << bytes_forwarding_;
   client_conn_->read_buffer_.dec_recycle_lock();
 
-  if (bytes_forwarding_ < request_cmd_len_ + request_body_bytes_) {
-    client_conn_->TryReadMoreRequest();
-  } else {
-    // TODO ?
-    backend_conn_->ReadResponse();
-  }
   request_forwarded_bytes_ += bytes_forwarding_;
   bytes_forwarding_ = 0;
+
+  if (request_forwarded_bytes_ < request_cmd_len_ + request_body_bytes_) {
+    LOG_DEBUG << "WriteCommand::OnForwardRequestFinished 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
+    client_conn_->TryReadMoreRequest();
+  } else {
+    LOG_DEBUG << "WriteCommand::OnForwardRequestFinished 转发了当前命令的所有数据, 等待 backend 的响应.";
+    backend_conn_->ReadResponse();
+  }
 }
 
 bool WriteCommand::ParseUpstreamResponse(BackendConn* backend) {

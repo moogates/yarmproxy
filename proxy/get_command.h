@@ -21,6 +21,7 @@ private:
 
   void DoForwardRequest(const char *, size_t) override;
   bool ParseUpstreamResponse(BackendConn* backend) override;
+  void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) override;
 
   std::string cmd_line_without_rn() const override {
     return cmd_line_.substr(0, cmd_line_.size() - 2);

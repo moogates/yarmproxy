@@ -38,7 +38,6 @@ void BackendConn::TryReadMoreData() {
     is_reading_more_ = true; // memmove cause read data offset drift
     read_buffer_.inc_recycle_lock();
 
-    // socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
     socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
         std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
     LOG_DEBUG << "TryReadMoreData";
@@ -93,23 +92,8 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
     return;
   }
 
-  read_buffer_.dec_recycle_lock();
-
-  {
-    if (request_has_more_data) {
-      LOG_DEBUG << "ParallelGetCommand BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
-      request_sent_callback_(error);
-    } else {
-      LOG_DEBUG << "ParallelGetCommand BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 backend 的响应.";
-      // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
-      // read_buffer_.Reset();  // TODO : 这里还需要吗？
-    
-      read_buffer_.inc_recycle_lock();
-      // socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
-      socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
-          std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
-    }
-  }
+  LOG_DEBUG << "HandleWrite 向 backend 写完, 触发回调.";
+  request_sent_callback_(error);
 }
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
