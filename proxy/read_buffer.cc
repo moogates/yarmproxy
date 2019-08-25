@@ -13,6 +13,10 @@ size_t ReadBuffer::unparsed_bytes() const {
   return 0;
 }
 
+ReadBuffer::~ReadBuffer() {
+  LOG_INFO << "ReadBuffer dtor";
+}
+
 void ReadBuffer::update_received_bytes(size_t received_bytes) {
   // LOG_DEBUG << "ReadBuffer::update_received_bytes, this=" << this
   //           << " received_data=" << std::string(data_ + received_offset_, received_bytes);

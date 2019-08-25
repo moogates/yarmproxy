@@ -33,7 +33,6 @@ void BackendConn::ReadResponse() {
 
 void BackendConn::TryReadMoreData() {
   if (!is_reading_more_  // not reading more
-      // && pushed_bytes_ * 3 <  BUFFER_SIZE * 2) {// there is still more than 1/3 buffer space free
       && read_buffer_.has_much_free_space()) {
     is_reading_more_ = true; // memmove cause read data offset drift
     read_buffer_.inc_recycle_lock();
@@ -130,7 +129,6 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool request_ha
   boost::asio::socket_base::linger linger(true, 0);
   socket_.set_option(linger);
   
-  // ForwardData(data, bytes);
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, this, data, bytes, request_has_more_data,
           std::placeholders::_1, std::placeholders::_2));
