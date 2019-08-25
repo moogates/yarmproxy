@@ -8,13 +8,18 @@ using namespace boost::asio;
 
 class ClientConnection;
 class BackendConnPool;
+class Allocator;
 
 struct WorkerContext {
   WorkerContext();
   std::thread thread_;
   io_service io_service_;
   io_service::work work_;
+  BackendConnPool* backend_conn_pool();
+private:
   BackendConnPool* backend_conn_pool_;
+public:
+  Allocator* allocator_;
 };
 
 class WorkerPool {

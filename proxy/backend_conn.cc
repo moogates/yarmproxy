@@ -1,6 +1,7 @@
 #include "backend_conn.h"
 
 #include "base/logging.h"
+#include "allocator.h"
 
 const static size_t kMaxConnPerEndpoint = 64;
 
@@ -10,10 +11,12 @@ namespace mcproxy {
 
 std::atomic_int backend_conn_count;
 
-BackendConn::BackendConn(boost::asio::io_service& io_service,
+BackendConn::BackendConn(WorkerContext& context,
                            const ip::tcp::endpoint& upendpoint)
-  : remote_endpoint_(upendpoint)
-  , socket_(io_service) 
+  : context_(context)
+  , read_buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
+  , remote_endpoint_(upendpoint)
+  , socket_(context.io_service_) 
   , is_reading_more_(false) {
   LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
 }
@@ -21,28 +24,31 @@ BackendConn::BackendConn(boost::asio::io_service& io_service,
 BackendConn::~BackendConn() {
   LOG_DEBUG << "BackendConn dtor, backend_conn_count=" << --backend_conn_count;
   socket_.close();
+
+  context_.allocator_->Release(read_buffer_->data());
+  delete read_buffer_;
 }
 
 void BackendConn::ReadResponse() {
   // TryReadMoreData();
   // return;
-  read_buffer_.inc_recycle_lock();
-  socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
+  read_buffer_->inc_recycle_lock();
+  socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
       std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void BackendConn::TryReadMoreData() {
   if (!is_reading_more_  // not reading more
-      && read_buffer_.has_much_free_space()) {
+      && read_buffer_->has_much_free_space()) {
     is_reading_more_ = true; // memmove cause read data offset drift
-    read_buffer_.inc_recycle_lock();
+    read_buffer_->inc_recycle_lock();
 
-    socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
+    socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
         std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
     LOG_DEBUG << "TryReadMoreData";
   } else {
     LOG_DEBUG << "No TryReadMoreData, is_reading_more_=" << is_reading_more_
-             << " has_much_free_space=" << read_buffer_.has_much_free_space();
+             << " has_much_free_space=" << read_buffer_->has_much_free_space();
   }
 }
 
@@ -105,8 +111,8 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
     LOG_DEBUG << "ParallelGetCommand BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
     is_reading_more_ = false;  // finish reading, you could memmove now
 
-    read_buffer_.update_received_bytes(bytes_transferred);
-    read_buffer_.dec_recycle_lock();
+    read_buffer_->update_received_bytes(bytes_transferred);
+    read_buffer_->dec_recycle_lock();
 
     response_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
   }
@@ -146,7 +152,7 @@ BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
     it->second.pop();
     LOG_DEBUG << "BackendConnPool::Allocate reuse conn, thread=" << std::this_thread::get_id() << " ep=" << ep << ", idles=" << it->second.size();
   } else {
-    conn = new BackendConn(io_service_, ep);
+    conn = new BackendConn(context_, ep);
     LOG_DEBUG << "BackendConnPool::Allocate create conn, thread=" << std::this_thread::get_id() << " ep=" << ep;
   }
   active_conns_.insert(std::make_pair(conn, ep));
@@ -173,7 +179,7 @@ void BackendConnPool::Release(BackendConn * conn) {
 
   auto it = conn_map_.find(ep);
   if (it == conn_map_.end()) {
-    conn->read_buffer_.Reset();
+    conn->buffer()->Reset();
     conn_map_[ep].push(conn);
     LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=1";
   } else {
@@ -182,7 +188,7 @@ void BackendConnPool::Release(BackendConn * conn) {
       conn->socket().close();
       delete conn;
     } else {
-      conn->read_buffer_.Reset();
+      conn->buffer()->Reset();
       it->second.push(conn);
       LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=" << it->second.size();
     }

@@ -39,7 +39,7 @@ SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep,
 
 SingleGetCommand::~SingleGetCommand() {
   if (backend_conn_) {
-    context_.backend_conn_pool_->Release(backend_conn_);
+    context_.backend_conn_pool()->Release(backend_conn_);
   }
   LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
 }
@@ -48,7 +48,7 @@ void SingleGetCommand::ForwardRequest(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
-    backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
+    backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend_conn_),
                                WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
   }
@@ -70,14 +70,14 @@ void SingleGetCommand::OnForwardRequestFinished(BackendConn* backend, const boos
 bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   bool valid = true;
   assert(backend_conn_ == backend);
-  while(backend_conn_->read_buffer_.unparsed_bytes() > 0) {
-    const char * entry = backend_conn_->read_buffer_.unparsed_data();
-    const char * p = GetLineEnd(entry, backend_conn_->read_buffer_.unparsed_bytes());
+  while(backend_conn_->buffer()->unparsed_bytes() > 0) {
+    const char * entry = backend_conn_->buffer()->unparsed_data();
+    const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
     if (p == nullptr) {
       // TODO : no enough data for parsing, please read more
       LOG_DEBUG << "ParseUpstreamResponse no enough data for parsing, please read more"
-                << " data=" << std::string(entry, backend_conn_->read_buffer_.unparsed_bytes())
-                << " bytes=" << backend_conn_->read_buffer_.unparsed_bytes();
+                << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
+                << " bytes=" << backend_conn_->buffer()->unparsed_bytes();
       return true;
     }
 
@@ -86,13 +86,13 @@ bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
       size_t body_bytes = GetValueBytes(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
 
-      backend_conn_->read_buffer_.update_parsed_bytes(entry_bytes);
+      backend_conn_->buffer()->update_parsed_bytes(entry_bytes);
       // break; // TODO : 每次转发一条，only for test
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-        backend_conn_->read_buffer_.update_parsed_bytes(sizeof("END\r\n") - 1);
-        if (backend_conn_->read_buffer_.unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
+        backend_conn_->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
+        if (backend_conn_->buffer()->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
           LOG_DEBUG << "ParseUpstreamResponse END not really end!";
         } else {

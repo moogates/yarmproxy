@@ -8,6 +8,7 @@
 #include "worker_pool.h"
 #include "memc_command.h"
 #include "backend_conn.h"
+#include "allocator.h"
 
 using namespace boost::asio;
 
@@ -21,6 +22,7 @@ std::atomic_int g_cc_count;
 
 ClientConnection::ClientConnection(WorkerContext& context)
   : socket_(context.io_service_)
+  , read_buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , context_(context)
   , timeout_(0) // TODO : timeout timer 
   , timer_(context.io_service_)
@@ -35,6 +37,8 @@ ClientConnection::~ClientConnection() {
   } else {
     LOG_DEBUG << "ClientConnection destroyed need not close socket.";
   }
+  context_.allocator_->Release(read_buffer_->data());
+  delete read_buffer_;
   LOG_DEBUG << "ClientConnection destroyed." << --g_cc_count;
 }
 
@@ -59,7 +63,7 @@ void ClientConnection::TryReadMoreRequest() {
 void ClientConnection::AsyncRead() {
   timer_.cancel();
 
-  socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
+  socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
       std::bind(&ClientConnection::HandleRead, shared_from_this(),
           std::placeholders::_1, // 占位符
           std::placeholders::_2));
@@ -106,22 +110,22 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
     return;
   }
 
-  read_buffer_.update_received_bytes(bytes_transferred);
+  read_buffer_->update_received_bytes(bytes_transferred);
 
-  if (read_buffer_.parsed_unprocessed_bytes() > 0) {
+  if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
-    poly_cmd_queue_.back()->ForwardRequest(read_buffer_.unprocessed_data(), read_buffer_.unprocessed_bytes());
-    read_buffer_.update_processed_bytes(read_buffer_.unprocessed_bytes());
-    if (read_buffer_.parsed_unreceived_bytes() > 0) {
+    poly_cmd_queue_.back()->ForwardRequest(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
+    read_buffer_->update_processed_bytes(read_buffer_->unprocessed_bytes());
+    if (read_buffer_->parsed_unreceived_bytes() > 0) {
       // TryReadMoreRequest(); // 现在的做法是，这里不继续read, 而是在ForwardRequest的回调函数里面才继续read. 这并不是最佳方式
       return;
     }
   }
 
-  while(read_buffer_.unparsed_received_bytes() > 0) {
+  while(read_buffer_->unparsed_received_bytes() > 0) {
     std::shared_ptr<MemcCommand> command;
     int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(),
-               read_buffer_.unprocessed_data(), read_buffer_.received_bytes(),
+               read_buffer_->unprocessed_data(), read_buffer_->received_bytes(),
                &command);
 
     if (parsed_bytes < 0) {
@@ -132,13 +136,13 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       TryReadMoreRequest(); // read more data
       return;
     } else {
-      size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_.received_bytes());
-      command->ForwardRequest(read_buffer_.unprocessed_data(), to_process_bytes);  
+      size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
+      command->ForwardRequest(read_buffer_->unprocessed_data(), to_process_bytes);  
       // poly_cmd_queue_.splice(poly_cmd_queue_.end(), sub_commands);
       poly_cmd_queue_.emplace_back(std::move(command));// TODO : 要控制单client的并发command数
 
-      read_buffer_.update_parsed_bytes(parsed_bytes);
-      read_buffer_.update_processed_bytes(to_process_bytes);
+      read_buffer_->update_parsed_bytes(parsed_bytes);
+      read_buffer_->update_processed_bytes(to_process_bytes);
     }
   }
 

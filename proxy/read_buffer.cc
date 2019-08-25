@@ -63,7 +63,7 @@ void ReadBuffer::try_recycle_buffer() {
     if (processed_offset_ == received_offset_) {
       parsed_offset_ -= processed_offset_;
       processed_offset_ = received_offset_ = 0;
-    } else if (processed_offset_ > (BUFFER_SIZE - received_offset_)) {
+    } else if (processed_offset_ > (buffer_size_ - received_offset_)) {
       memmove(data_, data_ + processed_offset_, received_offset_ - processed_offset_);
       parsed_offset_ -= processed_offset_;
       received_offset_ -= processed_offset_;

@@ -9,20 +9,26 @@ namespace mcproxy {
 
 class ReadBuffer {
 private:
-  enum { BUFFER_SIZE = 32 * 1024}; // TODO : use c++11 enum
-  char data_[BUFFER_SIZE];
+  char* data_;
+  size_t buffer_size_;
 
   size_t processed_offset_;
   size_t received_offset_;
   size_t parsed_offset_;
   size_t recycle_lock_count_;
 public:
-  ReadBuffer() : processed_offset_(0)
+  ReadBuffer(char* buffer, size_t buffer_size)
+               : data_(buffer)
+               , buffer_size_(buffer_size)
+               , processed_offset_(0)
                , received_offset_(0)
                , parsed_offset_(0) 
                , recycle_lock_count_(0) {
   }
   ~ReadBuffer();
+  char* data() {
+    return data_;
+  }
 
   void Reset() {
     received_offset_ = processed_offset_ = parsed_offset_ = 0; // TODO : 这里需要吗？
@@ -30,14 +36,14 @@ public:
   }
 
   bool has_much_free_space() {
-    return received_offset_ * 3 < BUFFER_SIZE * 2; // there is still more than 1/3 buffer space free
+    return received_offset_ * 3 < buffer_size_ * 2; // there is still more than 1/3 buffer space free
   }
 
   char* free_space_begin() {
     return data_ + received_offset_;
   }
   size_t free_space_size() {
-    return BUFFER_SIZE - received_offset_;
+    return buffer_size_ - received_offset_;
   }
 
   size_t received_bytes() const { // received_unprocessed_bytes
