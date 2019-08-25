@@ -14,7 +14,7 @@ Allocator::Allocator(int slab_size, int slab_count)
 }
 
 char* Allocator::Alloc() {
-  // return new char[slab_size_];  // TODO : Why pre-allocated chunk slower than malloc()? locality?
+  return new char[slab_size_];  // TODO : Why pre-allocated chunk slower than malloc()? locality?
   if (free_slabs_.empty()) {
     LOG_INFO << "Allocator::Alloc no free slab";
     return new char[slab_size_];
@@ -28,10 +28,11 @@ char* Allocator::Alloc() {
 }
 
 void Allocator::Release(char* slab) {
-  free_slabs_.insert(slab);
-  return;
   delete []slab;
   return;
+  free_slabs_.insert(slab);  // recycle all
+  return;
+
   if (slab < chunk_ || slab >= chunk_ + slab_size_ * slab_count_) {
     LOG_INFO << "Allocator::Alloc delete a slab";
     delete []slab;

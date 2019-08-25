@@ -16,7 +16,7 @@ namespace mcproxy {
 
 // TODO :
 // 1. gracefully close connections
-// 2. 
+// 2.
 
 std::atomic_int g_cc_count;
 
@@ -24,7 +24,7 @@ ClientConnection::ClientConnection(WorkerContext& context)
   : socket_(context.io_service_)
   , read_buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , context_(context)
-  , timeout_(0) // TODO : timeout timer 
+  , timeout_(0) // TODO : timeout timer
   , timer_(context.io_service_)
 {
   LOG_DEBUG << "ClientConnection created." << ++g_cc_count;
@@ -32,7 +32,7 @@ ClientConnection::ClientConnection(WorkerContext& context)
 
 ClientConnection::~ClientConnection() {
   if (socket_.is_open()) {
-    LOG_DEBUG << "ClientConnection destroyed close socket."; 
+    LOG_DEBUG << "ClientConnection destroyed close socket.";
     socket_.close();
   } else {
     LOG_DEBUG << "ClientConnection destroyed need not close socket.";
@@ -56,7 +56,7 @@ void ClientConnection::StartRead() {
 }
 
 void ClientConnection::TryReadMoreRequest() {
-  // TODO : checking preconditions 
+  // TODO : checking preconditions
   AsyncRead();
 }
 
@@ -70,17 +70,19 @@ void ClientConnection::AsyncRead() {
 }
 
 void ClientConnection::RotateFirstCommand() {
-  poly_cmd_queue_.pop_front();
-  if (!poly_cmd_queue_.empty()) {
-    LOG_DEBUG << __func__ << " poly_cmd_queue_.size=" << poly_cmd_queue_.size();
-    poly_cmd_queue_.front()->OnForwardReplyEnabled();
+  active_cmd_queue_.pop_front();
+  if (!active_cmd_queue_.empty()) {
+    LOG_INFO << __func__ << " PRE active_cmd_queue_.size=" << active_cmd_queue_.size();
+    active_cmd_queue_.front()->OnForwardReplyEnabled();
+    ProcessUnparsedData();
+    LOG_INFO << __func__ << " POST active_cmd_queue_.size=" << active_cmd_queue_.size();
   } else {
-    LOG_DEBUG << __func__ << " poly_cmd_queue_ emptr";
+    LOG_DEBUG << __func__ << " active_cmd_queue_ empty";
   }
 }
 
 void ClientConnection::ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb) {
-  forward_resp_callback_ = cb;
+  forward_resp_callback_ = cb; // TODO : unused member
 
   // TODO : 成员函数化
   std::weak_ptr<ClientConnection> wptr(shared_from_this());
@@ -104,6 +106,34 @@ void ClientConnection::ForwardResponse(const char* data, size_t bytes, const For
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
+bool ClientConnection::ProcessUnparsedData() {
+  static const size_t MAX_PIPELINE_ACTIVE = 4;
+  while(active_cmd_queue_.size() < MAX_PIPELINE_ACTIVE
+        && read_buffer_->unparsed_received_bytes() > 0) {
+    std::shared_ptr<MemcCommand> command;
+    int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(),
+               read_buffer_->unprocessed_data(), read_buffer_->received_bytes(),
+               &command);
+
+    if (parsed_bytes < 0) {
+      // TODO : error handling
+      socket_.close();
+      return false;
+    }  else if (parsed_bytes == 0) {
+      TryReadMoreRequest(); // read more data
+      return true;
+    } else {
+      size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
+      command->ForwardRequest(read_buffer_->unprocessed_data(), to_process_bytes);
+      active_cmd_queue_.emplace_back(std::move(command));
+
+      read_buffer_->update_parsed_bytes(parsed_bytes);
+      read_buffer_->update_processed_bytes(to_process_bytes);
+    }
+  }
+  return true;
+}
+
 void ClientConnection::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
     LOG_DEBUG << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
@@ -114,7 +144,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
-    poly_cmd_queue_.back()->ForwardRequest(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
+    active_cmd_queue_.back()->ForwardRequest(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
     read_buffer_->update_processed_bytes(read_buffer_->unprocessed_bytes());
     if (read_buffer_->parsed_unreceived_bytes() > 0) {
       // TryReadMoreRequest(); // 现在的做法是，这里不继续read, 而是在ForwardRequest的回调函数里面才继续read. 这并不是最佳方式
@@ -122,7 +152,12 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
     }
   }
 
-  while(read_buffer_->unparsed_received_bytes() > 0) {
+  ProcessUnparsedData();
+  return;
+
+  static const size_t MAX_PIPELINE_ACTIVE = 5;
+  while(active_cmd_queue_.size() < MAX_PIPELINE_ACTIVE
+        && read_buffer_->unparsed_received_bytes() > 0) {
     std::shared_ptr<MemcCommand> command;
     int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(),
                read_buffer_->unprocessed_data(), read_buffer_->received_bytes(),
@@ -137,21 +172,20 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       return;
     } else {
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
-      command->ForwardRequest(read_buffer_->unprocessed_data(), to_process_bytes);  
-      // poly_cmd_queue_.splice(poly_cmd_queue_.end(), sub_commands);
-      poly_cmd_queue_.emplace_back(std::move(command));// TODO : 要控制单client的并发command数
+      command->ForwardRequest(read_buffer_->unprocessed_data(), to_process_bytes);
+      active_cmd_queue_.emplace_back(std::move(command));
 
       read_buffer_->update_parsed_bytes(parsed_bytes);
       read_buffer_->update_processed_bytes(to_process_bytes);
     }
   }
 
-  if (timeout_ > 0) {
-    // TODO : 改为每个command有一个timer
-    timer_.expires_from_now(boost::posix_time::millisec(timeout_));
-    // timer_.expires_from_now(std::chrono::milliseconds(timeout_));
-    timer_.async_wait(std::bind(&ClientConnection::HandleMemcCommandTimeout, shared_from_this(), std::placeholders::_1));
-  }
+//if (timeout_ > 0) {
+//  // TODO : 改为每个command有一个timer
+//  timer_.expires_from_now(boost::posix_time::millisec(timeout_));
+//  // timer_.expires_from_now(std::chrono::milliseconds(timeout_));
+//  timer_.async_wait(std::bind(&ClientConnection::HandleMemcCommandTimeout, shared_from_this(), std::placeholders::_1));
+//}
 }
 
 void ClientConnection::HandleTimeoutWrite(const boost::system::error_code& error) {
