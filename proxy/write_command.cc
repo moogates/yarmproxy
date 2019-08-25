@@ -26,7 +26,7 @@ WriteCommand::WriteCommand(const ip::tcp::endpoint & ep,
 
 WriteCommand::~WriteCommand() {
   if (backend_conn_) {
-    context_.backend_conn_pool_->Release(backend_conn_);
+    context_.backend_conn_pool()->Release(backend_conn_);
   }
   LOG_DEBUG << "WriteCommand dtor " << --write_cmd_count;
 }
@@ -39,7 +39,7 @@ void WriteCommand::ForwardRequest(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
-    backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
+    backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend_conn_),
                                WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
   }
@@ -48,7 +48,7 @@ void WriteCommand::ForwardRequest(const char * data, size_t bytes) {
 }
 
 void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) {
-  client_conn_->read_buffer_.inc_recycle_lock();
+  client_conn_->buffer()->inc_recycle_lock();
   bytes_forwarding_ = std::min(client_buf_received_bytes, request_cmd_len_ + request_body_bytes_); // FIXME
   backend_conn_->ForwardRequest(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
 }
@@ -61,7 +61,7 @@ void WriteCommand::OnForwardRequestFinished(BackendConn* backend, const boost::s
   }
   assert(backend == backend_conn_);
   LOG_DEBUG << "WriteCommand OnForwardRequestFinished ok, bytes_forwarding_=" << bytes_forwarding_;
-  client_conn_->read_buffer_.dec_recycle_lock();
+  client_conn_->buffer()->dec_recycle_lock();
 
   request_forwarded_bytes_ += bytes_forwarding_;
   bytes_forwarding_ = 0;
@@ -77,17 +77,17 @@ void WriteCommand::OnForwardRequestFinished(BackendConn* backend, const boost::s
 
 bool WriteCommand::ParseUpstreamResponse(BackendConn* backend) {
   assert(backend_conn_ == backend);
-  const char * entry = backend_conn_->read_buffer_.unparsed_data();
-  const char * p = GetLineEnd(entry, backend_conn_->read_buffer_.unparsed_bytes());
+  const char * entry = backend_conn_->buffer()->unparsed_data();
+  const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
   if (p == nullptr) {
     // TODO : no enough data for parsing, please read more
     LOG_DEBUG << "WriteCommand ParseUpstreamResponse no enough data for parsing, please read more"
-              << " data=" << std::string(entry, backend_conn_->read_buffer_.unparsed_bytes())
-              << " bytes=" << backend_conn_->read_buffer_.unparsed_bytes();
+              // << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
+              << " bytes=" << backend_conn_->buffer()->unparsed_bytes();
     return true;
   }
 
-  backend_conn_->read_buffer_.update_parsed_bytes(p - entry + 1);
+  backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
   LOG_DEBUG << "WriteCommand ParseUpstreamResponse resp.size=" << p - entry + 1;
             // << " contont=[" << std::string(entry, p - entry - 1) << "]";
   return true;

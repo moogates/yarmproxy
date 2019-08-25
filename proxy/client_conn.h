@@ -10,7 +10,6 @@
 #include <memory>
 
 #include "base/logging.h"
-#include "read_buffer.h"
 
 using namespace boost::asio;
 
@@ -19,6 +18,7 @@ namespace mcproxy {
 class BackendConnPool;
 class MemcCommand;
 struct WorkerContext;
+class ReadBuffer;
 
 typedef std::function<void(const boost::system::error_code& error)> ForwardResponseCallback;
 
@@ -46,12 +46,15 @@ public:
   void RotateFirstCommand();
 
   void TryReadMoreRequest();
+  ReadBuffer* buffer() {
+    return read_buffer_;
+  }
 
   // boost::asio::io_service& io_service_;
 private:
   ip::tcp::socket socket_;
 public:
-  ReadBuffer read_buffer_;
+  ReadBuffer* read_buffer_;
 
 protected:
   WorkerContext& context_;

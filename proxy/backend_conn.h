@@ -8,6 +8,7 @@
 #include <boost/asio.hpp>
 #include "base/logging.h"
 
+#include "worker_pool.h"
 #include "read_buffer.h"
 
 using namespace boost::asio;
@@ -19,7 +20,7 @@ typedef std::function<void(const boost::system::error_code& error)> BackendReque
 
 class BackendConn {
 public:
-  BackendConn(boost::asio::io_service& io_service, const ip::tcp::endpoint& upendpoint);
+  BackendConn(WorkerContext& context, const ip::tcp::endpoint& upendpoint);
   ~BackendConn();
 
   void ForwardRequest(const char* data, size_t bytes, bool has_more_data);
@@ -44,8 +45,12 @@ private:
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleConnect(const char * buf, size_t bytes, bool has_more_data, const boost::system::error_code& error);
 public:
-  ReadBuffer read_buffer_;
+  ReadBuffer* buffer() {
+    return read_buffer_;
+  }
 private:
+  WorkerContext& context_;
+  ReadBuffer* read_buffer_;
   ip::tcp::endpoint remote_endpoint_;
   ip::tcp::socket socket_;
   BackendReplyReceivedCallback response_received_callback_;
@@ -56,11 +61,11 @@ private:
 
 class BackendConnPool {
 private:
-  boost::asio::io_service& io_service_;
+  WorkerContext& context_;
   std::map<ip::tcp::endpoint, std::queue<BackendConn*>> conn_map_;
   std::map<BackendConn*, ip::tcp::endpoint> active_conns_;
 public:
-  BackendConnPool(boost::asio::io_service& asio_service) : io_service_(asio_service) {
+  BackendConnPool(WorkerContext& context) : context_(context) {
   }
 
   BackendConn * Allocate(const ip::tcp::endpoint & ep);

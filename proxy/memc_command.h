@@ -73,6 +73,7 @@ protected:
   BackendConn* replying_backend_;
 
   std::shared_ptr<ClientConnection> client_conn_;
+
   WorkerContext& context_;
 
   void TryForwardResponse(BackendConn* backend);
