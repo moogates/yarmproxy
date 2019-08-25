@@ -14,13 +14,12 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-typedef std::function<void(const boost::system::error_code& error)> UpstreamReadCallback;
-typedef std::function<void(const boost::system::error_code& error)> UpstreamWriteCallback;
+typedef std::function<void(const boost::system::error_code& error)> BackendReplyReceivedCallback;
+typedef std::function<void(const boost::system::error_code& error)> BackendRequestSentCallback;
 
 class BackendConn {
 public:
-  BackendConn(boost::asio::io_service& io_service, 
-      const ip::tcp::endpoint& upendpoint);
+  BackendConn(boost::asio::io_service& io_service, const ip::tcp::endpoint& upendpoint);
   ~BackendConn();
 
   void ForwardRequest(const char* data, size_t bytes, bool has_more_data);
@@ -31,10 +30,13 @@ public:
   ip::tcp::socket& socket() {
     return socket_;
   }
+  ip::tcp::endpoint& remote_endpoint() {
+    return remote_endpoint_;
+  }
 
-  void SetReadWriteCallback(const UpstreamReadCallback& read_callback, const UpstreamWriteCallback& write_callback) {
-    backend_read_callback_ = read_callback;
-    uptream_write_callback_ = write_callback;
+  void SetReadWriteCallback(const BackendRequestSentCallback& request_sent_callback, const BackendReplyReceivedCallback& response_received_callback) {
+    request_sent_callback_ = request_sent_callback;
+    response_received_callback_ = response_received_callback;
   }
 private:
   void HandleWrite(const char * buf, const size_t bytes, bool has_more_data,
@@ -44,10 +46,10 @@ private:
 public:
   ReadBuffer read_buffer_;
 private:
-  ip::tcp::endpoint backend_endpoint_;
+  ip::tcp::endpoint remote_endpoint_;
   ip::tcp::socket socket_;
-  UpstreamReadCallback backend_read_callback_;
-  UpstreamWriteCallback uptream_write_callback_;
+  BackendReplyReceivedCallback response_received_callback_;
+  BackendRequestSentCallback request_sent_callback_;
 
   bool is_reading_more_;
 };

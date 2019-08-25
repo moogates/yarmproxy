@@ -12,7 +12,7 @@ std::atomic_int backend_conn_count;
 
 BackendConn::BackendConn(boost::asio::io_service& io_service,
                            const ip::tcp::endpoint& upendpoint)
-  : backend_endpoint_(upendpoint)
+  : remote_endpoint_(upendpoint)
   , socket_(io_service) 
   , is_reading_more_(false) {
   LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
@@ -20,22 +20,23 @@ BackendConn::BackendConn(boost::asio::io_service& io_service,
 
 BackendConn::~BackendConn() {
   LOG_DEBUG << "BackendConn dtor, backend_conn_count=" << --backend_conn_count;
+  socket_.close();
 }
 
 void BackendConn::ReadResponse() {
-  // socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
+  // TryReadMoreData();
+  // return;
+  read_buffer_.inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
       std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 void BackendConn::TryReadMoreData() {
   if (!is_reading_more_  // not reading more
-      // && pushed_bytes_ * 3 <  BUFFER_SIZE * 2) {// there is still more than 1/3 buffer space free
       && read_buffer_.has_much_free_space()) {
     is_reading_more_ = true; // memmove cause read data offset drift
-    read_buffer_.lock_memmove();
+    read_buffer_.inc_recycle_lock();
 
-    // socket_.async_read_some(boost::asio::buffer(buf_ + pushed_bytes_, BUFFER_SIZE - pushed_bytes_),
     socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
         std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
     LOG_DEBUG << "TryReadMoreData";
@@ -47,19 +48,19 @@ void BackendConn::TryReadMoreData() {
 
 void BackendConn::ForwardRequest(const char* data, size_t bytes, bool has_more_data) {
   if (!socket_.is_open()) {
-    LOG_DEBUG << "BackendConn::ForwardRequest open socket, req="
-              // << std::string(data, bytes - 2) << " size=" << bytes
-              << " has_more_data=" << has_more_data << " conn=" << this;
-    socket_.async_connect(backend_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
+    LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardRequest open socket, req="
+              << std::string(data, bytes - 2) << " size=" << bytes
+              << " has_more_data=" << has_more_data << " backend=" << this;
+    socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
         data, bytes, has_more_data, std::placeholders::_1));
     return;
   }
 
-  LOG_DEBUG << "BackendConn::ForwardRequest write data, bytes=" << bytes
+  LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardRequest write data, bytes=" << bytes
             << " has_more_data=" << has_more_data
             // << " req_ptr=" << (void*)data
             // << " req_data=" << std::string(data, bytes - 2)
-            << " conn=" << this;
+            << " backend=" << this;
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, this, data, bytes, has_more_data,
           std::placeholders::_1, std::placeholders::_2));
@@ -71,13 +72,13 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
 {
   if (error) {
     // TODO : 如何通知给command?
-    LOG_WARN << "HandleWrite error, upconn=" << this << " ep="
-             << backend_endpoint_ << " err=" << error.message();
+    LOG_DEBUG << "HandleWrite error, upconn=" << this << " ep="
+             << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     return;
   }
 
-  LOG_DEBUG << "HandleWrite ok, upconn=" << this << " ep=" << backend_endpoint_
+  LOG_DEBUG << "ParallelGetCommand HandleWrite ok, upconn=" << this << " ep=" << remote_endpoint_
             << " " << bytes << " bytes transfered to backend";
 
   if (bytes_transferred < bytes) {
@@ -90,37 +91,24 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
     return;
   }
 
-  {
-    if (request_has_more_data) {
-      LOG_WARN << "BackendConn::HandleWrite 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
-      uptream_write_callback_(error);
-    } else {
-      LOG_DEBUG << "BackendConn::HandleWrite 转发了当前命令的所有数据, 等待 backend 的响应.";
-      // pushed_bytes_ = popped_bytes_ = parsed_bytes_ = 0; // TODO : 这里需要吗？
-      read_buffer_.Reset();  // TODO : 这里还需要吗？
-    
-      // socket_.async_read_some(boost::asio::buffer(buf_, BUFFER_SIZE),
-      socket_.async_read_some(boost::asio::buffer(read_buffer_.free_space_begin(), read_buffer_.free_space_size()),
-          std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
-    }
-  }
+  LOG_DEBUG << "HandleWrite 向 backend 写完, 触发回调.";
+  request_sent_callback_(error);
 }
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    LOG_WARN << "BackendConn::HandleRead backend read error, upconn=" << this
-             << " ep=" << backend_endpoint_ << " err=" << error.message();
-    // socket_.close();
+    LOG_DEBUG << "BackendConn::HandleRead backend read error, upconn=" << this
+             << " ep=" << remote_endpoint_ << " err=" << error.message();
+    socket_.close();
     // TODO : 如何通知给外界?
   } else {
-    LOG_DEBUG << "BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
-    if (is_reading_more_) {
-      is_reading_more_ = false;  // finish reading, you could memmove now
-      read_buffer_.unlock_memmove();
-    }
-    // pushed_bytes_ += bytes_transferred;
+    LOG_DEBUG << "ParallelGetCommand BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
+    is_reading_more_ = false;  // finish reading, you could memmove now
+
     read_buffer_.update_received_bytes(bytes_transferred);
-    backend_read_callback_(error); // TODO : error总是false，所以这个参数应当去掉
+    read_buffer_.dec_recycle_lock();
+
+    response_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
   }
 }
 
@@ -141,7 +129,6 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool request_ha
   boost::asio::socket_base::linger linger(true, 0);
   socket_.set_option(linger);
   
-  // ForwardData(data, bytes);
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, this, data, bytes, request_has_more_data,
           std::placeholders::_1, std::placeholders::_2));
@@ -149,8 +136,8 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool request_ha
 
 BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
   {
-    BackendConn* conn = new BackendConn(io_service_, ep);
-    return conn;
+  //BackendConn* conn = new BackendConn(io_service_, ep);
+  //return conn;
   }
   BackendConn* conn;
   auto it = conn_map_.find(ep);
@@ -167,8 +154,11 @@ BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
 }
 
 void BackendConnPool::Release(BackendConn * conn) {
-  delete conn;
-  return;
+  {
+  //LOG_DEBUG << "BackendConnPool::Release delete dtor";
+  //delete conn;
+  //return;
+  }
 
   if (conn == nullptr) {
     return;

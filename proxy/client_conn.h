@@ -11,7 +11,6 @@
 
 #include "base/logging.h"
 #include "read_buffer.h"
-#include "worker_pool.h"
 
 using namespace boost::asio;
 
@@ -35,16 +34,17 @@ public:
   ip::tcp::socket& socket() {
     return socket_;
   }
-  BackendConnPool* upconn_pool();
   void StartRead();
   void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
 
 public:
   void ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb);
   bool IsFirstCommand(std::shared_ptr<MemcCommand> cmd) {
+    // TODO : 能否作为一个标记，放在command里面？
     return cmd == poly_cmd_queue_.front();
   }
   void RotateFirstCommand();
+
   void TryReadMoreRequest();
 
   // boost::asio::io_service& io_service_;
@@ -57,9 +57,8 @@ protected:
   WorkerContext& context_;
 
 private:
-  ForwardResponseCallback forward_resp_callback_;
-
   std::list<std::shared_ptr<MemcCommand>> poly_cmd_queue_; // 新版支持多态的cmd
+  ForwardResponseCallback forward_resp_callback_;
 
   size_t timeout_;
   boost::asio::deadline_timer timer_;
@@ -67,7 +66,6 @@ private:
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  bool ForwardParsedUnreceivedRequest(size_t last_parsed_unreceived_bytes);
 
   void HandleMemcCommandTimeout(const boost::system::error_code& error);
   void HandleTimeoutWrite(const boost::system::error_code& error);

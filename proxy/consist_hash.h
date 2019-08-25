@@ -47,6 +47,7 @@ private:
 
   CacheNodeMap cache_nodes_; //服务器信息
   std::vector<CachePoint> cache_points_;
+  // TODO : clone to each thread to avoid mutes
   mutable boost::shared_mutex cache_points_mutex_;
 };
 

@@ -9,6 +9,7 @@ using namespace boost::asio;
 namespace mcproxy {
 
 static const char * memcached_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;";
+// static const char * memcached_nodes = "127.0.0.1:11211=2000";
 
 //static const char * memcached_nodes = "10.3.22.42:11211=6800;"
 //                              "10.3.22.43:11211=6800;"
@@ -33,7 +34,7 @@ bool MemcachedLocator::Initialize() {
     if (continuum->SetCacheNodes(memcached_nodes)) {
       clusters_continum_.insert(std::make_pair("FEED", continuum));
     } else {
-      // MCE_WARN("加载 Continuum 失败 " << it->first << ":" << it->second);
+      LOG_WARN << "加载 Continuum 失败 " << ns << "-" << memcached_nodes;
       delete continuum;
     }
   }
@@ -46,7 +47,7 @@ bool MemcachedLocator::Initialize() {
     if (continuum->SetCacheNodes(memcached_nodes)) {
       clusters_continum_.insert(make_pair(ns, continuum));
     } else {
-      // MCE_WARN("加载 Continuum 失败 : " << ns << "-" << memcached_nodes);
+      LOG_WARN << "加载 Continuum 失败 : " << ns << "-" << memcached_nodes;
       delete continuum;
     }
   }
@@ -57,7 +58,7 @@ bool MemcachedLocator::Initialize() {
     if (continuum->SetCacheNodes(memcached_nodes)) {
       clusters_continum_.insert(make_pair(ns, continuum));
     } else {
-      // MCE_WARN("加载 Continuum 失败 : " << ns << "-" << memcached_nodes);
+      LOG_WARN << "加载 Continuum 失败 : " << ns << "-" << memcached_nodes;
       delete continuum;
     }
   }

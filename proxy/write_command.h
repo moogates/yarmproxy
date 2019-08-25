@@ -9,8 +9,9 @@ namespace mcproxy {
 
 class WriteCommand : public MemcCommand {
 private:
-  // bool is_forwarding_request_;
-  // bool is_forwarding_response_;
+//ip::tcp::endpoint backend_endpoint_;
+//BackendConn* backend_conn_;
+
   const char * request_cmd_line_;
   size_t request_cmd_len_;
 
@@ -18,6 +19,8 @@ private:
   size_t request_body_bytes_;
   size_t bytes_forwarding_;
 
+  ip::tcp::endpoint backend_endpoint_;
+  BackendConn* backend_conn_;
 public:
   WriteCommand(const ip::tcp::endpoint & ep, 
           std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len, size_t body_bytes);
@@ -25,13 +28,18 @@ public:
   virtual ~WriteCommand();
 
   size_t request_body_upcoming_bytes() const override;
-  void OnUpstreamRequestWritten(const boost::system::error_code& error) override;
+  void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) override;
 
   size_t request_body_bytes() const override {  // for debug info only
     return request_body_bytes_;
   }
 private:
-  bool ParseUpstreamResponse() override;
+  void OnForwardReplyEnabled() override {
+    TryForwardResponse(backend_conn_);
+  }
+
+  void ForwardRequest(const char * data, size_t bytes) override;
+  bool ParseUpstreamResponse(BackendConn* backend) override;
   void DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) override;
 
   std::string cmd_line_without_rn() const override {

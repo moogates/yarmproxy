@@ -3,6 +3,7 @@
 #include "base/logging.h"
 #include "client_conn.h"
 #include "backend_conn.h"
+#include "worker_pool.h"
 
 namespace mcproxy {
 
@@ -28,18 +29,47 @@ size_t GetValueBytes(const char * data, const char * end) {
 
 SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
-    : MemcCommand(ep, owner, buf, cmd_len) 
+    : MemcCommand(owner) 
     , cmd_line_(buf, cmd_len)
+    , backend_endpoint_(ep)
+    , backend_conn_(nullptr)
 {
   LOG_DEBUG << "SingleGetCommand ctor " << ++single_get_cmd_count;
 }
 
 SingleGetCommand::~SingleGetCommand() {
+  if (backend_conn_) {
+    context_.backend_conn_pool_->Release(backend_conn_);
+  }
   LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
 }
 
-bool SingleGetCommand::ParseUpstreamResponse() {
+void SingleGetCommand::ForwardRequest(const char * data, size_t bytes) {
+  if (backend_conn_ == nullptr) {
+    // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
+    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
+    backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend_conn_),
+                               WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
+  }
+
+  DoForwardRequest(data, bytes);
+}
+
+void SingleGetCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
+  if (error) {
+    // TODO : error handling
+    LOG_INFO << "WriteCommand OnForwardRequestFinished error";
+    return;
+  }
+  assert(backend == backend_conn_);
+  LOG_DEBUG << "SingleGetCommand::OnForwardRequestFinished 转发了当前命令, 等待backend的响应.";
+  backend_conn_->ReadResponse();
+}
+
+bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   bool valid = true;
+  assert(backend_conn_ == backend);
   while(backend_conn_->read_buffer_.unparsed_bytes() > 0) {
     const char * entry = backend_conn_->read_buffer_.unparsed_data();
     const char * p = GetLineEnd(entry, backend_conn_->read_buffer_.unparsed_bytes());
@@ -57,16 +87,16 @@ bool SingleGetCommand::ParseUpstreamResponse() {
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
 
       backend_conn_->read_buffer_.update_parsed_bytes(entry_bytes);
-      break; // TODO : 每次转发一条，only for test
+      // break; // TODO : 每次转发一条，only for test
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
         backend_conn_->read_buffer_.update_parsed_bytes(sizeof("END\r\n") - 1);
         if (backend_conn_->read_buffer_.unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
-          LOG_WARN << "ParseUpstreamResponse END not really end!";
+          LOG_DEBUG << "ParseUpstreamResponse END not really end!";
         } else {
-          LOG_INFO << "ParseUpstreamResponse END is really end!";
+          LOG_DEBUG << "ParseUpstreamResponse END is really end!";
         }
         break;
       } else {
@@ -78,23 +108,6 @@ bool SingleGetCommand::ParseUpstreamResponse() {
     }
   }
   return valid;
-}
-
-void SingleGetCommand::OnForwardResponseReady() {
-  if (backend_conn_->read_buffer_.unprocessed_bytes() == 0) { // TODO : for test only, 正常这里不触发解析, 在收到数据时候触发的解析，会一次解析所有可解析的
-     ParseUpstreamResponse();
-  }
-
-  if (!is_forwarding_response_ && backend_conn_->read_buffer_.unprocessed_bytes() > 0) {
-    is_forwarding_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
-    client_conn_->ForwardResponse(backend_conn_->read_buffer_.unprocessed_data(),
-                                  backend_conn_->read_buffer_.unprocessed_bytes(),
-                                  WeakBind(&MemcCommand::OnForwardResponseFinished));
-    backend_conn_->read_buffer_.lock_memmove();
-    backend_conn_->read_buffer_.update_processed_bytes(backend_conn_->read_buffer_.unprocessed_bytes());
-  } else {
-    LOG_DEBUG << "SingleGetCommand OnForwardResponseReady, backend no data ready to_transfer, waiting to read more data then write down";
-  }
 }
 
 void SingleGetCommand::DoForwardRequest(const char *, size_t) {
