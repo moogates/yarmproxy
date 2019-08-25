@@ -31,7 +31,7 @@ ProxyServer::~ProxyServer() {
 
 void ProxyServer::Run() {
   if (!MemcachedLocator::Instance().Initialize()) {
-    LOG_WARN << "MemcachedLocator initialization error ...";
+    LOG_ERROR << "MemcachedLocator initialization error ...";
     return;
   }
 

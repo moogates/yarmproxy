@@ -25,17 +25,17 @@ ClientConnection::ClientConnection(WorkerContext& context)
   , timeout_(0) // TODO : timeout timer 
   , timer_(context.io_service_)
 {
-  LOG_INFO << "ClientConnection created." << ++g_cc_count;
+  LOG_DEBUG << "ClientConnection created." << ++g_cc_count;
 }
 
 ClientConnection::~ClientConnection() {
   if (socket_.is_open()) {
-    LOG_INFO << "ClientConnection destroyed close socket."; 
+    LOG_DEBUG << "ClientConnection destroyed close socket."; 
     socket_.close();
   } else {
-    LOG_INFO << "ClientConnection destroyed need not close socket.";
+    LOG_DEBUG << "ClientConnection destroyed need not close socket.";
   }
-  LOG_INFO << "ClientConnection destroyed." << --g_cc_count;
+  LOG_DEBUG << "ClientConnection destroyed." << --g_cc_count;
 }
 
 void ClientConnection::StartRead() {
@@ -102,7 +102,7 @@ void ClientConnection::ForwardResponse(const char* data, size_t bytes, const For
 
 void ClientConnection::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    LOG_INFO << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
+    LOG_DEBUG << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
     return;
   }
 
@@ -159,7 +159,7 @@ void ClientConnection::HandleTimeoutWrite(const boost::system::error_code& error
 void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code& error) {
   if (error) {
     if (error != boost::asio::error::operation_aborted) {
-      LOG_INFO << "ClientConnection::HandleMemcCommandTimeout timer error : " << error;
+      LOG_DEBUG << "ClientConnection::HandleMemcCommandTimeout timer error : " << error;
     }
     return;
   }

@@ -76,16 +76,16 @@ bool Continuum::ParseNodesConfig(const std::string & config, CacheNodeMap * pars
     while(pos < config.size()) {
       pos = config.find(':', prev_pos);
       if (pos == std::string::npos) {
-        LOG_INFO << "ParseNodesConfig host error, config=" << config;
+        LOG_WARN << "ParseNodesConfig host error, config=" << config;
         return false;
       }
       std::string host = config.substr(prev_pos, pos - prev_pos);
-      LOG_INFO << "ParseNodesConfig host=" << host << " ok, config=" << config;
+      LOG_DEBUG << "ParseNodesConfig host=" << host << " ok, config=" << config;
 
       prev_pos = pos + 1;
       pos = config.find('=', prev_pos);
       if (pos == std::string::npos) {
-        LOG_INFO << "ParseNodesConfig port error, config=" << config;
+        LOG_WARN << "ParseNodesConfig port error, config=" << config;
         return false;
       }
       int port = std::stoi(config.substr(prev_pos, pos - prev_pos));
@@ -100,7 +100,7 @@ bool Continuum::ParseNodesConfig(const std::string & config, CacheNodeMap * pars
         ++pos;
         prev_pos = pos;
       }
-      LOG_INFO << "ParseNodesConfig " << host << ":" << port << " weight=" << weight << config;
+      LOG_DEBUG << "ParseNodesConfig " << host << ":" << port << " weight=" << weight << config;
       parsed->insert(std::make_pair(ip::tcp::endpoint(ip::address_v4::from_string(host), port), weight));
     }
     return true;
@@ -152,7 +152,7 @@ bool Continuum::SetCacheNodes(const std::string & cache_nodes) {
 void Continuum::Dump() {
   boost::shared_lock<boost::shared_mutex> rlock(cache_points_mutex_);
   for(auto& entry : cache_points_) {
-    LOG_INFO << "cache point dump - " << entry.endpoint << " : " << entry.hash_point;
+    LOG_DEBUG << "cache point dump - " << entry.endpoint << " : " << entry.hash_point;
   }
 }
 

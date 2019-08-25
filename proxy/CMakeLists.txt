@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 2.8.9)
 project(mcproxy)
 
-set (CMAKE_BUILD_TYPE "Debug")
+# set (CMAKE_BUILD_TYPE "Debug")
+set (CMAKE_BUILD_TYPE "Release")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -O0 -g -ggdb")
-set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3")
+set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O2")
 
 include_directories(..)
 include_directories(/usr/local/include)

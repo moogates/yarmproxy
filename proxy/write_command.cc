@@ -40,8 +40,8 @@ void WriteCommand::ForwardRequest(const char * data, size_t bytes) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind2(&MemcCommand::OnForwardRequestFinished, backend_conn_),
-                               WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend_conn_),
+                               WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
   }
 
   DoForwardRequest(data, bytes);
@@ -56,11 +56,11 @@ void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf
 void WriteCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_WARN << "WriteCommand OnForwardRequestFinished error";
+    LOG_DEBUG << "WriteCommand OnForwardRequestFinished error";
     return;
   }
   assert(backend == backend_conn_);
-  LOG_INFO << "WriteCommand OnForwardRequestFinished ok, bytes_forwarding_=" << bytes_forwarding_;
+  LOG_DEBUG << "WriteCommand OnForwardRequestFinished ok, bytes_forwarding_=" << bytes_forwarding_;
   client_conn_->read_buffer_.dec_recycle_lock();
 
   request_forwarded_bytes_ += bytes_forwarding_;
@@ -88,7 +88,8 @@ bool WriteCommand::ParseUpstreamResponse(BackendConn* backend) {
   }
 
   backend_conn_->read_buffer_.update_parsed_bytes(p - entry + 1);
-  LOG_WARN << "WriteCommand ParseUpstreamResponse resp=[" << std::string(entry, p - entry - 1) << "]";
+  LOG_DEBUG << "WriteCommand ParseUpstreamResponse resp.size=" << p - entry + 1;
+            // << " contont=[" << std::string(entry, p - entry - 1) << "]";
   return true;
 }
 

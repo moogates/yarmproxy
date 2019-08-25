@@ -9,7 +9,7 @@ namespace mcproxy {
 
 class ReadBuffer {
 private:
-  enum { BUFFER_SIZE = 4 * 1024}; // TODO : use c++11 enum
+  enum { BUFFER_SIZE = 32 * 1024}; // TODO : use c++11 enum
   char data_[BUFFER_SIZE];
 
   size_t processed_offset_;

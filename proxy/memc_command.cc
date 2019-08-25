@@ -155,13 +155,13 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
 
 void MemcCommand::OnUpstreamResponseReceived(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
-    LOG_WARN << "MemcCommand::OnUpstreamResponseReceived " << cmd_line_without_rn()
+    LOG_DEBUG << "MemcCommand::OnUpstreamResponseReceived " << cmd_line_without_rn()
              << " backend read error : " << backend->remote_endpoint() << " - "  << error << " " << error.message();
     client_conn_->OnCommandError(shared_from_this(), error);
     return;
   }
 
-  LOG_WARN << "ParallelGetCommand OnUpstreamResponseReceived, backend=" << backend;
+  LOG_DEBUG << "OnUpstreamResponseReceived, backend=" << backend;
   bool valid = ParseUpstreamResponse(backend);
   if (!valid) {
     LOG_WARN << __func__ << " parsing error! valid=false";
@@ -171,12 +171,12 @@ void MemcCommand::OnUpstreamResponseReceived(BackendConn* backend, const boost::
   }
 
   if (IsFormostCommand()) {
-    LOG_WARN << __func__ << " IsFormostCommand true, TryForwardResponse, backend=" << backend;
+    LOG_DEBUG << __func__ << " IsFormostCommand true, TryForwardResponse, backend=" << backend;
     TryForwardResponse(backend);
   } else {
     // TODO : do nothing, just wait
     PushReadyQueue(backend); // TODO : ready queue 的push，貌似会有重复?
-    LOG_WARN << __func__ << " IsFormostCommand false, wait to ForwardResponse, backend=" << backend;
+    LOG_DEBUG << __func__ << " IsFormostCommand false, wait to ForwardResponse, backend=" << backend;
   }
 
   if (backend->read_buffer_.parsed_unreceived_bytes() > 0) {
@@ -194,11 +194,11 @@ bool MemcCommand::IsFormostCommand() {
 void MemcCommand::Abort() {
 //if (backend_conn_) {
 //  backend_conn_->socket().close();
-//  // MCE_INFO("MemcCommand Abort OK.");
+//  LOG_INFO << "MemcCommand Abort OK.";
 //  delete backend_conn_;
 //  backend_conn_ = 0;
 //} else {
-//  // MCE_WARN("MemcCommand Abort NULL backend_conn_.");
+//  // LOG_WARN << "MemcCommand Abort NULL backend_conn_.";
 //}
 }
 
@@ -233,22 +233,22 @@ void MemcCommand::OnForwardReplyFinished(BackendConn* backend, const boost::syst
 
 void MemcCommand::TryForwardResponse(BackendConn* backend) {
   if (!TryActivateReplyingBackend(backend)) {
-    LOG_WARN << "ParallelGetCommand TryForwardResponse, TryActivateReplyingBackend false, backend=" << backend;
+    LOG_DEBUG << "TryForwardResponse, TryActivateReplyingBackend false, backend=" << backend;
     PushReadyQueue(backend);
     return;
   }
 
   size_t unprocessed = backend->read_buffer_.unprocessed_bytes();
   if (!is_transfering_response_ && unprocessed > 0) {
-    LOG_WARN << "ParallelGetCommand TryForwardResponse, TryActivateReplyingBackend OK, backend=" << backend;
+    LOG_DEBUG << "TryForwardResponse, TryActivateReplyingBackend OK, backend=" << backend;
 
     is_transfering_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
     backend->read_buffer_.inc_recycle_lock();
     client_conn_->ForwardResponse(backend->read_buffer_.unprocessed_data(), unprocessed,
-                                  WeakBind2(&MemcCommand::OnForwardReplyFinished, backend));
+                                  WeakBind(&MemcCommand::OnForwardReplyFinished, backend));
     // backend->read_buffer_.lock_memmove(); // FIXME : lock begin at read-start, finishes at sent-done
     backend->read_buffer_.update_processed_bytes(unprocessed);
-    LOG_WARN << "MemcCommand::TryForwardResponse to_process_bytes=" << unprocessed
+    LOG_DEBUG << "MemcCommand::TryForwardResponse to_process_bytes=" << unprocessed
               << " new_unprocessed=" << backend->read_buffer_.unprocessed_bytes()
               << " client=" << this << " backend=" << backend;
   } else {

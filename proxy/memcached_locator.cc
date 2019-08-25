@@ -34,7 +34,7 @@ bool MemcachedLocator::Initialize() {
     if (continuum->SetCacheNodes(memcached_nodes)) {
       clusters_continum_.insert(std::make_pair("FEED", continuum));
     } else {
-      // MCE_WARN("加载 Continuum 失败 " << it->first << ":" << it->second);
+      LOG_WARN << "加载 Continuum 失败 " << ns << "-" << memcached_nodes;
       delete continuum;
     }
   }
@@ -47,7 +47,7 @@ bool MemcachedLocator::Initialize() {
     if (continuum->SetCacheNodes(memcached_nodes)) {
       clusters_continum_.insert(make_pair(ns, continuum));
     } else {
-      // MCE_WARN("加载 Continuum 失败 : " << ns << "-" << memcached_nodes);
+      LOG_WARN << "加载 Continuum 失败 : " << ns << "-" << memcached_nodes;
       delete continuum;
     }
   }
@@ -58,7 +58,7 @@ bool MemcachedLocator::Initialize() {
     if (continuum->SetCacheNodes(memcached_nodes)) {
       clusters_continum_.insert(make_pair(ns, continuum));
     } else {
-      // MCE_WARN("加载 Continuum 失败 : " << ns << "-" << memcached_nodes);
+      LOG_WARN << "加载 Continuum 失败 : " << ns << "-" << memcached_nodes;
       delete continuum;
     }
   }

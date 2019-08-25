@@ -78,22 +78,12 @@ protected:
   void TryForwardResponse(BackendConn* backend);
   virtual void PushReadyQueue(BackendConn* backend) {}
 
-//typedef void(MemcCommand::*FuncType)(const boost::system::error_code& error);
-//ForwardResponseCallback WeakBind(FuncType mf) {
-//  std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
-//  return [cmd_wptr, mf](const boost::system::error_code& error) {
-//        if (auto cmd_ptr = cmd_wptr.lock()) {
-//          ((*cmd_ptr).*mf)(error);
-//        }
-//      };
-//}
-
-  typedef void(MemcCommand::*FuncType2)(BackendConn* backend, const boost::system::error_code& error);
-  ForwardResponseCallback WeakBind2(FuncType2 mf, BackendConn* backend) {
+  typedef void(MemcCommand::*BackendCallbackFunc)(BackendConn* backend, const boost::system::error_code& error);
+  ForwardResponseCallback WeakBind(BackendCallbackFunc mem_func, BackendConn* backend) {
     std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
-    return [cmd_wptr, mf, backend](const boost::system::error_code& error) {
+    return [cmd_wptr, mem_func, backend](const boost::system::error_code& error) {
           if (auto cmd_ptr = cmd_wptr.lock()) {
-            ((*cmd_ptr).*mf)(backend, error);
+            ((*cmd_ptr).*mem_func)(backend, error);
           }
         };
   }

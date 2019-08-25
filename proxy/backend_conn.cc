@@ -73,7 +73,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
 {
   if (error) {
     // TODO : 如何通知给command?
-    LOG_INFO << "HandleWrite error, upconn=" << this << " ep="
+    LOG_DEBUG << "HandleWrite error, upconn=" << this << " ep="
              << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     return;
@@ -98,7 +98,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    LOG_INFO << "BackendConn::HandleRead backend read error, upconn=" << this
+    LOG_DEBUG << "BackendConn::HandleRead backend read error, upconn=" << this
              << " ep=" << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     // TODO : 如何通知给外界?
@@ -138,8 +138,8 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool request_ha
 
 BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
   {
-    BackendConn* conn = new BackendConn(io_service_, ep);
-    return conn;
+  //BackendConn* conn = new BackendConn(io_service_, ep);
+  //return conn;
   }
   BackendConn* conn;
   auto it = conn_map_.find(ep);
@@ -157,9 +157,9 @@ BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
 
 void BackendConnPool::Release(BackendConn * conn) {
   {
-    LOG_DEBUG << "BackendConnPool::Release delete dtor";
-    delete conn;
-    return;
+  //LOG_DEBUG << "BackendConnPool::Release delete dtor";
+  //delete conn;
+  //return;
   }
 
   if (conn == nullptr) {

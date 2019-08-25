@@ -47,7 +47,7 @@ void ParallelGetCommand::ForwardRequest(const char *, size_t) {
 void ParallelGetCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_WARN << "ParallelGetCommand OnForwardRequestFinished error";
+    LOG_DEBUG << "ParallelGetCommand OnForwardRequestFinished error";
     return;
   }
   LOG_DEBUG << "ParallelGetCommand::OnForwardRequestFinished 转发了当前命令, 等待backend的响应.";
@@ -101,9 +101,9 @@ bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
         backend->read_buffer_.update_parsed_bytes(sizeof("END\r\n") - 1);
         if (backend->read_buffer_.unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
-          LOG_WARN << "ParseUpstreamResponse END not really end!";
+          LOG_DEBUG << "ParseUpstreamResponse END not really end!";
         } else {
-          LOG_INFO << "ParseUpstreamResponse END is really end!";
+          LOG_DEBUG << "ParseUpstreamResponse END is really end!";
         }
         break;
       } else {
@@ -124,8 +124,8 @@ void ParallelGetCommand::DoForwardRequest(const char *, size_t) {
       // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
       LOG_DEBUG << "ParallelGetCommand sub query(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ") create backend conn";
       backend = context_.backend_conn_pool_->Allocate(query->backend_addr_);
-      backend->SetReadWriteCallback(WeakBind2(&MemcCommand::OnForwardRequestFinished, backend),
-                                 WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend));
+      backend->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend),
+                                 WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend));
       query->backend_conn_ = backend;
     }
     LOG_DEBUG << __func__ << " ForwardRequest, query=(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";

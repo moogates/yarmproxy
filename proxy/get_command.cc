@@ -49,8 +49,8 @@ void SingleGetCommand::ForwardRequest(const char * data, size_t bytes) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool_->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind2(&MemcCommand::OnForwardRequestFinished, backend_conn_),
-                               WeakBind2(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend_conn_),
+                               WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
   }
 
   DoForwardRequest(data, bytes);
@@ -59,7 +59,7 @@ void SingleGetCommand::ForwardRequest(const char * data, size_t bytes) {
 void SingleGetCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_WARN << "WriteCommand OnForwardRequestFinished error";
+    LOG_INFO << "WriteCommand OnForwardRequestFinished error";
     return;
   }
   assert(backend == backend_conn_);
@@ -94,9 +94,9 @@ bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
         backend_conn_->read_buffer_.update_parsed_bytes(sizeof("END\r\n") - 1);
         if (backend_conn_->read_buffer_.unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
-          LOG_WARN << "ParseUpstreamResponse END not really end!";
+          LOG_DEBUG << "ParseUpstreamResponse END not really end!";
         } else {
-          LOG_INFO << "ParseUpstreamResponse END is really end!";
+          LOG_DEBUG << "ParseUpstreamResponse END is really end!";
         }
         break;
       } else {
