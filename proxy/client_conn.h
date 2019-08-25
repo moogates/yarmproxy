@@ -41,7 +41,7 @@ public:
   void ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb);
   bool IsFirstCommand(std::shared_ptr<MemcCommand> cmd) {
     // TODO : 能否作为一个标记，放在command里面？
-    return cmd == poly_cmd_queue_.front();
+    return cmd == active_cmd_queue_.front();
   }
   void RotateFirstCommand();
 
@@ -60,7 +60,8 @@ protected:
   WorkerContext& context_;
 
 private:
-  std::list<std::shared_ptr<MemcCommand>> poly_cmd_queue_; // 新版支持多态的cmd
+  std::list<std::shared_ptr<MemcCommand>> active_cmd_queue_;
+
   ForwardResponseCallback forward_resp_callback_;
 
   size_t timeout_;
@@ -69,6 +70,7 @@ private:
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
+  bool ProcessUnparsedData();
 
   void HandleMemcCommandTimeout(const boost::system::error_code& error);
   void HandleTimeoutWrite(const boost::system::error_code& error);
