@@ -14,7 +14,7 @@ size_t ReadBuffer::unparsed_bytes() const {
 }
 
 ReadBuffer::~ReadBuffer() {
-  LOG_INFO << "ReadBuffer dtor";
+  // LOG_INFO << "ReadBuffer dtor";
 }
 
 void ReadBuffer::update_received_bytes(size_t received_bytes) {

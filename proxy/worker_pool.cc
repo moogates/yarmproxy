@@ -6,12 +6,12 @@
 
 namespace mcproxy {
 
-#define SLAB_SIZE (8*1024) // TODO : use c++11 enum
+#define SLAB_SIZE (4*1024) // TODO : use c++11 enum
 
 WorkerContext::WorkerContext()
     : work_(io_service_)
     , backend_conn_pool_(nullptr)
-    , allocator_(new Allocator(SLAB_SIZE, 512)) {
+    , allocator_(new Allocator(SLAB_SIZE, 16)) {
 }
 
 BackendConnPool* WorkerContext::backend_conn_pool() {

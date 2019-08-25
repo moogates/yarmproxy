@@ -7,15 +7,15 @@ namespace mcproxy {
 
 class Allocator {
 public:
-  Allocator(size_t slab_size, size_t slab_count);
+  Allocator(int slab_size, int slab_count);
   char* Alloc();
   void Release(char*);
-  size_t slab_size() const {
+  int slab_size() const {
     return slab_size_;
   }
 private:
-  size_t slab_size_;
-  size_t slab_count_;
+  int slab_size_;
+  int slab_count_;
 
   std::set<char*> free_slabs_;
   char* chunk_;
