@@ -67,15 +67,16 @@ void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost:
   backend_conn_->ReadReply();
 }
 
-bool SingleGetCommand::ParseUpstreamReply(BackendConn* backend) {
+bool SingleGetCommand::ParseReply(BackendConn* backend) {
   bool valid = true;
   assert(backend_conn_ == backend);
   while(backend_conn_->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend_conn_->buffer()->unparsed_data();
-    const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
+    size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
+    const char * p = GetLineEnd(entry, unparsed_bytes);
     if (p == nullptr) {
       // TODO : no enough data for parsing, please read more
-      LOG_DEBUG << "ParseUpstreamReply no enough data for parsing, please read more"
+      LOG_DEBUG << "ParseReply no enough data for parsing, please read more"
                 << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
                 << " bytes=" << backend_conn_->buffer()->unparsed_bytes();
       return true;
@@ -87,6 +88,7 @@ bool SingleGetCommand::ParseUpstreamReply(BackendConn* backend) {
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
 
       backend_conn_->buffer()->update_parsed_bytes(entry_bytes);
+      LOG_DEBUG << __func__ << " VALUE data, backend=" << backend << " recv_body=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
       // break; // TODO : 每次转发一条，only for test
     } else {
       // "END\r\n"
@@ -94,13 +96,14 @@ bool SingleGetCommand::ParseUpstreamReply(BackendConn* backend) {
         backend_conn_->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
         if (backend_conn_->buffer()->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
-          LOG_DEBUG << "ParseUpstreamReply END not really end!";
+          LOG_DEBUG << "ParseReply END not really end!";
         } else {
-          LOG_DEBUG << "ParseUpstreamReply END is really end!";
+          LOG_DEBUG << "ParseReply END is really end! set_reply_complete, backend=" << backend;
+          backend->set_reply_complete();
         }
         break;
       } else {
-        LOG_WARN << "ParseUpstreamReply BAD DATA";
+        LOG_WARN << "ParseReply BAD DATA";
         // TODO : ERROR
         valid = false;
         break;

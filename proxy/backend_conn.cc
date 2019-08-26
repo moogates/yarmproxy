@@ -17,7 +17,8 @@ BackendConn::BackendConn(WorkerContext& context,
   , read_buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , remote_endpoint_(upendpoint)
   , socket_(context.io_service_) 
-  , is_reading_more_(false) {
+  , is_reading_more_(false)
+  , reply_complete_(false) {
   LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
 }
 
@@ -29,15 +30,25 @@ BackendConn::~BackendConn() {
   delete read_buffer_;
 }
 
+void BackendConn::Reset() {
+  is_reading_more_ = false;
+  reply_complete_  = false;
+  buffer()->Reset();
+}
+
 void BackendConn::ReadReply() {
-  // TryReadMoreData();
+  // TryReadMoreReply();
   // return;
   read_buffer_->inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
       std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
 }
 
-void BackendConn::TryReadMoreData() {
+void BackendConn::TryReadMoreReply() {
+  if (reply_complete_) {
+    LOG_DEBUG << "TryReadMoreReply reply_complete_=true, do nothing, backend=" << this;
+    return;
+  }
   if (!is_reading_more_  // not reading more
       && read_buffer_->has_much_free_space()) {
     is_reading_more_ = true; // memmove cause read data offset drift
@@ -45,10 +56,11 @@ void BackendConn::TryReadMoreData() {
 
     socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
         std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
-    LOG_DEBUG << "TryReadMoreData";
+    LOG_DEBUG << "TryReadMoreReply async_read_some, backend=" << this;
   } else {
-    LOG_DEBUG << "No TryReadMoreData, is_reading_more_=" << is_reading_more_
-             << " has_much_free_space=" << read_buffer_->has_much_free_space();
+    LOG_DEBUG << "TryReadMoreReply do nothing, is_reading_more_=" << is_reading_more_
+             << " has_much_free_space=" << read_buffer_->has_much_free_space()
+             << " backend=" << this;;
   }
 }
 
@@ -73,7 +85,7 @@ void BackendConn::ForwardQuery(const char* data, size_t bytes, bool has_more_dat
 }
 
 
-void BackendConn::HandleWrite(const char * data, const size_t bytes, bool request_has_more_data,
+void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_has_more_data,
     const boost::system::error_code& error, size_t bytes_transferred)
 {
   if (error) {
@@ -91,14 +103,14 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool reques
     LOG_DEBUG << "HandleWrite 向 backend 没写完, 继续写.";
     boost::asio::async_write(socket_,
         boost::asio::buffer(data + bytes_transferred, bytes - bytes_transferred),
-        std::bind(&BackendConn::HandleWrite, this, data + bytes_transferred, request_has_more_data,
+        std::bind(&BackendConn::HandleWrite, this, data + bytes_transferred, query_has_more_data,
           bytes - bytes_transferred,
           std::placeholders::_1, std::placeholders::_2));
     return;
   }
 
   LOG_DEBUG << "HandleWrite 向 backend 写完, 触发回调.";
-  request_sent_callback_(error);
+  query_sent_callback_(error);
 }
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
@@ -114,11 +126,11 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
     read_buffer_->update_received_bytes(bytes_transferred);
     read_buffer_->dec_recycle_lock();
 
-    response_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
+    reply_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
   }
 }
 
-void BackendConn::HandleConnect(const char * data, size_t bytes, bool request_has_more_data, const boost::system::error_code& error) {
+void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_more_data, const boost::system::error_code& error) {
   if (error) {
     socket_.close();
     // TODO : 如何通知给外界?
@@ -136,7 +148,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool request_ha
   socket_.set_option(linger);
   
   async_write(socket_, boost::asio::buffer(data, bytes),
-      std::bind(&BackendConn::HandleWrite, this, data, bytes, request_has_more_data,
+      std::bind(&BackendConn::HandleWrite, this, data, bytes, query_has_more_data,
           std::placeholders::_1, std::placeholders::_2));
 }
 
@@ -179,7 +191,8 @@ void BackendConnPool::Release(BackendConn * conn) {
 
   auto it = conn_map_.find(ep);
   if (it == conn_map_.end()) {
-    conn->buffer()->Reset();
+    conn->Reset();
+    // conn->buffer()->Reset();
     conn_map_[ep].push(conn);
     LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=1";
   } else {
@@ -188,7 +201,8 @@ void BackendConnPool::Release(BackendConn * conn) {
       conn->socket().close();
       delete conn;
     } else {
-      conn->buffer()->Reset();
+      conn->Reset();
+      // conn->buffer()->Reset();
       it->second.push(conn);
       LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=" << it->second.size();
     }

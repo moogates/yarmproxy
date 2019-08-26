@@ -93,13 +93,15 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 MemcCommand::MemcCommand(std::shared_ptr<ClientConnection> owner) 
-  : is_transfering_response_(false)
-  , replying_backend_(nullptr)
-  , client_conn_(owner)
-  , context_(owner->context())
-  , loaded_(false)
-{
+    : is_transfering_reply_(false)
+    , replying_backend_(nullptr)
+    , client_conn_(owner)
+    , context_(owner->context())
+    , loaded_(false) {
 };
+
+MemcCommand::~MemcCommand() {
+}
 
 // 0 : ok, 数据不够解析
 // >0 : ok, 解析成功，返回已解析的字节数
@@ -115,16 +117,15 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
 
   if (strncmp(buf, "get ", 4) == 0) {
-#define DONT_USE_MAP 0
-#if DONT_USE_MAP
+#define SINGLE_GET_ONLY 0
+#if SINGLE_GET_ONLY
     auto ep = BackendLoactor::Instance().GetEndpointByKey("1");
     std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(
                      ep, owner, buf, cmd_line_bytes));
     // command->push_back(cmd);
     *command = cmd;
     LOG_DEBUG << "DONT_USE_MAP ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
-    return cmd_line_bytes;
-#endif
+#else
     std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
     if (false && endpoint_key_map.size() == 1) {
@@ -135,6 +136,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
       std::shared_ptr<MemcCommand> cmd(new ParallelGetCommand(owner, std::move(endpoint_key_map)));
       *command = cmd;
     }
+#endif
     return cmd_line_bytes;
   } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0 || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
     std::string key;
@@ -162,7 +164,7 @@ void MemcCommand::OnUpstreamReplyReceived(BackendConn* backend, const boost::sys
   }
 
   LOG_DEBUG << "OnUpstreamReplyReceived, backend=" << backend;
-  bool valid = ParseUpstreamReply(backend);
+  bool valid = ParseReply(backend);
   if (!valid) {
     LOG_WARN << __func__ << " parsing error! valid=false";
     // TODO : error handling
@@ -170,25 +172,35 @@ void MemcCommand::OnUpstreamReplyReceived(BackendConn* backend, const boost::sys
     return;
   }
 
-  if (IsFormostCommand()) {
-    LOG_DEBUG << __func__ << " IsFormostCommand true, TryForwardReply, backend=" << backend;
-    TryForwardReply(backend);
+  // 判断是否最靠前的command, 是才可以转发
+  if (client_conn_->IsFirstCommand(shared_from_this())) {
+    LOG_DEBUG << __func__ << " IsFirstCommand true, backend=" << backend;
+    if (TryActivateReplyingBackend(backend)) {
+      LOG_DEBUG << __func__ << " TryActivateReplyingBackend OK, backend=" << backend;
+      TryForwardReply(backend);
+    } else {
+      LOG_DEBUG << __func__ << " TryActivateReplyingBackend false, backend=" << backend;
+      PushReadyQueue(backend);
+    }
   } else {
     // TODO : do nothing, just wait
     PushReadyQueue(backend); // TODO : ready queue 的push，貌似会有重复?
-    LOG_DEBUG << __func__ << " IsFormostCommand false, wait to ForwardReply, backend=" << backend;
+    LOG_DEBUG << __func__ << " IsFirstCommand false, wait to ForwardReply, backend=" << backend;
   }
 
-  if (backend->buffer()->parsed_unreceived_bytes() > 0) {
-    backend->TryReadMoreData(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
+  backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
+}
+
+bool MemcCommand::TryActivateReplyingBackend(BackendConn* backend) {
+  if (backend == replying_backend_) {
+    return true;
   }
-}
-
-MemcCommand::~MemcCommand() {
-}
-
-bool MemcCommand::IsFormostCommand() {
-  return client_conn_->IsFirstCommand(shared_from_this());
+  if (replying_backend_ == nullptr) {
+    replying_backend_ = backend;
+    LOG_WARN << __func__ << " ok, backend=" << backend << " replying_backend_=" << replying_backend_;
+    return true;
+  }
+  return false;
 }
 
 void MemcCommand::Abort() {
@@ -208,12 +220,13 @@ void MemcCommand::OnForwardReplyFinished(BackendConn* backend, const boost::syst
     LOG_DEBUG << "WriteCommand::OnForwardReplyFinished(" << cmd_line_without_rn() << ") error=" << error;
     return;
   }
-  is_transfering_response_ = false;
+  is_transfering_reply_ = false;
   backend->buffer()->dec_recycle_lock();
 
-  if (backend->buffer()->parsed_unreceived_bytes() == 0
-          && backend->buffer()->unprocessed_bytes() == 0) {
-    DeactivateReplyingBackend(backend);
+  if (// backend->buffer()->parsed_unreceived_bytes() == 0 && // TODO : unnecessary?
+          backend->reply_complete() &&
+          backend->buffer()->unprocessed_bytes() == 0) {
+    // DeactivateReplyingBackend(backend); // TODO : unnecessary?
     if (HasMoreBackend()) {
       LOG_DEBUG << __func__ << " HasMoreBackend true";
       RotateFirstBackend();
@@ -221,38 +234,33 @@ void MemcCommand::OnForwardReplyFinished(BackendConn* backend, const boost::syst
       LOG_DEBUG << __func__ << " HasMoreBackend false, RotateFirstCommand";
       client_conn_->RotateFirstCommand();
     }
-    LOG_DEBUG << "WriteCommand::OnForwardReplyFinished backend no more reply, and all data forwarded to client";
+    LOG_DEBUG << "WriteCommand::OnForwardReplyFinished backend no more reply, and all data forwarded to client,"
+              << " backend=" << backend;
   } else {
-    LOG_DEBUG << "WriteCommand::OnForwardReplyFinished ready_to_transfer_bytes=" << backend->buffer()->unprocessed_bytes();
-    if (backend->buffer()->parsed_unreceived_bytes() > 0) {
-      backend->TryReadMoreData(); // 这里必须继续try
-    }
+    LOG_DEBUG << "WriteCommand::OnForwardReplyFinished has more reply to forward, ready_to_transfer_bytes=" << backend->buffer()->unprocessed_bytes()
+              << " reply_complete=" << backend->reply_complete()
+              << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes()
+              << " parsed_unreceived_bytes=" << backend->buffer()->parsed_unreceived_bytes()
+              << " backend=" << backend;
+    backend->TryReadMoreReply(); // 这里必须继续try
     TryForwardReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }
 }
 
 void MemcCommand::TryForwardReply(BackendConn* backend) {
-  if (!TryActivateReplyingBackend(backend)) {
-    LOG_DEBUG << "TryForwardReply, TryActivateReplyingBackend false, backend=" << backend;
-    PushReadyQueue(backend);
-    return;
-  }
-
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
-  if (!is_transfering_response_ && unprocessed > 0) {
-    LOG_DEBUG << "TryForwardReply, TryActivateReplyingBackend OK, backend=" << backend;
-
-    is_transfering_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
+  if (!is_transfering_reply_ && unprocessed > 0) {
+    is_transfering_reply_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
     backend->buffer()->inc_recycle_lock();
     client_conn_->ForwardReply(backend->buffer()->unprocessed_data(), unprocessed,
                                   WeakBind(&MemcCommand::OnForwardReplyFinished, backend));
     backend->buffer()->update_processed_bytes(unprocessed);
-    LOG_DEBUG << "MemcCommand::TryForwardReply to_process_bytes=" << unprocessed
+    LOG_DEBUG << __func__ << " to_process_bytes=" << unprocessed
               << " new_unprocessed=" << backend->buffer()->unprocessed_bytes()
               << " client=" << this << " backend=" << backend;
   } else {
-    LOG_DEBUG << "ParallelGetCommand MemcCommand::TryForwardReply do nothing, unprocessed_bytes=" << unprocessed
-              << " is_transfering_response=" << is_transfering_response_
+    LOG_DEBUG << __func__ << " do nothing, unprocessed_bytes=" << unprocessed
+              << " is_transfering_reply=" << is_transfering_reply_
               << " client=" << this << " backend=" << backend;
   }
 }

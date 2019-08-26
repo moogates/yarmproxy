@@ -74,7 +74,7 @@ void ClientConnection::RotateFirstCommand() {
   if (!active_cmd_queue_.empty()) {
     // LOG_INFO << __func__ << " PRE active_cmd_queue_.size=" << active_cmd_queue_.size();
     active_cmd_queue_.front()->OnForwardReplyEnabled();
-    ProcessUnparsedData();
+    ProcessUnparsedQuery();
     // LOG_INFO << __func__ << " POST active_cmd_queue_.size=" << active_cmd_queue_.size();
   } else {
     // LOG_DEBUG << __func__ << " active_cmd_queue_ empty";
@@ -106,10 +106,11 @@ void ClientConnection::ForwardReply(const char* data, size_t bytes, const Forwar
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
-bool ClientConnection::ProcessUnparsedData() {
+bool ClientConnection::ProcessUnparsedQuery() {
   static const size_t MAX_PIPELINE_ACTIVE = 4;
   while(active_cmd_queue_.size() < MAX_PIPELINE_ACTIVE
         && read_buffer_->unparsed_received_bytes() > 0) {
+    // TODO : close the conn if command line is  too long
     std::shared_ptr<MemcCommand> command;
     int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(),
                read_buffer_->unprocessed_data(), read_buffer_->received_bytes(),
@@ -152,7 +153,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
     }
   }
 
-  ProcessUnparsedData();
+  ProcessUnparsedQuery();
   return;
 
   static const size_t MAX_PIPELINE_ACTIVE = 5;

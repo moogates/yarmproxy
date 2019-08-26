@@ -39,7 +39,7 @@ private:
   }
 
   void ForwardQuery(const char * data, size_t bytes) override;
-  bool ParseUpstreamReply(BackendConn* backend) override;
+  bool ParseReply(BackendConn* backend) override;
   void DoForwardQuery(const char * request_data, size_t client_buf_received_bytes) override;
 
   std::string cmd_line_without_rn() const override {

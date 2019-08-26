@@ -49,27 +49,21 @@ private:
   virtual void RotateFirstBackend() {}
 
   void DeactivateReplyingBackend(BackendConn* backend) {
-    assert(backend == replying_backend_);
+    // assert(backend == replying_backend_);
+    if (backend == replying_backend_) {
+      LOG_WARN << __func__ << " ok, backend=" << backend << " replying_backend_=" << replying_backend_;
+    } else {
+      LOG_WARN << __func__ << " error, backend=" << backend << " replying_backend_=" << replying_backend_;
+    }
     replying_backend_ = nullptr;
   }
-  bool TryActivateReplyingBackend(BackendConn* backend) {
-    if (backend == replying_backend_) {
-      return true;
-    }
-    if (replying_backend_ == nullptr) {
-      replying_backend_ = backend;
-      return true;
-    }
-    return false;
-  }
+  bool TryActivateReplyingBackend(BackendConn* backend);
 
-  // 判断是否最靠前的command, 是才可以转发
-  bool IsFormostCommand();
   virtual void DoForwardQuery(const char * data, size_t bytes) = 0;
-  virtual bool ParseUpstreamReply(BackendConn* backend) = 0;
+  virtual bool ParseReply(BackendConn* backend) = 0;
   virtual size_t request_body_upcoming_bytes() const = 0;
 protected:
-  bool is_transfering_response_;
+  bool is_transfering_reply_;
   BackendConn* replying_backend_;
 
   std::shared_ptr<ClientConnection> client_conn_;

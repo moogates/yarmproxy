@@ -75,21 +75,23 @@ void WriteCommand::OnForwardQueryFinished(BackendConn* backend, const boost::sys
   }
 }
 
-bool WriteCommand::ParseUpstreamReply(BackendConn* backend) {
+bool WriteCommand::ParseReply(BackendConn* backend) {
   assert(backend_conn_ == backend);
   const char * entry = backend_conn_->buffer()->unparsed_data();
   const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
   if (p == nullptr) {
     // TODO : no enough data for parsing, please read more
-    LOG_DEBUG << "WriteCommand ParseUpstreamReply no enough data for parsing, please read more"
+    LOG_DEBUG << "WriteCommand ParseReply no enough data for parsing, please read more"
               // << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
               << " bytes=" << backend_conn_->buffer()->unparsed_bytes();
     return true;
   }
 
   backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
-  LOG_DEBUG << "WriteCommand ParseUpstreamReply resp.size=" << p - entry + 1;
-            // << " contont=[" << std::string(entry, p - entry - 1) << "]";
+  LOG_DEBUG << "WriteCommand ParseReply resp.size=" << p - entry + 1
+            // << " contont=[" << std::string(entry, p - entry - 1) << "]"
+            << " set_reply_complete, backend=" << backend;
+  backend->set_reply_complete();
   return true;
 }
 

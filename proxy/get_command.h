@@ -20,7 +20,7 @@ private:
   }
 
   void DoForwardQuery(const char *, size_t) override;
-  bool ParseUpstreamReply(BackendConn* backend) override;
+  bool ParseReply(BackendConn* backend) override;
   void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
 
   std::string cmd_line_without_rn() const override {
