@@ -46,6 +46,7 @@ private:
   virtual bool HasMoreBackend() const {
     return false;
   }
+  virtual void HookOnUpstreamReplyReceived(BackendConn* backend){}
   virtual void RotateFirstBackend() {}
 
   void DeactivateReplyingBackend(BackendConn* backend) {

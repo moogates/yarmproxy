@@ -128,7 +128,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
 #else
     std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
-    if (false && endpoint_key_map.size() == 1) {
+    if (endpoint_key_map.size() == 1) {
       auto it = endpoint_key_map.begin();
       std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(it->first, owner, it->second.c_str(), it->second.size()));
       *command = cmd;
@@ -156,6 +156,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
 }
 
 void MemcCommand::OnUpstreamReplyReceived(BackendConn* backend, const boost::system::error_code& error) {
+  HookOnUpstreamReplyReceived(backend);
   if (error) {
     LOG_DEBUG << "MemcCommand::OnUpstreamReplyReceived " << cmd_line_without_rn()
              << " backend read error : " << backend->remote_endpoint() << " - "  << error << " " << error.message();
@@ -191,16 +192,14 @@ void MemcCommand::OnUpstreamReplyReceived(BackendConn* backend, const boost::sys
   backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
 }
 
+// return : is the backend successfully activated
 bool MemcCommand::TryActivateReplyingBackend(BackendConn* backend) {
-  if (backend == replying_backend_) {
-    return true;
-  }
   if (replying_backend_ == nullptr) {
     replying_backend_ = backend;
     LOG_WARN << __func__ << " ok, backend=" << backend << " replying_backend_=" << replying_backend_;
     return true;
   }
-  return false;
+  return backend == replying_backend_;
 }
 
 void MemcCommand::Abort() {

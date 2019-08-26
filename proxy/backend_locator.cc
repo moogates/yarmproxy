@@ -8,8 +8,8 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-// static const char * memcached_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;";
-static const char * memcached_nodes = "127.0.0.1:11211=2000";
+static const char * memcached_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;127.0.0.1:11213=2000;127.0.0.1:11214=2000;127.0.0.1:11215=2000;";
+// static const char * memcached_nodes = "127.0.0.1:11211=2000";
 
 //static const char * memcached_nodes = "10.3.22.42:11211=6800;"
 //                              "10.3.22.43:11211=6800;"

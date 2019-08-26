@@ -20,6 +20,7 @@ public:
 
 private:
   void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void HookOnUpstreamReplyReceived(BackendConn* backend) override;
   void DoForwardQuery(const char *, size_t) override;
   bool ParseReply(BackendConn* backend) override;
 
@@ -54,10 +55,12 @@ private:
   };
 
   std::vector<std::unique_ptr<BackendQuery>> query_set_;
-  // std::vector<BackendQuery*> query_set_;
   std::queue<BackendConn*> ready_queue_;
-  std::set<BackendConn*> ready_set_;
+  std::set<BackendConn*> ready_queue_flags_;
   size_t finished_count_;
+  BackendConn* last_backend_;
+
+  std::set<BackendConn*> all_ready_set_;
 };
 
 }

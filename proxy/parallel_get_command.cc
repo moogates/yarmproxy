@@ -19,6 +19,7 @@ ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
                    std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map)
     : MemcCommand(owner)
     , finished_count_(0)
+    , last_backend_(nullptr)
 {
   for(auto& it : endpoint_query_map) {
     LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first << " query=" << it.second;
@@ -43,6 +44,15 @@ void ParallelGetCommand::ForwardQuery(const char *, size_t) {
   DoForwardQuery(nullptr, 0);
 }
 
+void ParallelGetCommand::HookOnUpstreamReplyReceived(BackendConn* backend) {
+  if (all_ready_set_.insert(backend).second) {
+    if (all_ready_set_.size() == query_set_.size()) {
+      last_backend_ = backend;
+      LOG_DEBUG << __func__ << " set last backend=" << backend;
+    }
+  }
+}
+
 void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
@@ -54,7 +64,7 @@ void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boos
 }
 
 void ParallelGetCommand::PushReadyQueue(BackendConn* backend) {
-  if (ready_set_.insert(backend).second) {
+  if (ready_queue_flags_.insert(backend).second) {
     ready_queue_.push(backend);
     LOG_DEBUG << "ParallelGetCommand PushReadyQueue, backend=" << backend << " ready_queue_.size=" << ready_queue_.size();
   } else {
@@ -72,22 +82,27 @@ void ParallelGetCommand::OnForwardReplyEnabled() {
   } else {
     LOG_DEBUG << __func__ << " no ready backend to activate,"
               << " replying_backend_=" << replying_backend_;
+    replying_backend_ = nullptr;
   }
 }
 
 void ParallelGetCommand::RotateFirstBackend() {
   ++finished_count_;
-  LOG_DEBUG << "ParallelGetCommand RotateFirstBackend finished_count_=" << finished_count_;
-  if (ready_queue_.size() > 0) {
-    replying_backend_ = ready_queue_.front();
-    ready_queue_.pop();
-    LOG_WARN << "ParallelGetCommand RotateFirstBackend, activate ready backend"
-              << " replying_backend_=" << replying_backend_;
-    TryForwardReply(replying_backend_);
-  } else {
-    LOG_DEBUG << "ParallelGetCommand RotateFirstBackend, no ready backend, wait";
-    replying_backend_ = nullptr;
-  }
+//LOG_DEBUG << "ParallelGetCommand RotateFirstBackend finished_count_=" << finished_count_;
+
+//if (ready_queue_.size() > 0) {
+//  replying_backend_ = ready_queue_.front();
+//  ready_queue_.pop();
+//  LOG_WARN << "ParallelGetCommand RotateFirstBackend, activate ready backend"
+//            << " replying_backend_=" << replying_backend_;
+
+//  TryForwardReply(replying_backend_);
+//} else {
+//  LOG_DEBUG << "ParallelGetCommand RotateFirstBackend, no ready backend, wait";
+//  replying_backend_ = nullptr;
+//}
+
+  OnForwardReplyEnabled();
 }
 
 bool ParallelGetCommand::ParseReply(BackendConn* backend) {
@@ -113,14 +128,17 @@ bool ParallelGetCommand::ParseReply(BackendConn* backend) {
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-        // backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
         if (backend->buffer()->unparsed_bytes() != (sizeof("END\r\n") - 1)) { // TODO : pipeline的情况呢?
           valid = false;
           LOG_DEBUG << "ParseReply END not really end! backend=" << backend;
         } else {
           LOG_DEBUG << "ParseReply END is really end! set_reply_complete, backend=" << backend;
           backend->set_reply_complete();
-          backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
+          if (backend == last_backend_) {
+            backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
+          } else {
+            backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
+          }
         }
         break;
       } else {
@@ -151,5 +169,4 @@ void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
 }
 
 }
-
 
