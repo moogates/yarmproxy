@@ -50,7 +50,7 @@ void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend_conn_),
-                               WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
+                               WeakBind(&MemcCommand::OnUpstreamReplyReceived, backend_conn_));
   }
 
   DoForwardQuery(data, bytes);
@@ -64,10 +64,10 @@ void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost:
   }
   assert(backend == backend_conn_);
   LOG_DEBUG << "SingleGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
-  backend_conn_->ReadResponse();
+  backend_conn_->ReadReply();
 }
 
-bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
+bool SingleGetCommand::ParseUpstreamReply(BackendConn* backend) {
   bool valid = true;
   assert(backend_conn_ == backend);
   while(backend_conn_->buffer()->unparsed_bytes() > 0) {
@@ -75,7 +75,7 @@ bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
     const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
     if (p == nullptr) {
       // TODO : no enough data for parsing, please read more
-      LOG_DEBUG << "ParseUpstreamResponse no enough data for parsing, please read more"
+      LOG_DEBUG << "ParseUpstreamReply no enough data for parsing, please read more"
                 << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
                 << " bytes=" << backend_conn_->buffer()->unparsed_bytes();
       return true;
@@ -94,13 +94,13 @@ bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
         backend_conn_->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
         if (backend_conn_->buffer()->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
-          LOG_DEBUG << "ParseUpstreamResponse END not really end!";
+          LOG_DEBUG << "ParseUpstreamReply END not really end!";
         } else {
-          LOG_DEBUG << "ParseUpstreamResponse END is really end!";
+          LOG_DEBUG << "ParseUpstreamReply END is really end!";
         }
         break;
       } else {
-        LOG_WARN << "ParseUpstreamResponse BAD DATA";
+        LOG_WARN << "ParseUpstreamReply BAD DATA";
         // TODO : ERROR
         valid = false;
         break;

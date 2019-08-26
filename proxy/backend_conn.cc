@@ -29,7 +29,7 @@ BackendConn::~BackendConn() {
   delete read_buffer_;
 }
 
-void BackendConn::ReadResponse() {
+void BackendConn::ReadReply() {
   // TryReadMoreData();
   // return;
   read_buffer_->inc_recycle_lock();

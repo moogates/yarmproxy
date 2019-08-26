@@ -81,23 +81,23 @@ void ClientConnection::RotateFirstCommand() {
   }
 }
 
-void ClientConnection::ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb) {
+void ClientConnection::ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb) {
   forward_resp_callback_ = cb; // TODO : unused member
 
   // TODO : 成员函数化
   std::weak_ptr<ClientConnection> wptr(shared_from_this());
   auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
-    LOG_DEBUG << "ClientConnection::ForwardResponse callback begin, bytes_transferred=" << bytes_transferred;
+    LOG_DEBUG << "ClientConnection::ForwardReply callback begin, bytes_transferred=" << bytes_transferred;
     if (!error && bytes_transferred < bytes) {
       if (auto ptr = wptr.lock()) {
-        LOG_DEBUG << "ClientConnection::ForwardResponse try write more, bytes_transferred=" << bytes_transferred
+        LOG_DEBUG << "ClientConnection::ForwardReply try write more, bytes_transferred=" << bytes_transferred
                  << " left_bytes=" << bytes - bytes_transferred << " conn=" << ptr.get();
-        ptr->ForwardResponse(data + bytes_transferred, bytes - bytes_transferred, cb);
+        ptr->ForwardReply(data + bytes_transferred, bytes - bytes_transferred, cb);
       } else {
-        LOG_DEBUG << "ClientConnection::ForwardResponse try write more, but conn released";
+        LOG_DEBUG << "ClientConnection::ForwardReply try write more, but conn released";
       }
     } else {
-      LOG_DEBUG << "ClientConnection::ForwardResponse callback, bytes_transferred=" << bytes_transferred
+      LOG_DEBUG << "ClientConnection::ForwardReply callback, bytes_transferred=" << bytes_transferred
                << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
       cb(error);  // 发完了，或出错了，才告知MemcCommand
     }

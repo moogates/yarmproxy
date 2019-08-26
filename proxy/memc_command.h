@@ -29,8 +29,8 @@ public:
   // backend_conn转发完毕ForwardQuery()指定的数据后，调用OnForwardQueryFinished()
   virtual void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) = 0;
 
-  // backend_conn收到reply数据后, 调用OnUpstreamResponseReceived()
-  void OnUpstreamResponseReceived(BackendConn* backend, const boost::system::error_code& error);
+  // backend_conn收到reply数据后, 调用OnUpstreamReplyReceived()
+  void OnUpstreamReplyReceived(BackendConn* backend, const boost::system::error_code& error);
   virtual void OnForwardReplyEnabled() = 0;
   void OnForwardReplyFinished(BackendConn* backend, const boost::system::error_code& error);
 
@@ -66,7 +66,7 @@ private:
   // 判断是否最靠前的command, 是才可以转发
   bool IsFormostCommand();
   virtual void DoForwardQuery(const char * data, size_t bytes) = 0;
-  virtual bool ParseUpstreamResponse(BackendConn* backend) = 0;
+  virtual bool ParseUpstreamReply(BackendConn* backend) = 0;
   virtual size_t request_body_upcoming_bytes() const = 0;
 protected:
   bool is_transfering_response_;
@@ -76,11 +76,11 @@ protected:
 
   WorkerContext& context_;
 
-  void TryForwardResponse(BackendConn* backend);
+  void TryForwardReply(BackendConn* backend);
   virtual void PushReadyQueue(BackendConn* backend) {}
 
   typedef void(MemcCommand::*BackendCallbackFunc)(BackendConn* backend, const boost::system::error_code& error);
-  ForwardResponseCallback WeakBind(BackendCallbackFunc mem_func, BackendConn* backend) {
+  ForwardReplyCallback WeakBind(BackendCallbackFunc mem_func, BackendConn* backend) {
     std::weak_ptr<MemcCommand> cmd_wptr(shared_from_this());
     return [cmd_wptr, mem_func, backend](const boost::system::error_code& error) {
           if (auto cmd_ptr = cmd_wptr.lock()) {

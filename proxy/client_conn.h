@@ -20,7 +20,7 @@ class MemcCommand;
 struct WorkerContext;
 class ReadBuffer;
 
-typedef std::function<void(const boost::system::error_code& error)> ForwardResponseCallback;
+typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
 public:
@@ -38,7 +38,7 @@ public:
   void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
 
 public:
-  void ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb);
+  void ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb);
   bool IsFirstCommand(std::shared_ptr<MemcCommand> cmd) {
     // TODO : 能否作为一个标记，放在command里面？
     return cmd == active_cmd_queue_.front();
@@ -62,7 +62,7 @@ protected:
 private:
   std::list<std::shared_ptr<MemcCommand>> active_cmd_queue_;
 
-  ForwardResponseCallback forward_resp_callback_;
+  ForwardReplyCallback forward_resp_callback_;
 
   size_t timeout_;
   boost::asio::deadline_timer timer_;

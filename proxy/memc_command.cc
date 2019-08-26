@@ -153,16 +153,16 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
   }
 }
 
-void MemcCommand::OnUpstreamResponseReceived(BackendConn* backend, const boost::system::error_code& error) {
+void MemcCommand::OnUpstreamReplyReceived(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
-    LOG_DEBUG << "MemcCommand::OnUpstreamResponseReceived " << cmd_line_without_rn()
+    LOG_DEBUG << "MemcCommand::OnUpstreamReplyReceived " << cmd_line_without_rn()
              << " backend read error : " << backend->remote_endpoint() << " - "  << error << " " << error.message();
     client_conn_->OnCommandError(shared_from_this(), error);
     return;
   }
 
-  LOG_DEBUG << "OnUpstreamResponseReceived, backend=" << backend;
-  bool valid = ParseUpstreamResponse(backend);
+  LOG_DEBUG << "OnUpstreamReplyReceived, backend=" << backend;
+  bool valid = ParseUpstreamReply(backend);
   if (!valid) {
     LOG_WARN << __func__ << " parsing error! valid=false";
     // TODO : error handling
@@ -171,12 +171,12 @@ void MemcCommand::OnUpstreamResponseReceived(BackendConn* backend, const boost::
   }
 
   if (IsFormostCommand()) {
-    LOG_DEBUG << __func__ << " IsFormostCommand true, TryForwardResponse, backend=" << backend;
-    TryForwardResponse(backend);
+    LOG_DEBUG << __func__ << " IsFormostCommand true, TryForwardReply, backend=" << backend;
+    TryForwardReply(backend);
   } else {
     // TODO : do nothing, just wait
     PushReadyQueue(backend); // TODO : ready queue 的push，貌似会有重复?
-    LOG_DEBUG << __func__ << " IsFormostCommand false, wait to ForwardResponse, backend=" << backend;
+    LOG_DEBUG << __func__ << " IsFormostCommand false, wait to ForwardReply, backend=" << backend;
   }
 
   if (backend->buffer()->parsed_unreceived_bytes() > 0) {
@@ -227,31 +227,31 @@ void MemcCommand::OnForwardReplyFinished(BackendConn* backend, const boost::syst
     if (backend->buffer()->parsed_unreceived_bytes() > 0) {
       backend->TryReadMoreData(); // 这里必须继续try
     }
-    TryForwardResponse(backend); // 可能已经有新读到的数据，因而要尝试转发更多
+    TryForwardReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }
 }
 
-void MemcCommand::TryForwardResponse(BackendConn* backend) {
+void MemcCommand::TryForwardReply(BackendConn* backend) {
   if (!TryActivateReplyingBackend(backend)) {
-    LOG_DEBUG << "TryForwardResponse, TryActivateReplyingBackend false, backend=" << backend;
+    LOG_DEBUG << "TryForwardReply, TryActivateReplyingBackend false, backend=" << backend;
     PushReadyQueue(backend);
     return;
   }
 
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
   if (!is_transfering_response_ && unprocessed > 0) {
-    LOG_DEBUG << "TryForwardResponse, TryActivateReplyingBackend OK, backend=" << backend;
+    LOG_DEBUG << "TryForwardReply, TryActivateReplyingBackend OK, backend=" << backend;
 
     is_transfering_response_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
     backend->buffer()->inc_recycle_lock();
-    client_conn_->ForwardResponse(backend->buffer()->unprocessed_data(), unprocessed,
+    client_conn_->ForwardReply(backend->buffer()->unprocessed_data(), unprocessed,
                                   WeakBind(&MemcCommand::OnForwardReplyFinished, backend));
     backend->buffer()->update_processed_bytes(unprocessed);
-    LOG_DEBUG << "MemcCommand::TryForwardResponse to_process_bytes=" << unprocessed
+    LOG_DEBUG << "MemcCommand::TryForwardReply to_process_bytes=" << unprocessed
               << " new_unprocessed=" << backend->buffer()->unprocessed_bytes()
               << " client=" << this << " backend=" << backend;
   } else {
-    LOG_DEBUG << "ParallelGetCommand MemcCommand::TryForwardResponse do nothing, unprocessed_bytes=" << unprocessed
+    LOG_DEBUG << "ParallelGetCommand MemcCommand::TryForwardReply do nothing, unprocessed_bytes=" << unprocessed
               << " is_transfering_response=" << is_transfering_response_
               << " client=" << this << " backend=" << backend;
   }

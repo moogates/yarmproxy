@@ -35,11 +35,11 @@ public:
   }
 private:
   void OnForwardReplyEnabled() override {
-    TryForwardResponse(backend_conn_);
+    TryForwardReply(backend_conn_);
   }
 
   void ForwardQuery(const char * data, size_t bytes) override;
-  bool ParseUpstreamResponse(BackendConn* backend) override;
+  bool ParseUpstreamReply(BackendConn* backend) override;
   void DoForwardQuery(const char * request_data, size_t client_buf_received_bytes) override;
 
   std::string cmd_line_without_rn() const override {

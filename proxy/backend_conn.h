@@ -25,7 +25,7 @@ public:
 
   void ForwardQuery(const char* data, size_t bytes, bool has_more_data);
 
-  void ReadResponse();
+  void ReadReply();
   void TryReadMoreData();
 
   ip::tcp::socket& socket() {

@@ -41,7 +41,7 @@ void WriteCommand::ForwardQuery(const char * data, size_t bytes) {
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend_conn_),
-                               WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
+                               WeakBind(&MemcCommand::OnUpstreamReplyReceived, backend_conn_));
   }
 
   DoForwardQuery(data, bytes);
@@ -71,24 +71,24 @@ void WriteCommand::OnForwardQueryFinished(BackendConn* backend, const boost::sys
     client_conn_->TryReadMoreQuery();
   } else {
     LOG_DEBUG << "WriteCommand::OnForwardQueryFinished 转发了当前命令的所有数据, 等待 backend 的响应.";
-    backend_conn_->ReadResponse();
+    backend_conn_->ReadReply();
   }
 }
 
-bool WriteCommand::ParseUpstreamResponse(BackendConn* backend) {
+bool WriteCommand::ParseUpstreamReply(BackendConn* backend) {
   assert(backend_conn_ == backend);
   const char * entry = backend_conn_->buffer()->unparsed_data();
   const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
   if (p == nullptr) {
     // TODO : no enough data for parsing, please read more
-    LOG_DEBUG << "WriteCommand ParseUpstreamResponse no enough data for parsing, please read more"
+    LOG_DEBUG << "WriteCommand ParseUpstreamReply no enough data for parsing, please read more"
               // << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
               << " bytes=" << backend_conn_->buffer()->unparsed_bytes();
     return true;
   }
 
   backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
-  LOG_DEBUG << "WriteCommand ParseUpstreamResponse resp.size=" << p - entry + 1;
+  LOG_DEBUG << "WriteCommand ParseUpstreamReply resp.size=" << p - entry + 1;
             // << " contont=[" << std::string(entry, p - entry - 1) << "]";
   return true;
 }

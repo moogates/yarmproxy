@@ -50,7 +50,7 @@ void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boos
     return;
   }
   LOG_DEBUG << "ParallelGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
-  backend->ReadResponse();
+  backend->ReadReply();
 }
 
 void ParallelGetCommand::PushReadyQueue(BackendConn* backend) {
@@ -68,21 +68,21 @@ void ParallelGetCommand::OnForwardReplyEnabled() {
     ready_queue_.pop();
     LOG_DEBUG << __func__ << " activate ready backend,"
               << " replying_backend_=" << replying_backend_;
-    TryForwardResponse(replying_backend_);
+    TryForwardReply(replying_backend_);
   } else {
     LOG_DEBUG << __func__ << " no ready backend to activate,"
               << " replying_backend_=" << replying_backend_;
   }
 }
 
-bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
+bool ParallelGetCommand::ParseUpstreamReply(BackendConn* backend) {
   bool valid = true;
   while(backend->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend->buffer()->unparsed_data();
     const char * p = GetLineEnd(entry, backend->buffer()->unparsed_bytes());
     if (p == nullptr) {
       // TODO : no enough data for parsing, please read more
-      LOG_DEBUG << "ParseUpstreamResponse no enough data for parsing, please read more"
+      LOG_DEBUG << "ParseUpstreamReply no enough data for parsing, please read more"
                 << " bytes=" << backend->buffer()->unparsed_bytes();
       return true;
     }
@@ -100,13 +100,13 @@ bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
         backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
         if (backend->buffer()->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
-          LOG_DEBUG << "ParseUpstreamResponse END not really end!";
+          LOG_DEBUG << "ParseUpstreamReply END not really end!";
         } else {
-          LOG_DEBUG << "ParseUpstreamResponse END is really end!";
+          LOG_DEBUG << "ParseUpstreamReply END is really end!";
         }
         break;
       } else {
-        LOG_WARN << "ParseUpstreamResponse BAD DATA";
+        LOG_WARN << "ParseUpstreamReply BAD DATA";
         // TODO : ERROR
         valid = false;
         break;
@@ -124,7 +124,7 @@ void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
       LOG_DEBUG << "ParallelGetCommand sub query(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ") create backend conn";
       backend = context_.backend_conn_pool()->Allocate(query->backend_addr_);
       backend->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend),
-                                 WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend));
+                                 WeakBind(&MemcCommand::OnUpstreamReplyReceived, backend));
       query->backend_conn_ = backend;
     }
     LOG_DEBUG << __func__ << " ForwardQuery, query=(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";

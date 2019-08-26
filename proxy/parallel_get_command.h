@@ -21,7 +21,7 @@ public:
 private:
   void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
   void DoForwardQuery(const char *, size_t) override;
-  bool ParseUpstreamResponse(BackendConn* backend) override;
+  bool ParseUpstreamReply(BackendConn* backend) override;
 
   void PushReadyQueue(BackendConn* backend) override; 
   bool HasMoreBackend() const override {
@@ -39,7 +39,7 @@ private:
       replying_backend_ = ready_queue_.front();
       ready_queue_.pop();
       LOG_DEBUG << "ParallelGetCommand RotateFirstBackend, activate ready backend";
-      TryForwardResponse(replying_backend_);
+      TryForwardReply(replying_backend_);
       return;
     }
     LOG_DEBUG << "ParallelGetCommand RotateFirstBackend, no ready backend, wait";
