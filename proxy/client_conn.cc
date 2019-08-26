@@ -72,12 +72,12 @@ void ClientConnection::AsyncRead() {
 void ClientConnection::RotateFirstCommand() {
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
-    LOG_INFO << __func__ << " PRE active_cmd_queue_.size=" << active_cmd_queue_.size();
+    // LOG_INFO << __func__ << " PRE active_cmd_queue_.size=" << active_cmd_queue_.size();
     active_cmd_queue_.front()->OnForwardReplyEnabled();
     ProcessUnparsedData();
-    LOG_INFO << __func__ << " POST active_cmd_queue_.size=" << active_cmd_queue_.size();
+    // LOG_INFO << __func__ << " POST active_cmd_queue_.size=" << active_cmd_queue_.size();
   } else {
-    LOG_DEBUG << __func__ << " active_cmd_queue_ empty";
+    // LOG_DEBUG << __func__ << " active_cmd_queue_ empty";
   }
 }
 

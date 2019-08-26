@@ -1,4 +1,4 @@
-#include "memcached_locator.h"
+#include "backend_locator.h"
 
 #include "base/logging.h"
 
@@ -8,8 +8,8 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-static const char * memcached_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;";
-// static const char * memcached_nodes = "127.0.0.1:11211=2000";
+// static const char * memcached_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;";
+static const char * memcached_nodes = "127.0.0.1:11211=2000";
 
 //static const char * memcached_nodes = "10.3.22.42:11211=6800;"
 //                              "10.3.22.43:11211=6800;"
@@ -23,7 +23,7 @@ static const char * memcached_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000
 //                              "10.3.22.126:11211=6800";
 
 
-bool MemcachedLocator::Initialize() {
+bool BackendLoactor::Initialize() {
   {
     std::string ns = "FEED";
     //std::string FEED_nodes = "10.3.17.128:11211 2800;10.3.16.210:11211 2800;10.3.16.211:11211 2800;10.3.17.149:11211 1500;10.3.20.44:11211 2700"
@@ -66,11 +66,11 @@ bool MemcachedLocator::Initialize() {
   return true;
 }
 
-ip::tcp::endpoint MemcachedLocator::GetEndpointByKey(const std::string& key) {
+ip::tcp::endpoint BackendLoactor::GetEndpointByKey(const std::string& key) {
   return GetEndpointByKey(key.c_str(), key.size());
 }
 
-ip::tcp::endpoint MemcachedLocator::GetEndpointByKey(const char * key, size_t len) {
+ip::tcp::endpoint BackendLoactor::GetEndpointByKey(const char * key, size_t len) {
   size_t delim_pos = 0;
   for (; delim_pos < len; ++ delim_pos) {
     if (key[delim_pos] == '#') {
@@ -94,7 +94,7 @@ ip::tcp::endpoint MemcachedLocator::GetEndpointByKey(const char * key, size_t le
   }
   
   ip::tcp::endpoint ep = continuum->LocateCacheNode(key, len);
-  LOG_DEBUG << "MemcachedLocator::GetEndpointByKey key=" << std::string(key, len) << " cache_node=" << ep;
+  LOG_DEBUG << "BackendLoactor::GetEndpointByKey key=" << std::string(key, len) << " cache_node=" << ep;
 
   return ep;
 }

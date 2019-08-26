@@ -9,7 +9,7 @@
 
 #include "worker_pool.h"
 #include "client_conn.h"
-#include "memcached_locator.h"
+#include "backend_locator.h"
 #include "backend_conn.h"
 
 #include "get_command.h"
@@ -42,7 +42,7 @@ bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip
     while(*q != ' ' && *q != '\r') {
       ++q;
     }
-    ip::tcp::endpoint ep = MemcachedLocator::Instance().GetEndpointByKey(p, q - p);
+    ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(p, q - p);
 
     auto it = endpoint_key_map->find(ep);
     if (it == endpoint_key_map->end()) {
@@ -117,7 +117,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
   if (strncmp(buf, "get ", 4) == 0) {
 #define DONT_USE_MAP 0
 #if DONT_USE_MAP
-    auto ep = MemcachedLocator::Instance().GetEndpointByKey("1");
+    auto ep = BackendLoactor::Instance().GetEndpointByKey("1");
     std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(
                      ep, owner, buf, cmd_line_bytes));
     // command->push_back(cmd);
@@ -142,7 +142,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
     ParseWriteCommandLine(buf, cmd_line_bytes, &key, &body_bytes);
 
     //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-    std::shared_ptr<MemcCommand> cmd(new WriteCommand(MemcachedLocator::Instance().GetEndpointByKey(key),
+    std::shared_ptr<MemcCommand> cmd(new WriteCommand(BackendLoactor::Instance().GetEndpointByKey(key),
               owner, buf, cmd_line_bytes, body_bytes));
     *command = cmd;
     return cmd_line_bytes + body_bytes;

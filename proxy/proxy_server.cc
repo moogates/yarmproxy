@@ -7,7 +7,7 @@
 
 #include "client_conn.h"
 #include "worker_pool.h"
-#include "memcached_locator.h"
+#include "backend_locator.h"
 
 namespace mcproxy {
 
@@ -30,8 +30,8 @@ ProxyServer::~ProxyServer() {
 }
 
 void ProxyServer::Run() {
-  if (!MemcachedLocator::Instance().Initialize()) {
-    LOG_ERROR << "MemcachedLocator initialization error ...";
+  if (!BackendLoactor::Instance().Initialize()) {
+    LOG_ERROR << "BackendLoactor initialization error ...";
     return;
   }
 
