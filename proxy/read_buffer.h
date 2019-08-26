@@ -50,6 +50,14 @@ public:
     return received_offset_ - processed_offset_;
   }
 
+  void cut_received_tail(size_t bytes) {
+    received_offset_ -= bytes;
+  }
+  void recover_received_tail(size_t bytes) {
+    received_offset_ += bytes;
+    parsed_offset_ += bytes;
+  }
+
   void inc_recycle_lock();
   void dec_recycle_lock();
 

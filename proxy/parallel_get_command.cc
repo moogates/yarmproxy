@@ -113,13 +113,14 @@ bool ParallelGetCommand::ParseReply(BackendConn* backend) {
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-        backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
-        if (backend->buffer()->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
+        // backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
+        if (backend->buffer()->unparsed_bytes() != (sizeof("END\r\n") - 1)) { // TODO : pipeline的情况呢?
           valid = false;
           LOG_DEBUG << "ParseReply END not really end! backend=" << backend;
         } else {
           LOG_DEBUG << "ParseReply END is really end! set_reply_complete, backend=" << backend;
           backend->set_reply_complete();
+          backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
         }
         break;
       } else {

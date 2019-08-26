@@ -64,7 +64,7 @@ private:
   BackendQuerySentCallback query_sent_callback_;
 
   bool is_reading_more_;
-  bool reply_complete_;
+  bool reply_complete_;  // if reveived all reply from backend server
 };
 
 class BackendConnPool {
