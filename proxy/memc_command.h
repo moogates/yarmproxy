@@ -25,9 +25,9 @@ public:
 public:
   virtual ~MemcCommand();
 
-  virtual void ForwardRequest(const char * data, size_t bytes) = 0;
-  // backend_conn转发完毕ForwardRequest()指定的数据后，调用OnForwardRequestFinished()
-  virtual void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) = 0;
+  virtual void ForwardQuery(const char * data, size_t bytes) = 0;
+  // backend_conn转发完毕ForwardQuery()指定的数据后，调用OnForwardQueryFinished()
+  virtual void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) = 0;
 
   // backend_conn收到reply数据后, 调用OnUpstreamResponseReceived()
   void OnUpstreamResponseReceived(BackendConn* backend, const boost::system::error_code& error);
@@ -65,7 +65,7 @@ private:
 
   // 判断是否最靠前的command, 是才可以转发
   bool IsFormostCommand();
-  virtual void DoForwardRequest(const char * data, size_t bytes) = 0;
+  virtual void DoForwardQuery(const char * data, size_t bytes) = 0;
   virtual bool ParseUpstreamResponse(BackendConn* backend) = 0;
   virtual size_t request_body_upcoming_bytes() const = 0;
 protected:

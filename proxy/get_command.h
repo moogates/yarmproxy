@@ -14,14 +14,14 @@ public:
   virtual ~SingleGetCommand();
 
 private:
-  void ForwardRequest(const char * data, size_t bytes) override;
+  void ForwardQuery(const char * data, size_t bytes) override;
   void OnForwardReplyEnabled() override {
     TryForwardResponse(backend_conn_);
   }
 
-  void DoForwardRequest(const char *, size_t) override;
+  void DoForwardQuery(const char *, size_t) override;
   bool ParseUpstreamResponse(BackendConn* backend) override;
-  void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
 
   std::string cmd_line_without_rn() const override {
     return cmd_line_.substr(0, cmd_line_.size() - 2);

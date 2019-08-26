@@ -15,12 +15,12 @@ public:
 
   virtual ~ParallelGetCommand();
 
-  void ForwardRequest(const char * data, size_t bytes) override;
+  void ForwardQuery(const char * data, size_t bytes) override;
   void OnForwardReplyEnabled() override;
 
 private:
-  void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) override;
-  void DoForwardRequest(const char *, size_t) override;
+  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void DoForwardQuery(const char *, size_t) override;
   bool ParseUpstreamResponse(BackendConn* backend) override;
 
   void PushReadyQueue(BackendConn* backend) override; 

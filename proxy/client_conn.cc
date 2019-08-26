@@ -55,7 +55,7 @@ void ClientConnection::StartRead() {
   AsyncRead();
 }
 
-void ClientConnection::TryReadMoreRequest() {
+void ClientConnection::TryReadMoreQuery() {
   // TODO : checking preconditions
   AsyncRead();
 }
@@ -120,11 +120,11 @@ bool ClientConnection::ProcessUnparsedData() {
       socket_.close();
       return false;
     }  else if (parsed_bytes == 0) {
-      TryReadMoreRequest(); // read more data
+      TryReadMoreQuery(); // read more data
       return true;
     } else {
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
-      command->ForwardRequest(read_buffer_->unprocessed_data(), to_process_bytes);
+      command->ForwardQuery(read_buffer_->unprocessed_data(), to_process_bytes);
       active_cmd_queue_.emplace_back(std::move(command));
 
       read_buffer_->update_parsed_bytes(parsed_bytes);
@@ -144,10 +144,10 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
-    active_cmd_queue_.back()->ForwardRequest(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
+    active_cmd_queue_.back()->ForwardQuery(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
     read_buffer_->update_processed_bytes(read_buffer_->unprocessed_bytes());
     if (read_buffer_->parsed_unreceived_bytes() > 0) {
-      // TryReadMoreRequest(); // 现在的做法是，这里不继续read, 而是在ForwardRequest的回调函数里面才继续read. 这并不是最佳方式
+      // TryReadMoreQuery(); // 现在的做法是，这里不继续read, 而是在ForwardQuery的回调函数里面才继续read. 这并不是最佳方式
       return;
     }
   }
@@ -168,11 +168,11 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       socket_.close();
       return;
     }  else if (parsed_bytes == 0) {
-      TryReadMoreRequest(); // read more data
+      TryReadMoreQuery(); // read more data
       return;
     } else {
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
-      command->ForwardRequest(read_buffer_->unprocessed_data(), to_process_bytes);
+      command->ForwardQuery(read_buffer_->unprocessed_data(), to_process_bytes);
       active_cmd_queue_.emplace_back(std::move(command));
 
       read_buffer_->update_parsed_bytes(parsed_bytes);

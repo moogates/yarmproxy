@@ -44,26 +44,26 @@ SingleGetCommand::~SingleGetCommand() {
   LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
 }
 
-void SingleGetCommand::ForwardRequest(const char * data, size_t bytes) {
+void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend_conn_),
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend_conn_),
                                WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
   }
 
-  DoForwardRequest(data, bytes);
+  DoForwardQuery(data, bytes);
 }
 
-void SingleGetCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
+void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_INFO << "WriteCommand OnForwardRequestFinished error";
+    LOG_INFO << "WriteCommand OnForwardQueryFinished error";
     return;
   }
   assert(backend == backend_conn_);
-  LOG_DEBUG << "SingleGetCommand::OnForwardRequestFinished 转发了当前命令, 等待backend的响应.";
+  LOG_DEBUG << "SingleGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
   backend_conn_->ReadResponse();
 }
 
@@ -110,8 +110,8 @@ bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   return valid;
 }
 
-void SingleGetCommand::DoForwardRequest(const char *, size_t) {
-  backend_conn_->ForwardRequest(cmd_line_.data(), cmd_line_.size(), false);
+void SingleGetCommand::DoForwardQuery(const char *, size_t) {
+  backend_conn_->ForwardQuery(cmd_line_.data(), cmd_line_.size(), false);
 }
 
 }

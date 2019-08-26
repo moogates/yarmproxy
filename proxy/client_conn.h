@@ -45,7 +45,7 @@ public:
   }
   void RotateFirstCommand();
 
-  void TryReadMoreRequest();
+  void TryReadMoreQuery();
   ReadBuffer* buffer() {
     return read_buffer_;
   }

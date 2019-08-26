@@ -52,9 +52,9 @@ void BackendConn::TryReadMoreData() {
   }
 }
 
-void BackendConn::ForwardRequest(const char* data, size_t bytes, bool has_more_data) {
+void BackendConn::ForwardQuery(const char* data, size_t bytes, bool has_more_data) {
   if (!socket_.is_open()) {
-    LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardRequest open socket, req="
+    LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardQuery open socket, req="
               << std::string(data, bytes - 2) << " size=" << bytes
               << " has_more_data=" << has_more_data << " backend=" << this;
     socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
@@ -62,7 +62,7 @@ void BackendConn::ForwardRequest(const char* data, size_t bytes, bool has_more_d
     return;
   }
 
-  LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardRequest write data, bytes=" << bytes
+  LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardQuery write data, bytes=" << bytes
             << " has_more_data=" << has_more_data
             // << " req_ptr=" << (void*)data
             // << " req_data=" << std::string(data, bytes - 2)

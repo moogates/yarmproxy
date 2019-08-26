@@ -39,17 +39,17 @@ ParallelGetCommand::~ParallelGetCommand() {
   LOG_DEBUG << "ParallelGetCommand dtor " << --parallel_get_cmd_count;
 }
 
-void ParallelGetCommand::ForwardRequest(const char *, size_t) {
-  DoForwardRequest(nullptr, 0);
+void ParallelGetCommand::ForwardQuery(const char *, size_t) {
+  DoForwardQuery(nullptr, 0);
 }
 
-void ParallelGetCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
+void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_DEBUG << "ParallelGetCommand OnForwardRequestFinished error";
+    LOG_DEBUG << "ParallelGetCommand OnForwardQueryFinished error";
     return;
   }
-  LOG_DEBUG << "ParallelGetCommand::OnForwardRequestFinished 转发了当前命令, 等待backend的响应.";
+  LOG_DEBUG << "ParallelGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
   backend->ReadResponse();
 }
 
@@ -116,19 +116,19 @@ bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   return valid;
 }
 
-void ParallelGetCommand::DoForwardRequest(const char *, size_t) {
+void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
   for(auto& query : query_set_) {
     BackendConn* backend = query->backend_conn_;
     if (backend == nullptr) {
       // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
       LOG_DEBUG << "ParallelGetCommand sub query(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ") create backend conn";
       backend = context_.backend_conn_pool()->Allocate(query->backend_addr_);
-      backend->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend),
+      backend->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend),
                                  WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend));
       query->backend_conn_ = backend;
     }
-    LOG_DEBUG << __func__ << " ForwardRequest, query=(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
-    backend->ForwardRequest(query->query_line_.data(), query->query_line_.size(), false);
+    LOG_DEBUG << __func__ << " ForwardQuery, query=(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
+    backend->ForwardQuery(query->query_line_.data(), query->query_line_.size(), false);
   }
 }
 
