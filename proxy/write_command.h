@@ -1,16 +1,17 @@
 #ifndef _WRITE_COMMAND_H_
 #define _WRITE_COMMAND_H_
 
-#include "memc_command.h"
+#include "command.h"
 
 using namespace boost::asio;
 
 namespace mcproxy {
 
-class WriteCommand : public MemcCommand {
+class WriteCommand : public Command {
 private:
-  // bool is_forwarding_request_;
-  // bool is_forwarding_response_;
+//ip::tcp::endpoint backend_endpoint_;
+//BackendConn* backend_conn_;
+
   const char * request_cmd_line_;
   size_t request_cmd_len_;
 
@@ -18,21 +19,28 @@ private:
   size_t request_body_bytes_;
   size_t bytes_forwarding_;
 
+  ip::tcp::endpoint backend_endpoint_;
+  BackendConn* backend_conn_;
 public:
-  WriteCommand(boost::asio::io_service& io_service, const ip::tcp::endpoint & ep, 
+  WriteCommand(const ip::tcp::endpoint & ep, 
           std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len, size_t body_bytes);
 
   virtual ~WriteCommand();
 
   size_t request_body_upcoming_bytes() const override;
-  void OnUpstreamRequestWritten(const boost::system::error_code& error) override;
+  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
 
   size_t request_body_bytes() const override {  // for debug info only
     return request_body_bytes_;
   }
 private:
-  bool ParseUpstreamResponse() override;
-  void DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) override;
+  void OnForwardReplyEnabled() override {
+    TryForwardReply(backend_conn_);
+  }
+
+  void ForwardQuery(const char * data, size_t bytes) override;
+  bool ParseReply(BackendConn* backend) override;
+  void DoForwardQuery(const char * request_data, size_t client_buf_received_bytes) override;
 
   std::string cmd_line_without_rn() const override {
     return std::string(request_cmd_line_, request_cmd_len_ - 2);

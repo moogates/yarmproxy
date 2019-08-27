@@ -46,7 +46,8 @@ void InitLogging(const char *path, const char *loglevel) {
   int argc = 1;
   char* argv[] = {const_cast<char*>("loguru"), nullptr};
   loguru::init(argc, argv);
-  loguru::add_file(path, loguru::Append, verbosity);
+  // loguru::add_file(path, loguru::Append, verbosity);
+  loguru::add_file(path, loguru::Truncate, verbosity);
 }
 
 }

@@ -1,54 +1,60 @@
+#ifndef _PARALLEL_GET_COMMAND_H_
+#define _PARALLEL_GET_COMMAND_H_
 
+#include "command.h"
 
-    ParallelGetCommand* parallel_cmd = new ParallelGetCommand(asio_service, owner, buf, cmd_len);
-    parallel_cmd ->GroupGetKeys();
-    (*cmd).reset(parallel_cmd);
+using namespace boost::asio;
 
-class ParallelGetCommand : public MemcCommand {
+namespace mcproxy {
+
+class ParallelGetCommand : public Command {
 public:
-  ParallelGetCommand(boost::asio::io_service& io_service, std::shared_ptr<ClientConnection> owner, const char* buf, size_t size)
-    : MemcCommand(io_service,
-        MemcachedLocator::Instance().GetEndpointByKey("1"), // FIXME
-        owner, buf, size) {
+  ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
+                     std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
+
+  virtual ~ParallelGetCommand();
+
+  void ForwardQuery(const char * data, size_t bytes) override;
+  void OnForwardReplyEnabled() override;
+
+private:
+  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void HookOnUpstreamReplyReceived(BackendConn* backend) override;
+  void DoForwardQuery(const char *, size_t) override;
+  bool ParseReply(BackendConn* backend) override;
+
+  void PushWaitingReplyQueue(BackendConn* backend) override; 
+  bool HasMoreBackend() const {
+    return completed_backends_ < query_set_.size(); // NOTE: 注意这里要
   }
-  std::vector<std::shared_ptr<MemcCommand>> single_get_commands_;
+  void RotateReplyingBackend() override;
 
-  // TODO : refinement
-  bool GroupGetKeys() {
-    std::vector<std::string> keys;
-    std::string key_list = cmd_line().substr(4, cmd_line().size() - 6);
-    boost::split(keys, key_list, boost::is_any_of(" "), boost::token_compress_on);
-
-    std::map<ip::tcp::endpoint, std::string> cmd_line_map;
-    
-    for (size_t i = 0; i < keys.size(); ++i) {
-      if (keys[i].empty()) {
-        continue;
-      }
-      ip::tcp::endpoint ep = MemcachedLocator::Instance().GetEndpointByKey(keys[i].c_str(), keys[i].size());
-
-      auto it = cmd_line_map.find(ep);
-      if (it == cmd_line_map.end()) {
-        it = cmd_line_map.insert(make_pair(ep, std::string("get"))).first;
-      }
-      it->second += ' ';
-      it->second += keys[i];
-    }
-
-    for (auto it = cmd_line_map.begin(); it != cmd_line_map.end(); ++it) {
-      LOG_DEBUG << "GroupGetKeys " << it->first << " get_keys=" << it->second;
-      it->second += "\r\n";
-      std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(io_service_, it->first, client_conn_, it->second.c_str(), it->second.size()));
-      // fetching_cmd_set_.insert(cmd);
-      single_get_commands_.push_back(cmd);
-    }
-    return true;
+  std::string cmd_line_without_rn() const override {
+    return "PARALLEL GET";
+  }
+  size_t request_body_upcoming_bytes() const override {
+    return 0;
   }
 
-  virtual void ForwardData(const char *, size_t) {
-    for(auto cmd : single_get_commands_) {
-      cmd->ForwardData(nullptr, 0);
+  struct BackendQuery {
+    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
+        : query_line_(query_line)
+        , backend_addr_(ep)
+        , backend_conn_(nullptr) {
     }
-  }
+    ~BackendQuery();
+    std::string query_line_;
+    ip::tcp::endpoint backend_addr_;
+    BackendConn* backend_conn_;
+  };
+
+  std::vector<std::unique_ptr<BackendQuery>> query_set_;
+  std::list<BackendConn*> waiting_reply_queue_;
+  BackendConn* last_backend_;
+  std::set<BackendConn*> received_reply_backends_;
 };
+
+}
+
+#endif  // _PARALLEL_GET_COMMAND_H_
 

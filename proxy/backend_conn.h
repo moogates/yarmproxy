@@ -1,40 +1,34 @@
-#ifndef _UPSTREAM_CONN_H_
-#define _UPSTREAM_CONN_H_
+#ifndef _BACKEND_CONN_H_
+#define _BACKEND_CONN_H_
 
 #include <map>
 #include <queue>
 #include <functional>
 
 #include <boost/asio.hpp>
-#include "base/logging.h"
-
-#include "read_buffer.h"
 
 using namespace boost::asio;
 
 namespace mcproxy {
+class WorkerContext;
+class ReadBuffer;
 
-typedef std::function<void(const boost::system::error_code& error)> UpstreamReadCallback;
-typedef std::function<void(const boost::system::error_code& error)> UpstreamWriteCallback;
+typedef std::function<void(const boost::system::error_code& error)> BackendReplyReceivedCallback;
+typedef std::function<void(const boost::system::error_code& error)> BackendQuerySentCallback;
 
 class BackendConn {
 public:
-  BackendConn(boost::asio::io_service& io_service, 
-      const ip::tcp::endpoint& upendpoint);
+  BackendConn(WorkerContext& context, const ip::tcp::endpoint& upendpoint);
   ~BackendConn();
 
-  void ForwardRequest(const char* data, size_t bytes, bool has_more_data);
+  void ForwardQuery(const char* data, size_t bytes, bool has_more_data);
 
-  void ReadResponse();
-  void TryReadMoreData();
+  void ReadReply();
+  void TryReadMoreReply();
 
-  ip::tcp::socket& socket() {
-    return socket_;
-  }
-
-  void SetReadWriteCallback(const UpstreamReadCallback& read_callback, const UpstreamWriteCallback& write_callback) {
-    backend_read_callback_ = read_callback;
-    uptream_write_callback_ = write_callback;
+  void SetReadWriteCallback(const BackendQuerySentCallback& query_sent_callback, const BackendReplyReceivedCallback& reply_received_callback) {
+    query_sent_callback_ = query_sent_callback;
+    reply_received_callback_ = reply_received_callback;
   }
 private:
   void HandleWrite(const char * buf, const size_t bytes, bool has_more_data,
@@ -42,23 +36,35 @@ private:
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleConnect(const char * buf, size_t bytes, bool has_more_data, const boost::system::error_code& error);
 public:
-  ReadBuffer read_buffer_;
+  void Reset();
+  ReadBuffer* buffer() {
+    return read_buffer_;
+  }
+  void set_reply_complete() {
+    reply_complete_ = true;
+  }
+  bool reply_complete() const {
+    return reply_complete_;
+  }
 private:
-  ip::tcp::endpoint backend_endpoint_;
+  WorkerContext& context_;
+  ReadBuffer* read_buffer_;
+  ip::tcp::endpoint remote_endpoint_;
   ip::tcp::socket socket_;
-  UpstreamReadCallback backend_read_callback_;
-  UpstreamWriteCallback uptream_write_callback_;
+  BackendReplyReceivedCallback reply_received_callback_;
+  BackendQuerySentCallback query_sent_callback_;
 
   bool is_reading_more_;
+  bool reply_complete_;  // if reveived all reply from backend server
 };
 
 class BackendConnPool {
 private:
-  boost::asio::io_service& io_service_;
+  WorkerContext& context_;
   std::map<ip::tcp::endpoint, std::queue<BackendConn*>> conn_map_;
   std::map<BackendConn*, ip::tcp::endpoint> active_conns_;
 public:
-  BackendConnPool(boost::asio::io_service& asio_service) : io_service_(asio_service) {
+  BackendConnPool(WorkerContext& context) : context_(context) {
   }
 
   BackendConn * Allocate(const ip::tcp::endpoint & ep);
@@ -67,4 +73,4 @@ public:
 
 }
 
-#endif // _UPSTREAM_CONN_H_
+#endif // _BACKEND_CONN_H_

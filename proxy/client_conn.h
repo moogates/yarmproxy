@@ -5,61 +5,62 @@
 #include <queue>
 #include <set>
 #include <string>
-
-#include <boost/asio.hpp>
 #include <memory>
 
-#include "base/logging.h"
-#include "read_buffer.h"
+#include <boost/asio.hpp>
 
 using namespace boost::asio;
 
 namespace mcproxy {
 
 class BackendConnPool;
-class MemcCommand;
+class Command;
+class WorkerContext;
+class ReadBuffer;
 
-typedef std::function<void(const boost::system::error_code& error)> ForwardResponseCallback;
+typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
 public:
-  ClientConnection(boost::asio::io_service& io_service, BackendConnPool* pool);
+  ClientConnection(WorkerContext& context);
   ~ClientConnection();
+
+  WorkerContext& context() {
+    return context_;
+  }
 
   ip::tcp::socket& socket() {
     return socket_;
   }
-
-  BackendConnPool* upconn_pool() {
-    return upconn_pool_;
-  }
-
-  void Start();
-
-  void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
+  void StartRead();
+  void OnCommandError(std::shared_ptr<Command> cmd, const boost::system::error_code& error);
 
 public:
-  void ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb);
-  bool IsFirstCommand(std::shared_ptr<MemcCommand> cmd) {
-    return cmd == poly_cmd_queue_.front();
+  void ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb);
+  bool IsFirstCommand(std::shared_ptr<Command> cmd) {
+    // TODO : 能否作为一个标记，放在command里面？
+    return cmd == active_cmd_queue_.front();
   }
-  void RotateFirstCommand();
-  void TryReadMoreRequest();
+  void RotateReplyingCommand();
 
-protected:
-  boost::asio::io_service& io_service_;
+  void TryReadMoreQuery();
+  ReadBuffer* buffer() {
+    return read_buffer_;
+  }
+
+  // boost::asio::io_service& io_service_;
 private:
   ip::tcp::socket socket_;
 public:
-  ReadBuffer read_buffer_;
+  ReadBuffer* read_buffer_;
 
 protected:
-  BackendConnPool* upconn_pool_;
+  WorkerContext& context_;
 
 private:
-  ForwardResponseCallback forward_resp_callback_;
+  std::list<std::shared_ptr<Command>> active_cmd_queue_;
 
-  std::list<std::shared_ptr<MemcCommand>> poly_cmd_queue_; // 新版支持多态的cmd
+  ForwardReplyCallback forward_resp_callback_;
 
   size_t timeout_;
   boost::asio::deadline_timer timer_;
@@ -67,7 +68,7 @@ private:
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  bool ForwardParsedUnreceivedRequest(size_t last_parsed_unreceived_bytes);
+  bool ProcessUnparsedQuery();
 
   void HandleMemcCommandTimeout(const boost::system::error_code& error);
   void HandleTimeoutWrite(const boost::system::error_code& error);

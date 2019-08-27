@@ -1,5 +1,5 @@
-#ifndef _MEMCACHED_LOCATOR_H_
-#define _MEMCACHED_LOCATOR_H_
+#ifndef _BACKEND_LOCATOR_H_
+#define _BACKEND_LOCATOR_H_
 
 #include <string>
 #include <boost/asio.hpp>
@@ -8,12 +8,12 @@ namespace mcproxy {
 
 class Continuum;
 
-class MemcachedLocator {
+class BackendLoactor {
 private:
-  MemcachedLocator() {}
+  BackendLoactor() {}
 public:
-  static MemcachedLocator& Instance() {
-    static MemcachedLocator locator;
+  static BackendLoactor& Instance() {
+    static BackendLoactor locator;
     return locator;
   }
   bool Initialize();
@@ -25,4 +25,4 @@ private:
 
 }
 
-#endif // _MEMCACHED_LOCATOR_H_
+#endif // _BACKEND_LOCATOR_H_
