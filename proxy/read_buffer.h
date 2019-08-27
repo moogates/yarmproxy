@@ -3,8 +3,6 @@
 
 #include <algorithm>
 
-#include "base/logging.h"
-
 namespace mcproxy {
 
 class ReadBuffer {

@@ -4,8 +4,9 @@
 #include <list>
 #include <vector>
 #include <string>
-#include <boost/asio.hpp>
 #include <memory>
+
+#include <boost/asio.hpp>
 
 #include "client_conn.h"
 
@@ -14,6 +15,7 @@ using namespace boost::asio;
 namespace mcproxy {
 
 class BackendConn;
+class WorkerContext;
 class ClientConnection;
 
 class Command : public std::enable_shared_from_this<Command> {
@@ -43,11 +45,10 @@ public:
   }
 
 private:
-  virtual bool HasMoreBackend() const {
-    return false;
-  }
   virtual void HookOnUpstreamReplyReceived(BackendConn* backend){}
-  virtual void RotateFirstBackend() {}
+  virtual void RotateReplyingBackend() {
+    client_conn_->RotateReplyingCommand();
+  }
 
   bool TryActivateReplyingBackend(BackendConn* backend);
 
@@ -64,7 +65,7 @@ protected:
   WorkerContext& context_;
 
   void TryForwardReply(BackendConn* backend);
-  virtual void PushReadyQueue(BackendConn* backend) {}
+  virtual void PushWaitingReplyQueue(BackendConn* backend) {}
 
   typedef void(Command::*BackendCallbackFunc)(BackendConn* backend, const boost::system::error_code& error);
   ForwardReplyCallback WeakBind(BackendCallbackFunc mem_func, BackendConn* backend) {

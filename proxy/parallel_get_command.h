@@ -23,11 +23,11 @@ private:
   void DoForwardQuery(const char *, size_t) override;
   bool ParseReply(BackendConn* backend) override;
 
-  void PushReadyQueue(BackendConn* backend) override; 
-  bool HasMoreBackend() const override {
+  void PushWaitingReplyQueue(BackendConn* backend) override; 
+  bool HasMoreBackend() const {
     return completed_backends_ < query_set_.size(); // NOTE: 注意这里要
   }
-  void RotateFirstBackend() override;
+  void RotateReplyingBackend() override;
 
   std::string cmd_line_without_rn() const override {
     return "PARALLEL GET";

@@ -53,7 +53,7 @@ void ReadBuffer::dec_recycle_lock() {
   } else {
     LOG_DEBUG << "ReadBuffer::dec_recycle_lock, this=" << this << " bad unlock";
   }
-  try_recycle_buffer(); // TODO : 这里不释放? 如果需要，可以自己调用
+  try_recycle_buffer();
 }
 
 void ReadBuffer::try_recycle_buffer() {

@@ -10,7 +10,7 @@ int main() {
 
   std::string endpoint("127.0.0.1:11311");
 	LOG_INFO << "Service listening on " << endpoint;
-  mcproxy::ProxyServer server(endpoint, 2); // TODO : concurrenty
+  mcproxy::ProxyServer server(endpoint, 2); // TODO : concurrency
   server.Run();
   return 0;
 }

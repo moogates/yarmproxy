@@ -5,18 +5,17 @@
 
 #include "base/logging.h"
 
-#include "worker_pool.h"
-#include "command.h"
-#include "backend_conn.h"
 #include "allocator.h"
+#include "backend_conn.h"
+#include "command.h"
+#include "read_buffer.h"
+#include "worker_pool.h"
 
 using namespace boost::asio;
 
 namespace mcproxy {
 
-// TODO :
-// 1. gracefully close connections
-// 2.
+// TODO : gracefully close connections
 
 std::atomic_int g_cc_count;
 
@@ -69,7 +68,7 @@ void ClientConnection::AsyncRead() {
           std::placeholders::_2));
 }
 
-void ClientConnection::RotateFirstCommand() {
+void ClientConnection::RotateReplyingCommand() {
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
     // LOG_INFO << __func__ << " PRE active_cmd_queue_.size=" << active_cmd_queue_.size();

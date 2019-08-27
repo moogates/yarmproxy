@@ -11,8 +11,9 @@
 #include "client_conn.h"
 #include "backend_locator.h"
 #include "backend_conn.h"
+#include "read_buffer.h"
 
-#include "get_command.h"
+#include "single_get_command.h"
 #include "parallel_get_command.h"
 #include "write_command.h"
 
@@ -183,25 +184,15 @@ void Command::OnUpstreamReplyReceived(BackendConn* backend, const boost::system:
         // 新收的新数据，可能不需要转发！例如收到的刚好是"END\r\n"
         // TODO : 合并重复代码
         ++completed_backends_;
-        if (HasMoreBackend()) {
-          LOG_DEBUG << __func__ << " HasMoreBackend true";
-          RotateFirstBackend();
-        } else {
-          LOG_DEBUG << __func__ << " HasMoreBackend false, RotateFirstCommand";
-          client_conn_->RotateFirstCommand();
-        }
-        ///////////////
+        RotateReplyingBackend();
       } else {
         TryForwardReply(backend);
       }
     } else {
-      LOG_DEBUG << __func__ << " TryActivateReplyingBackend false, backend=" << backend;
-      PushReadyQueue(backend);
+      PushWaitingReplyQueue(backend);
     }
   } else {
-    // TODO : do nothing, just wait
-    PushReadyQueue(backend); // TODO : ready queue 的push，貌似会有重复?
-    LOG_DEBUG << __func__ << " IsFirstCommand false, wait to ForwardReply, backend=" << backend;
+    PushWaitingReplyQueue(backend);
   }
 
   backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
@@ -239,13 +230,7 @@ void Command::OnForwardReplyFinished(BackendConn* backend, const boost::system::
 
   if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
     ++completed_backends_;
-    if (HasMoreBackend()) {
-      LOG_DEBUG << __func__ << " HasMoreBackend true";
-      RotateFirstBackend();
-    } else {
-      LOG_DEBUG << __func__ << " HasMoreBackend false, RotateFirstCommand";
-      client_conn_->RotateFirstCommand();
-    }
+    RotateReplyingBackend();
     LOG_DEBUG << "WriteCommand::OnForwardReplyFinished backend no more reply, and all data forwarded to client,"
               << " backend=" << backend;
   } else {

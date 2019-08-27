@@ -1,8 +1,10 @@
 #include "write_command.h"
 
 #include "base/logging.h"
-#include "client_conn.h"
+
 #include "backend_conn.h"
+#include "client_conn.h"
+#include "read_buffer.h"
 #include "worker_pool.h"
 
 namespace mcproxy {

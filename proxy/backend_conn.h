@@ -6,14 +6,12 @@
 #include <functional>
 
 #include <boost/asio.hpp>
-#include "base/logging.h"
-
-#include "worker_pool.h"
-#include "read_buffer.h"
 
 using namespace boost::asio;
 
 namespace mcproxy {
+class WorkerContext;
+class ReadBuffer;
 
 typedef std::function<void(const boost::system::error_code& error)> BackendReplyReceivedCallback;
 typedef std::function<void(const boost::system::error_code& error)> BackendQuerySentCallback;

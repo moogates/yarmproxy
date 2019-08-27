@@ -15,7 +15,7 @@ namespace mcproxy {
 
 class BackendConnPool;
 class Command;
-struct WorkerContext;
+class WorkerContext;
 class ReadBuffer;
 
 typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
@@ -41,7 +41,7 @@ public:
     // TODO : 能否作为一个标记，放在command里面？
     return cmd == active_cmd_queue_.front();
   }
-  void RotateFirstCommand();
+  void RotateReplyingCommand();
 
   void TryReadMoreQuery();
   ReadBuffer* buffer() {

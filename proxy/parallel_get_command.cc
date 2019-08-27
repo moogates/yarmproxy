@@ -1,9 +1,11 @@
 #include "parallel_get_command.h"
 
 #include "base/logging.h"
-#include "client_conn.h"
-#include "worker_pool.h"
+
 #include "backend_conn.h"
+#include "client_conn.h"
+#include "read_buffer.h"
+#include "worker_pool.h"
 
 namespace mcproxy {
 
@@ -61,23 +63,20 @@ void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boos
   backend->ReadReply();
 }
 
-void ParallelGetCommand::PushReadyQueue(BackendConn* backend) {
+void ParallelGetCommand::PushWaitingReplyQueue(BackendConn* backend) {
   if (std::find(waiting_reply_queue_.begin(), waiting_reply_queue_.end(), backend)
       == waiting_reply_queue_.end()) {
     waiting_reply_queue_.push_back(backend);
-    LOG_DEBUG << "ParallelGetCommand PushReadyQueue, backend=" << backend
+    LOG_DEBUG << "ParallelGetCommand PushWaitingReplyQueue, backend=" << backend
               << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
   } else {
-    LOG_DEBUG << "ParallelGetCommand PushReadyQueue already in queue, backend=" << backend
+    LOG_DEBUG << "ParallelGetCommand PushWaitingReplyQueue already in queue, backend=" << backend
               << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
   }
 }
 
 void ParallelGetCommand::OnForwardReplyEnabled() {
-  RotateFirstBackend();
-}
-
-void ParallelGetCommand::RotateFirstBackend() {
+  // RotateReplyingBackend();
   if (waiting_reply_queue_.size() > 0) {
     replying_backend_ = waiting_reply_queue_.front();
     waiting_reply_queue_.pop_front();
@@ -91,6 +90,14 @@ void ParallelGetCommand::RotateFirstBackend() {
   }
 }
 
+void ParallelGetCommand::RotateReplyingBackend() {
+  if (HasMoreBackend()) {
+    OnForwardReplyEnabled();
+  } else {
+    client_conn_->RotateReplyingCommand();
+  }
+}
+
 bool ParallelGetCommand::ParseReply(BackendConn* backend) {
   bool valid = true;
   while(backend->buffer()->unparsed_bytes() > 0) {
@@ -98,7 +105,6 @@ bool ParallelGetCommand::ParseReply(BackendConn* backend) {
     size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
     const char * p = GetLineEnd(entry, unparsed_bytes);
     if (p == nullptr) {
-      // TODO : no enough data for parsing, please read more
       LOG_DEBUG << "ParseReply no enough data for parsing, please read more"
                 << " bytes=" << backend->buffer()->unparsed_bytes();
       return true;
@@ -111,11 +117,11 @@ bool ParallelGetCommand::ParseReply(BackendConn* backend) {
       LOG_DEBUG << __func__ << " VALUE data, backend=" << backend
                 << " recv_body=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
       backend->buffer()->update_parsed_bytes(entry_bytes);
-      // break; // TODO : 每次转发一条，only for test
+      // break; // 这里如果break, 则每次转发一条，only for test
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-        if (backend->buffer()->unparsed_bytes() != (sizeof("END\r\n") - 1)) { // TODO : pipeline的情况呢?
+        if (backend->buffer()->unparsed_bytes() != (sizeof("END\r\n") - 1)) {
           valid = false;
           LOG_DEBUG << "ParseReply END not really end! backend=" << backend;
         } else {

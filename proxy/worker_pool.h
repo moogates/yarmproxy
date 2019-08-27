@@ -1,6 +1,7 @@
 #ifndef _WORKER_POOL_H_
 #define _WORKER_POOL_H_
 
+#include <thread>
 #include <boost/asio.hpp>
 
 namespace mcproxy {
@@ -9,7 +10,8 @@ using namespace boost::asio;
 class BackendConnPool;
 class Allocator;
 
-struct WorkerContext {
+class WorkerContext {
+public:
   WorkerContext();
   std::thread thread_;
   io_service io_service_;

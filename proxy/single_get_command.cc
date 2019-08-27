@@ -1,8 +1,10 @@
-#include "get_command.h"
+#include "single_get_command.h"
 
 #include "base/logging.h"
-#include "client_conn.h"
+
 #include "backend_conn.h"
+#include "client_conn.h"
+#include "read_buffer.h"
 #include "worker_pool.h"
 
 namespace mcproxy {
@@ -75,7 +77,6 @@ bool SingleGetCommand::ParseReply(BackendConn* backend) {
     size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
     const char * p = GetLineEnd(entry, unparsed_bytes);
     if (p == nullptr) {
-      // TODO : no enough data for parsing, please read more
       LOG_DEBUG << "ParseReply no enough data for parsing, please read more"
                 << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
                 << " bytes=" << backend_conn_->buffer()->unparsed_bytes();

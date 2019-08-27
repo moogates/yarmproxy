@@ -4,7 +4,6 @@
 #include <memory>
 #include <vector>
 #include <boost/asio.hpp>
-#include "base/logging.h"
 
 namespace mcproxy {
 

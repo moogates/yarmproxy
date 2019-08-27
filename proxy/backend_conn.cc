@@ -1,7 +1,10 @@
 #include "backend_conn.h"
 
 #include "base/logging.h"
+
 #include "allocator.h"
+#include "read_buffer.h"
+#include "worker_pool.h"
 
 const static size_t kMaxConnPerEndpoint = 64;
 
