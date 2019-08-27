@@ -28,13 +28,6 @@ public:
   void ReadReply();
   void TryReadMoreReply();
 
-  ip::tcp::socket& socket() {
-    return socket_;
-  }
-  ip::tcp::endpoint& remote_endpoint() {
-    return remote_endpoint_;
-  }
-
   void SetReadWriteCallback(const BackendQuerySentCallback& query_sent_callback, const BackendReplyReceivedCallback& reply_received_callback) {
     query_sent_callback_ = query_sent_callback;
     reply_received_callback_ = reply_received_callback;

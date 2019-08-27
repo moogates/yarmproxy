@@ -1,8 +1,11 @@
-# printf "set key 0 10 6\r\nresult\r\n" | nc 127.0.0.1 11311
+size=2027
+echo $#
+if [ $# -gt 0 ]; then
+  size=$1
+fi
 for id in `seq 1 100`; do
-#for id in `seq 1 1`; do
   key=key$id
   echo $key
   # 存储命令: <command name> <key> <flags> <exptime> <bytes>
-  printf "set $key 0 86400 6\r\nresult\r\n" | nc 127.0.0.1 11311
+  ./data_gen $size | sed "1s/EXAMPLE_KEY/$key/g" | nc 127.0.0.1 11311
 done

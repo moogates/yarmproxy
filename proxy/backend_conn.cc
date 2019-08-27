@@ -198,7 +198,6 @@ void BackendConnPool::Release(BackendConn * conn) {
   } else {
     if (it->second.size() >= kMaxConnPerEndpoint){
       LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " destroyed, size=" << it->second.size();
-      conn->socket().close();
       delete conn;
     } else {
       conn->Reset();

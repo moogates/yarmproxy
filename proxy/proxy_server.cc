@@ -46,7 +46,8 @@ void ProxyServer::Run() {
 }
 
 void ProxyServer::StartAccept() {
-  std::shared_ptr<ClientConnection> client_conn(worker_pool_->NewClientConntion());
+  WorkerContext& worker = worker_pool_->NextWorker();
+  std::shared_ptr<ClientConnection> client_conn(new ClientConnection(worker));
 
   acceptor_.async_accept(client_conn->socket(),
       std::bind(&ProxyServer::HandleAccept, this, client_conn,

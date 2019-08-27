@@ -2,7 +2,7 @@
 #include "base/logging.h"
 
 int main() {
-  //base::InitLogging("yamproxy.log", "TRACE");
+  // base::InitLogging("yamproxy.log", "TRACE");
   // loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
   // loguru::g_stderr_verbosity = 8;
   // loguru::g_stderr_verbosity = 0;

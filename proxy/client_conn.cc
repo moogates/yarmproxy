@@ -6,7 +6,7 @@
 #include "base/logging.h"
 
 #include "worker_pool.h"
-#include "memc_command.h"
+#include "command.h"
 #include "backend_conn.h"
 #include "allocator.h"
 
@@ -99,7 +99,7 @@ void ClientConnection::ForwardReply(const char* data, size_t bytes, const Forwar
     } else {
       LOG_DEBUG << "ClientConnection::ForwardReply callback, bytes_transferred=" << bytes_transferred
                << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
-      cb(error);  // 发完了，或出错了，才告知MemcCommand
+      cb(error);  // 发完了，或出错了，才告知Command
     }
   };
 
@@ -111,8 +111,8 @@ bool ClientConnection::ProcessUnparsedQuery() {
   while(active_cmd_queue_.size() < MAX_PIPELINE_ACTIVE
         && read_buffer_->unparsed_received_bytes() > 0) {
     // TODO : close the conn if command line is  too long
-    std::shared_ptr<MemcCommand> command;
-    int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(),
+    std::shared_ptr<Command> command;
+    int parsed_bytes = Command::CreateCommand(shared_from_this(),
                read_buffer_->unprocessed_data(), read_buffer_->received_bytes(),
                &command);
 
@@ -159,8 +159,8 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   static const size_t MAX_PIPELINE_ACTIVE = 5;
   while(active_cmd_queue_.size() < MAX_PIPELINE_ACTIVE
         && read_buffer_->unparsed_received_bytes() > 0) {
-    std::shared_ptr<MemcCommand> command;
-    int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(),
+    std::shared_ptr<Command> command;
+    int parsed_bytes = Command::CreateCommand(shared_from_this(),
                read_buffer_->unprocessed_data(), read_buffer_->received_bytes(),
                &command);
 
@@ -219,7 +219,7 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
       std::bind(&ClientConnection::HandleTimeoutWrite, shared_from_this(), std::placeholders::_1));
 }
 
-void ClientConnection::OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error) {
+void ClientConnection::OnCommandError(std::shared_ptr<Command> cmd, const boost::system::error_code& error) {
   timer_.cancel();
   // TODO : 销毁工作
   // TODO : 如果是最后一个error, 要负责client的收尾工作

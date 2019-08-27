@@ -29,7 +29,7 @@ size_t GetValueBytes(const char * data, const char * end) {
 
 SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
-    : MemcCommand(owner) 
+    : Command(owner) 
     , cmd_line_(buf, cmd_len)
     , backend_endpoint_(ep)
     , backend_conn_(nullptr)
@@ -46,11 +46,11 @@ SingleGetCommand::~SingleGetCommand() {
 
 void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
-    // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
-    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
+    // LOG_DEBUG << "Command(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
+    LOG_DEBUG << "Command(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend_conn_),
-                               WeakBind(&MemcCommand::OnUpstreamReplyReceived, backend_conn_));
+    backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
+                               WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
   }
 
   DoForwardQuery(data, bytes);

@@ -1,14 +1,13 @@
 #ifndef _PARALLEL_GET_COMMAND_H_
 #define _PARALLEL_GET_COMMAND_H_
 
-#include "memc_command.h"
-#include "base/logging.h"
+#include "command.h"
 
 using namespace boost::asio;
 
 namespace mcproxy {
 
-class ParallelGetCommand : public MemcCommand {
+class ParallelGetCommand : public Command {
 public:
   ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
                      std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
@@ -26,12 +25,7 @@ private:
 
   void PushReadyQueue(BackendConn* backend) override; 
   bool HasMoreBackend() const override {
-    // FIXME
-    bool ret = (finished_count_ + 1) < query_set_.size(); // NOTE: 注意这里要+1
-    LOG_DEBUG << "ParallelGetCommand HasMoreBackend ret=" << ret
-              << " finished_count_=" << finished_count_
-              << " query_set_.size=" << query_set_.size();
-    return ret;
+    return completed_backends_ < query_set_.size(); // NOTE: 注意这里要
   }
   void RotateFirstBackend() override;
 
@@ -55,12 +49,9 @@ private:
   };
 
   std::vector<std::unique_ptr<BackendQuery>> query_set_;
-  std::queue<BackendConn*> ready_queue_;
-  std::set<BackendConn*> ready_queue_flags_;
-  size_t finished_count_;
+  std::list<BackendConn*> waiting_reply_queue_;
   BackendConn* last_backend_;
-
-  std::set<BackendConn*> all_ready_set_;
+  std::set<BackendConn*> received_reply_backends_;
 };
 
 }

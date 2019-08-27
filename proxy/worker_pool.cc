@@ -45,10 +45,5 @@ void WorkerPool::StopDispatching() {
   }
 }
 
-ClientConnection* WorkerPool::NewClientConntion() {
-  WorkerContext& worker = NextWorker();
-  return new ClientConnection(worker);
-}
-
 }
 
