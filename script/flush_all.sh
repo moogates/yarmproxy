@@ -10,5 +10,9 @@ if [ $line != "Y" ] && [ $line != "y" ];then
 fi
 
 printf "flush_all\r\n" | nc 127.0.0.1 11211
+printf "flush_all\r\n" | nc 127.0.0.1 11212
+printf "flush_all\r\n" | nc 127.0.0.1 11213
+printf "flush_all\r\n" | nc 127.0.0.1 11214
+printf "flush_all\r\n" | nc 127.0.0.1 11215
 echo "Flushed."
 

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 int main(int argc, char* argv[]) {
   int size = 0;
@@ -10,8 +11,12 @@ int main(int argc, char* argv[]) {
     printf("Usage: %s size\r\n", argv[0]);
     return 1;
   }
+  srand(time(NULL));
 
   size = atoi(argv[1]);
+  if (size == 0) {
+    size = 1 + random() % (128 * 1024);
+  }
 
   printf("set EXAMPLE_KEY 0 86400 %d\r\n", size);
   for(i = 0; (i + 1) * 50 <= size; ++i) {
