@@ -5,11 +5,9 @@
 #include <queue>
 #include <set>
 #include <string>
-
-#include <boost/asio.hpp>
 #include <memory>
 
-#include "base/logging.h"
+#include <boost/asio.hpp>
 
 using namespace boost::asio;
 

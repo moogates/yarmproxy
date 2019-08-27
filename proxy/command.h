@@ -49,15 +49,6 @@ private:
   virtual void HookOnUpstreamReplyReceived(BackendConn* backend){}
   virtual void RotateFirstBackend() {}
 
-  void DeactivateReplyingBackend(BackendConn* backend) {
-    // assert(backend == replying_backend_);
-    if (backend == replying_backend_) {
-      LOG_WARN << __func__ << " ok, backend=" << backend << " replying_backend_=" << replying_backend_;
-    } else {
-      LOG_WARN << __func__ << " error, backend=" << backend << " replying_backend_=" << replying_backend_;
-    }
-    replying_backend_ = nullptr;
-  }
   bool TryActivateReplyingBackend(BackendConn* backend);
 
   virtual void DoForwardQuery(const char * data, size_t bytes) = 0;
@@ -66,6 +57,7 @@ private:
 protected:
   bool is_transfering_reply_;
   BackendConn* replying_backend_;
+  size_t completed_backends_;
 
   std::shared_ptr<ClientConnection> client_conn_;
 

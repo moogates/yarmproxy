@@ -95,6 +95,7 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 Command::Command(std::shared_ptr<ClientConnection> owner) 
     : is_transfering_reply_(false)
     , replying_backend_(nullptr)
+    , completed_backends_(0)
     , client_conn_(owner)
     , context_(owner->context())
     , loaded_(false) {
@@ -178,7 +179,21 @@ void Command::OnUpstreamReplyReceived(BackendConn* backend, const boost::system:
     LOG_DEBUG << __func__ << " IsFirstCommand true, backend=" << backend;
     if (TryActivateReplyingBackend(backend)) {
       LOG_DEBUG << __func__ << " TryActivateReplyingBackend OK, backend=" << backend;
-      TryForwardReply(backend);
+      if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
+        // 新收的新数据，可能不需要转发！例如收到的刚好是"END\r\n"
+        // TODO : 合并重复代码
+        ++completed_backends_;
+        if (HasMoreBackend()) {
+          LOG_DEBUG << __func__ << " HasMoreBackend true";
+          RotateFirstBackend();
+        } else {
+          LOG_DEBUG << __func__ << " HasMoreBackend false, RotateFirstCommand";
+          client_conn_->RotateFirstCommand();
+        }
+        ///////////////
+      } else {
+        TryForwardReply(backend);
+      }
     } else {
       LOG_DEBUG << __func__ << " TryActivateReplyingBackend false, backend=" << backend;
       PushReadyQueue(backend);
@@ -222,10 +237,8 @@ void Command::OnForwardReplyFinished(BackendConn* backend, const boost::system::
   is_transfering_reply_ = false;
   backend->buffer()->dec_recycle_lock();
 
-  if (// backend->buffer()->parsed_unreceived_bytes() == 0 && // TODO : unnecessary?
-          backend->reply_complete() &&
-          backend->buffer()->unprocessed_bytes() == 0) {
-    // DeactivateReplyingBackend(backend); // TODO : unnecessary?
+  if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
+    ++completed_backends_;
     if (HasMoreBackend()) {
       LOG_DEBUG << __func__ << " HasMoreBackend true";
       RotateFirstBackend();
