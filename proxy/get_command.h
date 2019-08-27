@@ -1,13 +1,13 @@
 #ifndef _GET_COMMAND_H_
 #define _GET_COMMAND_H_
 
-#include "memc_command.h"
+#include "command.h"
 
 using namespace boost::asio;
 
 namespace mcproxy {
 
-class SingleGetCommand : public MemcCommand {
+class SingleGetCommand : public Command {
 public:
   SingleGetCommand(const ip::tcp::endpoint & ep, 
           std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);

@@ -17,7 +17,7 @@ ParallelGetCommand::BackendQuery::~BackendQuery() {
 
 ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
                    std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map)
-    : MemcCommand(owner)
+    : Command(owner)
     , finished_count_(0)
     , last_backend_(nullptr)
 {
@@ -156,11 +156,11 @@ void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
   for(auto& query : query_set_) {
     BackendConn* backend = query->backend_conn_;
     if (backend == nullptr) {
-      // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
+      // LOG_DEBUG << "Command(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
       LOG_DEBUG << "ParallelGetCommand sub query(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ") create backend conn";
       backend = context_.backend_conn_pool()->Allocate(query->backend_addr_);
-      backend->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend),
-                                 WeakBind(&MemcCommand::OnUpstreamReplyReceived, backend));
+      backend->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend),
+                                 WeakBind(&Command::OnUpstreamReplyReceived, backend));
       query->backend_conn_ = backend;
     }
     LOG_DEBUG << __func__ << " ForwardQuery, query=(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";

@@ -8,10 +8,10 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-static const char * memcached_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;127.0.0.1:11213=2000;127.0.0.1:11214=2000;127.0.0.1:11215=2000;";
-// static const char * memcached_nodes = "127.0.0.1:11211=2000";
+static const char * backend_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;127.0.0.1:11213=2000;127.0.0.1:11214=2000;127.0.0.1:11215=2000;";
+// static const char * backend_nodes = "127.0.0.1:11211=2000";
 
-//static const char * memcached_nodes = "10.3.22.42:11211=6800;"
+//static const char * backend_nodes = "10.3.22.42:11211=6800;"
 //                              "10.3.22.43:11211=6800;"
 //                              "10.3.22.119:11211=6800;"
 //                              "10.3.22.120:11211=6800;"
@@ -31,10 +31,10 @@ bool BackendLoactor::Initialize() {
 
     Continuum * continuum = new Continuum;
     // if (continuum->SetCacheNodes(FEED_nodes)) {
-    if (continuum->SetCacheNodes(memcached_nodes)) {
+    if (continuum->SetCacheNodes(backend_nodes)) {
       clusters_continum_.insert(std::make_pair("FEED", continuum));
     } else {
-      LOG_WARN << "加载 Continuum 失败 " << ns << "-" << memcached_nodes;
+      LOG_WARN << "加载 Continuum 失败 " << ns << "-" << backend_nodes;
       delete continuum;
     }
   }
@@ -44,10 +44,10 @@ bool BackendLoactor::Initialize() {
     //std::string ADUP_nodes = "10.3.17.128:11211 2800;10.3.16.210:11211 2800;10.3.16.211:11211 2800;10.3.17.149:11211 1500;10.3.20.44:11211 2700"
     //                  ";10.3.20.45:11211 2800;10.3.20.46:11211 2800;10.3.20.47:11211 2800;10.3.20.48:11211 2800";
     Continuum * continuum = new Continuum;
-    if (continuum->SetCacheNodes(memcached_nodes)) {
+    if (continuum->SetCacheNodes(backend_nodes)) {
       clusters_continum_.insert(make_pair(ns, continuum));
     } else {
-      LOG_WARN << "加载 Continuum 失败 : " << ns << "-" << memcached_nodes;
+      LOG_WARN << "加载 Continuum 失败 : " << ns << "-" << backend_nodes;
       delete continuum;
     }
   }
@@ -55,10 +55,10 @@ bool BackendLoactor::Initialize() {
   {
     std::string ns = "DEFAULT";
     Continuum * continuum = new Continuum;
-    if (continuum->SetCacheNodes(memcached_nodes)) {
+    if (continuum->SetCacheNodes(backend_nodes)) {
       clusters_continum_.insert(make_pair(ns, continuum));
     } else {
-      LOG_WARN << "加载 Continuum 失败 : " << ns << "-" << memcached_nodes;
+      LOG_WARN << "加载 Continuum 失败 : " << ns << "-" << backend_nodes;
       delete continuum;
     }
   }

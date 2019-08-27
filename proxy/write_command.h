@@ -1,13 +1,13 @@
 #ifndef _WRITE_COMMAND_H_
 #define _WRITE_COMMAND_H_
 
-#include "memc_command.h"
+#include "command.h"
 
 using namespace boost::asio;
 
 namespace mcproxy {
 
-class WriteCommand : public MemcCommand {
+class WriteCommand : public Command {
 private:
 //ip::tcp::endpoint backend_endpoint_;
 //BackendConn* backend_conn_;

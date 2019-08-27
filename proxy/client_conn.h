@@ -16,7 +16,7 @@ using namespace boost::asio;
 namespace mcproxy {
 
 class BackendConnPool;
-class MemcCommand;
+class Command;
 struct WorkerContext;
 class ReadBuffer;
 
@@ -35,11 +35,11 @@ public:
     return socket_;
   }
   void StartRead();
-  void OnCommandError(std::shared_ptr<MemcCommand> memc_cmd, const boost::system::error_code& error);
+  void OnCommandError(std::shared_ptr<Command> cmd, const boost::system::error_code& error);
 
 public:
   void ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb);
-  bool IsFirstCommand(std::shared_ptr<MemcCommand> cmd) {
+  bool IsFirstCommand(std::shared_ptr<Command> cmd) {
     // TODO : 能否作为一个标记，放在command里面？
     return cmd == active_cmd_queue_.front();
   }
@@ -60,7 +60,7 @@ protected:
   WorkerContext& context_;
 
 private:
-  std::list<std::shared_ptr<MemcCommand>> active_cmd_queue_;
+  std::list<std::shared_ptr<Command>> active_cmd_queue_;
 
   ForwardReplyCallback forward_resp_callback_;
 

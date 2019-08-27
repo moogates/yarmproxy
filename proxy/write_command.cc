@@ -12,7 +12,7 @@ const char * GetLineEnd(const char * buf, size_t len);
 std::atomic_int write_cmd_count;
 WriteCommand::WriteCommand(const ip::tcp::endpoint & ep, 
         std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len, size_t body_bytes)
-    : MemcCommand(owner) 
+    : Command(owner) 
     , request_cmd_line_(buf)
     , request_cmd_len_(cmd_len)
     , request_forwarded_bytes_(0)
@@ -37,11 +37,11 @@ size_t WriteCommand::request_body_upcoming_bytes() const {
 
 void WriteCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
-    // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
-    LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
+    // LOG_DEBUG << "Command(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
+    LOG_DEBUG << "Command(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend_conn_),
-                               WeakBind(&MemcCommand::OnUpstreamReplyReceived, backend_conn_));
+    backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
+                               WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
   }
 
   DoForwardQuery(data, bytes);

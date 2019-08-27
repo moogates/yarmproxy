@@ -1,14 +1,14 @@
 #ifndef _PARALLEL_GET_COMMAND_H_
 #define _PARALLEL_GET_COMMAND_H_
 
-#include "memc_command.h"
+#include "command.h"
 #include "base/logging.h"
 
 using namespace boost::asio;
 
 namespace mcproxy {
 
-class ParallelGetCommand : public MemcCommand {
+class ParallelGetCommand : public Command {
 public:
   ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
                      std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);

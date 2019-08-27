@@ -10,8 +10,8 @@ namespace mcproxy {
 
 using namespace boost::asio;
 
-class WorkerPool;
 class ClientConnection;
+class WorkerPool;
 
 class ProxyServer {
 public:

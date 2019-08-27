@@ -6,7 +6,6 @@
 namespace mcproxy {
 using namespace boost::asio;
 
-class ClientConnection;
 class BackendConnPool;
 class Allocator;
 
@@ -33,16 +32,15 @@ public:
   void StartDispatching();
   void StopDispatching();
 
-  ClientConnection* NewClientConntion();
+  WorkerContext& NextWorker() {
+    return workers_[next_worker_++ % concurrency_];
+  }
 private:
   static thread_local int worker_id_;
 
   size_t concurrency_;
   WorkerContext* workers_; // TODO : use std::unique_ptr
 
-  WorkerContext& NextWorker() {
-    return workers_[next_worker_++ % concurrency_];
-  }
   size_t next_worker_;
 };
 

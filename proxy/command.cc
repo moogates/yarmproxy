@@ -1,4 +1,4 @@
-#include "memc_command.h"
+#include "command.h"
 
 #include <vector>
 #include <functional>
@@ -92,7 +92,7 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 
 
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-MemcCommand::MemcCommand(std::shared_ptr<ClientConnection> owner) 
+Command::Command(std::shared_ptr<ClientConnection> owner) 
     : is_transfering_reply_(false)
     , replying_backend_(nullptr)
     , client_conn_(owner)
@@ -100,14 +100,14 @@ MemcCommand::MemcCommand(std::shared_ptr<ClientConnection> owner)
     , loaded_(false) {
 };
 
-MemcCommand::~MemcCommand() {
+Command::~Command() {
 }
 
 // 0 : ok, 数据不够解析
 // >0 : ok, 解析成功，返回已解析的字节数
 // <0 : error, 未知命令
-int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
-          std::shared_ptr<MemcCommand>* command) {
+int Command::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
+          std::shared_ptr<Command>* command) {
   const char * p = GetLineEnd(buf, size);
   if (p == nullptr) {
     LOG_DEBUG << "CreateCommand no complete cmd line found";
@@ -120,7 +120,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
 #define SINGLE_GET_ONLY 0
 #if SINGLE_GET_ONLY
     auto ep = BackendLoactor::Instance().GetEndpointByKey("1");
-    std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(
+    std::shared_ptr<Command> cmd(new SingleGetCommand(
                      ep, owner, buf, cmd_line_bytes));
     // command->push_back(cmd);
     *command = cmd;
@@ -130,10 +130,10 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
     if (endpoint_key_map.size() == 1) {
       auto it = endpoint_key_map.begin();
-      std::shared_ptr<MemcCommand> cmd(new SingleGetCommand(it->first, owner, it->second.c_str(), it->second.size()));
+      std::shared_ptr<Command> cmd(new SingleGetCommand(it->first, owner, it->second.c_str(), it->second.size()));
       *command = cmd;
     } else {
-      std::shared_ptr<MemcCommand> cmd(new ParallelGetCommand(owner, std::move(endpoint_key_map)));
+      std::shared_ptr<Command> cmd(new ParallelGetCommand(owner, std::move(endpoint_key_map)));
       *command = cmd;
     }
 #endif
@@ -144,7 +144,7 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
     ParseWriteCommandLine(buf, cmd_line_bytes, &key, &body_bytes);
 
     //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-    std::shared_ptr<MemcCommand> cmd(new WriteCommand(BackendLoactor::Instance().GetEndpointByKey(key),
+    std::shared_ptr<Command> cmd(new WriteCommand(BackendLoactor::Instance().GetEndpointByKey(key),
               owner, buf, cmd_line_bytes, body_bytes));
     *command = cmd;
     return cmd_line_bytes + body_bytes;
@@ -155,11 +155,11 @@ int MemcCommand::CreateCommand(std::shared_ptr<ClientConnection> owner, const ch
   }
 }
 
-void MemcCommand::OnUpstreamReplyReceived(BackendConn* backend, const boost::system::error_code& error) {
+void Command::OnUpstreamReplyReceived(BackendConn* backend, const boost::system::error_code& error) {
   HookOnUpstreamReplyReceived(backend);
   if (error) {
-    LOG_DEBUG << "MemcCommand::OnUpstreamReplyReceived " << cmd_line_without_rn()
-             << " backend read error : " << backend->remote_endpoint() << " - "  << error << " " << error.message();
+    LOG_DEBUG << "Command::OnUpstreamReplyReceived read error, backend=" << backend
+              << " err="  << error << " " << error.message();
     client_conn_->OnCommandError(shared_from_this(), error);
     return;
   }
@@ -193,7 +193,7 @@ void MemcCommand::OnUpstreamReplyReceived(BackendConn* backend, const boost::sys
 }
 
 // return : is the backend successfully activated
-bool MemcCommand::TryActivateReplyingBackend(BackendConn* backend) {
+bool Command::TryActivateReplyingBackend(BackendConn* backend) {
   if (replying_backend_ == nullptr) {
     replying_backend_ = backend;
     LOG_WARN << __func__ << " ok, backend=" << backend << " replying_backend_=" << replying_backend_;
@@ -202,18 +202,18 @@ bool MemcCommand::TryActivateReplyingBackend(BackendConn* backend) {
   return backend == replying_backend_;
 }
 
-void MemcCommand::Abort() {
+void Command::Abort() {
 //if (backend_conn_) {
-//  backend_conn_->socket().close();
-//  LOG_INFO << "MemcCommand Abort OK.";
+//  backend_conn_->Close();
+//  LOG_INFO << "Command Abort OK.";
 //  delete backend_conn_;
 //  backend_conn_ = 0;
 //} else {
-//  // LOG_WARN << "MemcCommand Abort NULL backend_conn_.";
+//  // LOG_WARN << "Command Abort NULL backend_conn_.";
 //}
 }
 
-void MemcCommand::OnForwardReplyFinished(BackendConn* backend, const boost::system::error_code& error) {
+void Command::OnForwardReplyFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO
     LOG_DEBUG << "WriteCommand::OnForwardReplyFinished(" << cmd_line_without_rn() << ") error=" << error;
@@ -246,13 +246,13 @@ void MemcCommand::OnForwardReplyFinished(BackendConn* backend, const boost::syst
   }
 }
 
-void MemcCommand::TryForwardReply(BackendConn* backend) {
+void Command::TryForwardReply(BackendConn* backend) {
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
   if (!is_transfering_reply_ && unprocessed > 0) {
     is_transfering_reply_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
     backend->buffer()->inc_recycle_lock();
     client_conn_->ForwardReply(backend->buffer()->unprocessed_data(), unprocessed,
-                                  WeakBind(&MemcCommand::OnForwardReplyFinished, backend));
+                                  WeakBind(&Command::OnForwardReplyFinished, backend));
     backend->buffer()->update_processed_bytes(unprocessed);
     LOG_DEBUG << __func__ << " to_process_bytes=" << unprocessed
               << " new_unprocessed=" << backend->buffer()->unprocessed_bytes()
