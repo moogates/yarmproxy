@@ -55,7 +55,7 @@ void ClientConnection::StartRead() {
   AsyncRead();
 }
 
-void ClientConnection::TryReadMoreRequest() {
+void ClientConnection::TryReadMoreQuery() {
   // TODO : checking preconditions
   AsyncRead();
 }
@@ -72,32 +72,32 @@ void ClientConnection::AsyncRead() {
 void ClientConnection::RotateFirstCommand() {
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
-    LOG_INFO << __func__ << " PRE active_cmd_queue_.size=" << active_cmd_queue_.size();
+    // LOG_INFO << __func__ << " PRE active_cmd_queue_.size=" << active_cmd_queue_.size();
     active_cmd_queue_.front()->OnForwardReplyEnabled();
-    ProcessUnparsedData();
-    LOG_INFO << __func__ << " POST active_cmd_queue_.size=" << active_cmd_queue_.size();
+    ProcessUnparsedQuery();
+    // LOG_INFO << __func__ << " POST active_cmd_queue_.size=" << active_cmd_queue_.size();
   } else {
-    LOG_DEBUG << __func__ << " active_cmd_queue_ empty";
+    // LOG_DEBUG << __func__ << " active_cmd_queue_ empty";
   }
 }
 
-void ClientConnection::ForwardResponse(const char* data, size_t bytes, const ForwardResponseCallback& cb) {
+void ClientConnection::ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb) {
   forward_resp_callback_ = cb; // TODO : unused member
 
   // TODO : 成员函数化
   std::weak_ptr<ClientConnection> wptr(shared_from_this());
   auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
-    LOG_DEBUG << "ClientConnection::ForwardResponse callback begin, bytes_transferred=" << bytes_transferred;
+    LOG_DEBUG << "ClientConnection::ForwardReply callback begin, bytes_transferred=" << bytes_transferred;
     if (!error && bytes_transferred < bytes) {
       if (auto ptr = wptr.lock()) {
-        LOG_DEBUG << "ClientConnection::ForwardResponse try write more, bytes_transferred=" << bytes_transferred
+        LOG_DEBUG << "ClientConnection::ForwardReply try write more, bytes_transferred=" << bytes_transferred
                  << " left_bytes=" << bytes - bytes_transferred << " conn=" << ptr.get();
-        ptr->ForwardResponse(data + bytes_transferred, bytes - bytes_transferred, cb);
+        ptr->ForwardReply(data + bytes_transferred, bytes - bytes_transferred, cb);
       } else {
-        LOG_DEBUG << "ClientConnection::ForwardResponse try write more, but conn released";
+        LOG_DEBUG << "ClientConnection::ForwardReply try write more, but conn released";
       }
     } else {
-      LOG_DEBUG << "ClientConnection::ForwardResponse callback, bytes_transferred=" << bytes_transferred
+      LOG_DEBUG << "ClientConnection::ForwardReply callback, bytes_transferred=" << bytes_transferred
                << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
       cb(error);  // 发完了，或出错了，才告知MemcCommand
     }
@@ -106,10 +106,11 @@ void ClientConnection::ForwardResponse(const char* data, size_t bytes, const For
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
-bool ClientConnection::ProcessUnparsedData() {
+bool ClientConnection::ProcessUnparsedQuery() {
   static const size_t MAX_PIPELINE_ACTIVE = 4;
   while(active_cmd_queue_.size() < MAX_PIPELINE_ACTIVE
         && read_buffer_->unparsed_received_bytes() > 0) {
+    // TODO : close the conn if command line is  too long
     std::shared_ptr<MemcCommand> command;
     int parsed_bytes = MemcCommand::CreateCommand(shared_from_this(),
                read_buffer_->unprocessed_data(), read_buffer_->received_bytes(),
@@ -120,11 +121,11 @@ bool ClientConnection::ProcessUnparsedData() {
       socket_.close();
       return false;
     }  else if (parsed_bytes == 0) {
-      TryReadMoreRequest(); // read more data
+      TryReadMoreQuery(); // read more data
       return true;
     } else {
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
-      command->ForwardRequest(read_buffer_->unprocessed_data(), to_process_bytes);
+      command->ForwardQuery(read_buffer_->unprocessed_data(), to_process_bytes);
       active_cmd_queue_.emplace_back(std::move(command));
 
       read_buffer_->update_parsed_bytes(parsed_bytes);
@@ -144,15 +145,15 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
-    active_cmd_queue_.back()->ForwardRequest(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
+    active_cmd_queue_.back()->ForwardQuery(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
     read_buffer_->update_processed_bytes(read_buffer_->unprocessed_bytes());
     if (read_buffer_->parsed_unreceived_bytes() > 0) {
-      // TryReadMoreRequest(); // 现在的做法是，这里不继续read, 而是在ForwardRequest的回调函数里面才继续read. 这并不是最佳方式
+      // TryReadMoreQuery(); // 现在的做法是，这里不继续read, 而是在ForwardQuery的回调函数里面才继续read. 这并不是最佳方式
       return;
     }
   }
 
-  ProcessUnparsedData();
+  ProcessUnparsedQuery();
   return;
 
   static const size_t MAX_PIPELINE_ACTIVE = 5;
@@ -168,11 +169,11 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       socket_.close();
       return;
     }  else if (parsed_bytes == 0) {
-      TryReadMoreRequest(); // read more data
+      TryReadMoreQuery(); // read more data
       return;
     } else {
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
-      command->ForwardRequest(read_buffer_->unprocessed_data(), to_process_bytes);
+      command->ForwardQuery(read_buffer_->unprocessed_data(), to_process_bytes);
       active_cmd_queue_.emplace_back(std::move(command));
 
       read_buffer_->update_parsed_bytes(parsed_bytes);

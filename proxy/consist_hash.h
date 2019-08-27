@@ -13,7 +13,7 @@ using namespace boost::asio;
 
 namespace mcproxy {
 
-typedef std::map<ip::tcp::endpoint, size_t> CacheNodeMap;
+using CacheNodeMap = std::map<ip::tcp::endpoint, size_t>;
 
 class Continuum
 {
@@ -21,12 +21,9 @@ public:
   // 传入配置的格式 : "10.3.17.127:11211 2000;10.3.17.127:11212 3000;10.3.17.127:11213 4000"
   // 端口后面, 是内存大小, 以M为单位
   bool SetCacheNodes(const std::string & cache_nodes);
-
   ip::tcp::endpoint LocateCacheNode(const char * key, size_t len) const;
-
   void Dump();
 
-  //std::vector<std::pair<uint32_t, uint32_t> > GetServerRanges(const std::string & endpoint);
 private:
   bool ParseNodesConfig(const std::string & s, CacheNodeMap * parsed) const;
   bool RebuildCachePoints();

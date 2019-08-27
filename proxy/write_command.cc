@@ -35,61 +35,63 @@ size_t WriteCommand::request_body_upcoming_bytes() const {
   return request_cmd_len_ + request_body_bytes_ - bytes_forwarding_ - request_forwarded_bytes_;
 }
 
-void WriteCommand::ForwardRequest(const char * data, size_t bytes) {
+void WriteCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend_conn_),
-                               WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend_conn_),
+                               WeakBind(&MemcCommand::OnUpstreamReplyReceived, backend_conn_));
   }
 
-  DoForwardRequest(data, bytes);
+  DoForwardQuery(data, bytes);
 }
 
-void WriteCommand::DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) {
+void WriteCommand::DoForwardQuery(const char * request_data, size_t client_buf_received_bytes) {
   client_conn_->buffer()->inc_recycle_lock();
   bytes_forwarding_ = std::min(client_buf_received_bytes, request_cmd_len_ + request_body_bytes_); // FIXME
-  backend_conn_->ForwardRequest(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
+  backend_conn_->ForwardQuery(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
 }
 
-void WriteCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
+void WriteCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_DEBUG << "WriteCommand OnForwardRequestFinished error";
+    LOG_DEBUG << "WriteCommand OnForwardQueryFinished error";
     return;
   }
   assert(backend == backend_conn_);
-  LOG_DEBUG << "WriteCommand OnForwardRequestFinished ok, bytes_forwarding_=" << bytes_forwarding_;
+  LOG_DEBUG << "WriteCommand OnForwardQueryFinished ok, bytes_forwarding_=" << bytes_forwarding_;
   client_conn_->buffer()->dec_recycle_lock();
 
   request_forwarded_bytes_ += bytes_forwarding_;
   bytes_forwarding_ = 0;
 
   if (request_forwarded_bytes_ < request_cmd_len_ + request_body_bytes_) {
-    LOG_DEBUG << "WriteCommand::OnForwardRequestFinished 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
-    client_conn_->TryReadMoreRequest();
+    LOG_DEBUG << "WriteCommand::OnForwardQueryFinished 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
+    client_conn_->TryReadMoreQuery();
   } else {
-    LOG_DEBUG << "WriteCommand::OnForwardRequestFinished 转发了当前命令的所有数据, 等待 backend 的响应.";
-    backend_conn_->ReadResponse();
+    LOG_DEBUG << "WriteCommand::OnForwardQueryFinished 转发了当前命令的所有数据, 等待 backend 的响应.";
+    backend_conn_->ReadReply();
   }
 }
 
-bool WriteCommand::ParseUpstreamResponse(BackendConn* backend) {
+bool WriteCommand::ParseReply(BackendConn* backend) {
   assert(backend_conn_ == backend);
   const char * entry = backend_conn_->buffer()->unparsed_data();
   const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
   if (p == nullptr) {
     // TODO : no enough data for parsing, please read more
-    LOG_DEBUG << "WriteCommand ParseUpstreamResponse no enough data for parsing, please read more"
+    LOG_DEBUG << "WriteCommand ParseReply no enough data for parsing, please read more"
               // << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
               << " bytes=" << backend_conn_->buffer()->unparsed_bytes();
     return true;
   }
 
   backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
-  LOG_DEBUG << "WriteCommand ParseUpstreamResponse resp.size=" << p - entry + 1;
-            // << " contont=[" << std::string(entry, p - entry - 1) << "]";
+  LOG_DEBUG << "WriteCommand ParseReply resp.size=" << p - entry + 1
+            // << " contont=[" << std::string(entry, p - entry - 1) << "]"
+            << " set_reply_complete, backend=" << backend;
+  backend->set_reply_complete();
   return true;
 }
 

@@ -19,6 +19,7 @@ ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
                    std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map)
     : MemcCommand(owner)
     , finished_count_(0)
+    , last_backend_(nullptr)
 {
   for(auto& it : endpoint_query_map) {
     LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first << " query=" << it.second;
@@ -39,22 +40,31 @@ ParallelGetCommand::~ParallelGetCommand() {
   LOG_DEBUG << "ParallelGetCommand dtor " << --parallel_get_cmd_count;
 }
 
-void ParallelGetCommand::ForwardRequest(const char *, size_t) {
-  DoForwardRequest(nullptr, 0);
+void ParallelGetCommand::ForwardQuery(const char *, size_t) {
+  DoForwardQuery(nullptr, 0);
 }
 
-void ParallelGetCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
+void ParallelGetCommand::HookOnUpstreamReplyReceived(BackendConn* backend) {
+  if (all_ready_set_.insert(backend).second) {
+    if (all_ready_set_.size() == query_set_.size()) {
+      last_backend_ = backend;
+      LOG_DEBUG << __func__ << " set last backend=" << backend;
+    }
+  }
+}
+
+void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_DEBUG << "ParallelGetCommand OnForwardRequestFinished error";
+    LOG_DEBUG << "ParallelGetCommand OnForwardQueryFinished error";
     return;
   }
-  LOG_DEBUG << "ParallelGetCommand::OnForwardRequestFinished 转发了当前命令, 等待backend的响应.";
-  backend->ReadResponse();
+  LOG_DEBUG << "ParallelGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
+  backend->ReadReply();
 }
 
 void ParallelGetCommand::PushReadyQueue(BackendConn* backend) {
-  if (ready_set_.insert(backend).second) {
+  if (ready_queue_flags_.insert(backend).second) {
     ready_queue_.push(backend);
     LOG_DEBUG << "ParallelGetCommand PushReadyQueue, backend=" << backend << " ready_queue_.size=" << ready_queue_.size();
   } else {
@@ -66,23 +76,44 @@ void ParallelGetCommand::OnForwardReplyEnabled() {
   if (ready_queue_.size() > 0) {
     replying_backend_ = ready_queue_.front();
     ready_queue_.pop();
-    LOG_DEBUG << __func__ << " activate ready backend,"
+    LOG_WARN << __func__ << " activate ready backend,"
               << " replying_backend_=" << replying_backend_;
-    TryForwardResponse(replying_backend_);
+    TryForwardReply(replying_backend_);
   } else {
     LOG_DEBUG << __func__ << " no ready backend to activate,"
               << " replying_backend_=" << replying_backend_;
+    replying_backend_ = nullptr;
   }
 }
 
-bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
+void ParallelGetCommand::RotateFirstBackend() {
+  ++finished_count_;
+//LOG_DEBUG << "ParallelGetCommand RotateFirstBackend finished_count_=" << finished_count_;
+
+//if (ready_queue_.size() > 0) {
+//  replying_backend_ = ready_queue_.front();
+//  ready_queue_.pop();
+//  LOG_WARN << "ParallelGetCommand RotateFirstBackend, activate ready backend"
+//            << " replying_backend_=" << replying_backend_;
+
+//  TryForwardReply(replying_backend_);
+//} else {
+//  LOG_DEBUG << "ParallelGetCommand RotateFirstBackend, no ready backend, wait";
+//  replying_backend_ = nullptr;
+//}
+
+  OnForwardReplyEnabled();
+}
+
+bool ParallelGetCommand::ParseReply(BackendConn* backend) {
   bool valid = true;
   while(backend->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend->buffer()->unparsed_data();
-    const char * p = GetLineEnd(entry, backend->buffer()->unparsed_bytes());
+    size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
+    const char * p = GetLineEnd(entry, unparsed_bytes);
     if (p == nullptr) {
       // TODO : no enough data for parsing, please read more
-      LOG_DEBUG << "ParseUpstreamResponse no enough data for parsing, please read more"
+      LOG_DEBUG << "ParseReply no enough data for parsing, please read more"
                 << " bytes=" << backend->buffer()->unparsed_bytes();
       return true;
     }
@@ -91,22 +122,27 @@ bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
       // "VALUE <key> <flag> <bytes>\r\n"
       size_t body_bytes = GetValueBytes(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
-      LOG_DEBUG << __func__ << " recv_body=(" << std::string(entry, entry_bytes) << ")";
+      LOG_DEBUG << __func__ << " VALUE data, backend=" << backend << " recv_body=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
       backend->buffer()->update_parsed_bytes(entry_bytes);
       // break; // TODO : 每次转发一条，only for test
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
-        backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
-        if (backend->buffer()->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
+        if (backend->buffer()->unparsed_bytes() != (sizeof("END\r\n") - 1)) { // TODO : pipeline的情况呢?
           valid = false;
-          LOG_DEBUG << "ParseUpstreamResponse END not really end!";
+          LOG_DEBUG << "ParseReply END not really end! backend=" << backend;
         } else {
-          LOG_DEBUG << "ParseUpstreamResponse END is really end!";
+          LOG_DEBUG << "ParseReply END is really end! set_reply_complete, backend=" << backend;
+          backend->set_reply_complete();
+          if (backend == last_backend_) {
+            backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
+          } else {
+            backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
+          }
         }
         break;
       } else {
-        LOG_WARN << "ParseUpstreamResponse BAD DATA";
+        LOG_WARN << "ParseReply BAD DATA";
         // TODO : ERROR
         valid = false;
         break;
@@ -116,22 +152,21 @@ bool ParallelGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   return valid;
 }
 
-void ParallelGetCommand::DoForwardRequest(const char *, size_t) {
+void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
   for(auto& query : query_set_) {
     BackendConn* backend = query->backend_conn_;
     if (backend == nullptr) {
       // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
       LOG_DEBUG << "ParallelGetCommand sub query(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ") create backend conn";
       backend = context_.backend_conn_pool()->Allocate(query->backend_addr_);
-      backend->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend),
-                                 WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend));
+      backend->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend),
+                                 WeakBind(&MemcCommand::OnUpstreamReplyReceived, backend));
       query->backend_conn_ = backend;
     }
-    LOG_DEBUG << __func__ << " ForwardRequest, query=(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
-    backend->ForwardRequest(query->query_line_.data(), query->query_line_.size(), false);
+    LOG_DEBUG << __func__ << " ForwardQuery, query=(" << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
+    backend->ForwardQuery(query->query_line_.data(), query->query_line_.size(), false);
   }
 }
 
 }
-
 

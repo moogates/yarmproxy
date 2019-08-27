@@ -44,38 +44,39 @@ SingleGetCommand::~SingleGetCommand() {
   LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
 }
 
-void SingleGetCommand::ForwardRequest(const char * data, size_t bytes) {
+void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     // LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
     LOG_DEBUG << "MemcCommand(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardRequestFinished, backend_conn_),
-                               WeakBind(&MemcCommand::OnUpstreamResponseReceived, backend_conn_));
+    backend_conn_->SetReadWriteCallback(WeakBind(&MemcCommand::OnForwardQueryFinished, backend_conn_),
+                               WeakBind(&MemcCommand::OnUpstreamReplyReceived, backend_conn_));
   }
 
-  DoForwardRequest(data, bytes);
+  DoForwardQuery(data, bytes);
 }
 
-void SingleGetCommand::OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) {
+void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
-    LOG_INFO << "WriteCommand OnForwardRequestFinished error";
+    LOG_INFO << "WriteCommand OnForwardQueryFinished error";
     return;
   }
   assert(backend == backend_conn_);
-  LOG_DEBUG << "SingleGetCommand::OnForwardRequestFinished 转发了当前命令, 等待backend的响应.";
-  backend_conn_->ReadResponse();
+  LOG_DEBUG << "SingleGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
+  backend_conn_->ReadReply();
 }
 
-bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
+bool SingleGetCommand::ParseReply(BackendConn* backend) {
   bool valid = true;
   assert(backend_conn_ == backend);
   while(backend_conn_->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend_conn_->buffer()->unparsed_data();
-    const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
+    size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
+    const char * p = GetLineEnd(entry, unparsed_bytes);
     if (p == nullptr) {
       // TODO : no enough data for parsing, please read more
-      LOG_DEBUG << "ParseUpstreamResponse no enough data for parsing, please read more"
+      LOG_DEBUG << "ParseReply no enough data for parsing, please read more"
                 << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
                 << " bytes=" << backend_conn_->buffer()->unparsed_bytes();
       return true;
@@ -87,20 +88,24 @@ bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
 
       backend_conn_->buffer()->update_parsed_bytes(entry_bytes);
+      LOG_DEBUG << __func__ << " VALUE data, backend=" << backend << " recv_body=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
       // break; // TODO : 每次转发一条，only for test
     } else {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
         backend_conn_->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
-        if (backend_conn_->buffer()->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
+        // if (backend->buffer()->unparsed_bytes() != (sizeof("END\r\n") - 1)) { // TODO : pipeline的情况呢?
+        if (backend->buffer()->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
           valid = false;
-          LOG_DEBUG << "ParseUpstreamResponse END not really end!";
+          LOG_DEBUG << "ParseReply END not really end!";
         } else {
-          LOG_DEBUG << "ParseUpstreamResponse END is really end!";
+          LOG_DEBUG << "ParseReply END is really end! set_reply_complete, backend=" << backend;
+          backend->set_reply_complete();
+          // backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
         }
         break;
       } else {
-        LOG_WARN << "ParseUpstreamResponse BAD DATA";
+        LOG_WARN << "ParseReply BAD DATA";
         // TODO : ERROR
         valid = false;
         break;
@@ -110,8 +115,8 @@ bool SingleGetCommand::ParseUpstreamResponse(BackendConn* backend) {
   return valid;
 }
 
-void SingleGetCommand::DoForwardRequest(const char *, size_t) {
-  backend_conn_->ForwardRequest(cmd_line_.data(), cmd_line_.size(), false);
+void SingleGetCommand::DoForwardQuery(const char *, size_t) {
+  backend_conn_->ForwardQuery(cmd_line_.data(), cmd_line_.size(), false);
 }
 
 }

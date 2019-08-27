@@ -28,19 +28,19 @@ public:
   virtual ~WriteCommand();
 
   size_t request_body_upcoming_bytes() const override;
-  void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
 
   size_t request_body_bytes() const override {  // for debug info only
     return request_body_bytes_;
   }
 private:
   void OnForwardReplyEnabled() override {
-    TryForwardResponse(backend_conn_);
+    TryForwardReply(backend_conn_);
   }
 
-  void ForwardRequest(const char * data, size_t bytes) override;
-  bool ParseUpstreamResponse(BackendConn* backend) override;
-  void DoForwardRequest(const char * request_data, size_t client_buf_received_bytes) override;
+  void ForwardQuery(const char * data, size_t bytes) override;
+  bool ParseReply(BackendConn* backend) override;
+  void DoForwardQuery(const char * request_data, size_t client_buf_received_bytes) override;
 
   std::string cmd_line_without_rn() const override {
     return std::string(request_cmd_line_, request_cmd_len_ - 2);

@@ -15,13 +15,14 @@ public:
 
   virtual ~ParallelGetCommand();
 
-  void ForwardRequest(const char * data, size_t bytes) override;
+  void ForwardQuery(const char * data, size_t bytes) override;
   void OnForwardReplyEnabled() override;
 
 private:
-  void OnForwardRequestFinished(BackendConn* backend, const boost::system::error_code& error) override;
-  void DoForwardRequest(const char *, size_t) override;
-  bool ParseUpstreamResponse(BackendConn* backend) override;
+  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void HookOnUpstreamReplyReceived(BackendConn* backend) override;
+  void DoForwardQuery(const char *, size_t) override;
+  bool ParseReply(BackendConn* backend) override;
 
   void PushReadyQueue(BackendConn* backend) override; 
   bool HasMoreBackend() const override {
@@ -32,19 +33,7 @@ private:
               << " query_set_.size=" << query_set_.size();
     return ret;
   }
-  void RotateFirstBackend() override {
-    ++finished_count_;
-    LOG_DEBUG << "ParallelGetCommand RotateFirstBackend finished_count_=" << finished_count_;
-    if (ready_queue_.size() > 0) {
-      replying_backend_ = ready_queue_.front();
-      ready_queue_.pop();
-      LOG_DEBUG << "ParallelGetCommand RotateFirstBackend, activate ready backend";
-      TryForwardResponse(replying_backend_);
-      return;
-    }
-    LOG_DEBUG << "ParallelGetCommand RotateFirstBackend, no ready backend, wait";
-    replying_backend_ = nullptr;
-  }
+  void RotateFirstBackend() override;
 
   std::string cmd_line_without_rn() const override {
     return "PARALLEL GET";
@@ -66,10 +55,12 @@ private:
   };
 
   std::vector<std::unique_ptr<BackendQuery>> query_set_;
-  // std::vector<BackendQuery*> query_set_;
   std::queue<BackendConn*> ready_queue_;
-  std::set<BackendConn*> ready_set_;
+  std::set<BackendConn*> ready_queue_flags_;
   size_t finished_count_;
+  BackendConn* last_backend_;
+
+  std::set<BackendConn*> all_ready_set_;
 };
 
 }
