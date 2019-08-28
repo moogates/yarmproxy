@@ -12,12 +12,12 @@ private:
 //ip::tcp::endpoint backend_endpoint_;
 //BackendConn* backend_conn_;
 
-  const char * request_cmd_line_;
+  const char * request_cmd_line_; // TODO: request -> query
   size_t request_cmd_len_;
 
   size_t request_forwarded_bytes_;
   size_t request_body_bytes_;
-  size_t bytes_forwarding_;
+  size_t bytes_forwarding_;  // TODO : rename to "query_forwarding_bytes_"
 
   ip::tcp::endpoint backend_endpoint_;
   BackendConn* backend_conn_;

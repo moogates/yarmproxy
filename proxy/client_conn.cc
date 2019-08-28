@@ -106,8 +106,8 @@ void ClientConnection::ForwardReply(const char* data, size_t bytes, const Forwar
 }
 
 bool ClientConnection::ProcessUnparsedQuery() {
-  static const size_t MAX_PIPELINE_ACTIVE = 4;
-  while(active_cmd_queue_.size() < MAX_PIPELINE_ACTIVE
+  static const size_t PIPELINE_ACTIVE_LIMIT = 4;
+  while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
         && read_buffer_->unparsed_received_bytes() > 0) {
     // TODO : close the conn if command line is  too long
     std::shared_ptr<Command> command;
@@ -155,8 +155,8 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   ProcessUnparsedQuery();
   return;
 
-  static const size_t MAX_PIPELINE_ACTIVE = 5;
-  while(active_cmd_queue_.size() < MAX_PIPELINE_ACTIVE
+  static const size_t PIPELINE_ACTIVE_LIMIT = 5;
+  while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
         && read_buffer_->unparsed_received_bytes() > 0) {
     std::shared_ptr<Command> command;
     int parsed_bytes = Command::CreateCommand(shared_from_this(),
