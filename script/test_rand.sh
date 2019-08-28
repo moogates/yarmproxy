@@ -3,6 +3,6 @@ for seq in `seq 1 100000`; do
   echo "round $seq bod_size=$body_size"
   ./set.sh $body_size
   ./get.sh
-  sleep 0.02
+  ./truncate_log.sh
 done
 #while true; do ./get.sh; sleep 0.02; done

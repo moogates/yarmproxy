@@ -26,7 +26,7 @@ ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
     LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first << " query=" << it.second;
     query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
   }
-  LOG_DEBUG << "ParallelGetCommand ctor " << ++parallel_get_cmd_count;
+  LOG_DEBUG << "ParallelGetCommand ctor, connt=" << ++parallel_get_cmd_count;
 }
 
 ParallelGetCommand::~ParallelGetCommand() {
@@ -38,7 +38,7 @@ ParallelGetCommand::~ParallelGetCommand() {
       context_.backend_conn_pool()->Release(query->backend_conn_);
     }
   }
-  LOG_DEBUG << "ParallelGetCommand dtor " << --parallel_get_cmd_count;
+  LOG_DEBUG << "ParallelGetCommand dtor, cmd=" << this << " connt=" << --parallel_get_cmd_count;
 }
 
 void ParallelGetCommand::ForwardQuery(const char *, size_t) {
@@ -77,14 +77,15 @@ void ParallelGetCommand::PushWaitingReplyQueue(BackendConn* backend) {
 
 void ParallelGetCommand::OnForwardReplyEnabled() {
   // RotateReplyingBackend();
+  LOG_DEBUG << "ParallelGetCommand::OnForwardReplyEnabled cmd=" << this << " old replying_backend_=" << replying_backend_;
   if (waiting_reply_queue_.size() > 0) {
     replying_backend_ = waiting_reply_queue_.front();
     waiting_reply_queue_.pop_front();
-    LOG_WARN << __func__ << " activate ready backend,"
+    LOG_DEBUG << "ParallelGetCommand::OnForwardReplyEnabled activate ready backend,"
               << " replying_backend_=" << replying_backend_;
     TryForwardReply(replying_backend_);
   } else {
-    LOG_DEBUG << __func__ << " no ready backend to activate,"
+    LOG_DEBUG << "ParallelGetCommand::OnForwardReplyEnabled no ready backend to activate,"
               << " replying_backend_=" << replying_backend_;
     replying_backend_ = nullptr;
   }
@@ -114,8 +115,8 @@ bool ParallelGetCommand::ParseReply(BackendConn* backend) {
       // "VALUE <key> <flag> <bytes>\r\n"
       size_t body_bytes = GetValueBytes(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
-      LOG_DEBUG << __func__ << " VALUE data, backend=" << backend
-                << " recv_body=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
+      LOG_DEBUG << "ParseReply VALUE data, backend=" << backend << " bytes=" << std::min(unparsed_bytes, entry_bytes)
+                << " data=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
       backend->buffer()->update_parsed_bytes(entry_bytes);
       // break; // 这里如果break, 则每次转发一条，only for test
     } else {
@@ -125,11 +126,12 @@ bool ParallelGetCommand::ParseReply(BackendConn* backend) {
           valid = false;
           LOG_DEBUG << "ParseReply END not really end! backend=" << backend;
         } else {
-          LOG_DEBUG << "ParseReply END is really end! set_reply_complete, backend=" << backend;
           backend->set_reply_complete();
           if (backend == last_backend_) {
+            LOG_DEBUG << "ParseReply END is really end, is last, backend=" << backend;
             backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
           } else {
+            LOG_DEBUG << "ParseReply END is really end, is not last, backend=" << backend;
             backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only
             // backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
           }
@@ -154,10 +156,10 @@ void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
       backend->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend),
                                  WeakBind(&Command::OnUpstreamReplyReceived, backend));
       query->backend_conn_ = backend;
-      LOG_DEBUG << "ParallelGetCommand ForwardQuery allocated backend=" << backend << " query=("
+      LOG_DEBUG << "ParallelGetCommand ForwardQuery cmd=" << this << " allocated backend=" << backend << " query=("
                 << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
     }
-    LOG_DEBUG << "ParallelGetCommand ForwardQuery backend=" << backend << ", query=("
+    LOG_DEBUG << "ParallelGetCommand ForwardQuery cmd=" << this << " backend=" << backend << ", query=("
               << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
     backend->ForwardQuery(query->query_line_.data(), query->query_line_.size(), false);
   }

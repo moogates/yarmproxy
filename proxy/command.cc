@@ -202,7 +202,7 @@ void Command::OnUpstreamReplyReceived(BackendConn* backend, const boost::system:
 bool Command::TryActivateReplyingBackend(BackendConn* backend) {
   if (replying_backend_ == nullptr) {
     replying_backend_ = backend;
-    LOG_WARN << __func__ << " ok, backend=" << backend << " replying_backend_=" << replying_backend_;
+    LOG_DEBUG << "TryActivateReplyingBackend ok, backend=" << backend << " replying_backend_=" << replying_backend_;
     return true;
   }
   return backend == replying_backend_;

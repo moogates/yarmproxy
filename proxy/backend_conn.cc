@@ -93,13 +93,13 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_
 {
   if (error) {
     // TODO : 如何通知给command?
-    LOG_DEBUG << "HandleWrite error, upconn=" << this << " ep="
+    LOG_DEBUG << "BackendConn::HandleWrite error, backend=" << this << " ep="
              << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     return;
   }
 
-  LOG_DEBUG << "ParallelGetCommand HandleWrite ok, upconn=" << this << " ep=" << remote_endpoint_
+  LOG_DEBUG << "BackendConn::HandleWrite ok, backend=" << this << " ep=" << remote_endpoint_
             << " " << bytes << " bytes transfered to backend";
 
   if (bytes_transferred < bytes) {
@@ -118,12 +118,12 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    LOG_DEBUG << "BackendConn::HandleRead backend read error, upconn=" << this
+    LOG_DEBUG << "BackendConn::HandleRead read error, backend=" << this
              << " ep=" << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     // TODO : 如何通知给外界?
   } else {
-    LOG_DEBUG << "ParallelGetCommand BackendConn::HandleRead backend read ok, bytes_transferred=" << bytes_transferred << " upconn=" << this;
+    LOG_DEBUG << "BackendConn::HandleRead read ok, bytes_transferred=" << bytes_transferred << " backend=" << this;
     is_reading_more_ = false;  // finish reading, you could memmove now
 
     read_buffer_->update_received_bytes(bytes_transferred);
