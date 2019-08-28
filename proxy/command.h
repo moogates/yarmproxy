@@ -8,8 +8,6 @@
 
 #include <boost/asio.hpp>
 
-#include "client_conn.h"
-
 using namespace boost::asio;
 
 namespace yarmproxy {
@@ -17,6 +15,8 @@ namespace yarmproxy {
 class BackendConn;
 class WorkerContext;
 class ClientConnection;
+
+typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
 
 class Command : public std::enable_shared_from_this<Command> {
 public:
@@ -33,7 +33,7 @@ public:
 
   // backend_conn收到reply数据后, 调用OnUpstreamReplyReceived()
   void OnUpstreamReplyReceived(BackendConn* backend, const boost::system::error_code& error);
-  virtual void OnForwardReplyEnabled() = 0;
+  virtual void OnForwardReplyEnabled() = 0; // TODO : need not in base class
   void OnForwardReplyFinished(BackendConn* backend, const boost::system::error_code& error);
 
 public:
@@ -42,9 +42,7 @@ public:
 
 private:
   virtual void HookOnUpstreamReplyReceived(BackendConn* backend){}
-  virtual void RotateReplyingBackend() {
-    client_conn_->RotateReplyingCommand();
-  }
+  virtual void RotateReplyingBackend();
 
   bool TryActivateReplyingBackend(BackendConn* backend);
 

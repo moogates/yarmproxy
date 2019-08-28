@@ -1,6 +1,8 @@
 #ifndef _YARMPROXY_PARALLEL_GET_COMMAND_H_
 #define _YARMPROXY_PARALLEL_GET_COMMAND_H_
 
+#include <set>
+
 #include "command.h"
 
 using namespace boost::asio;

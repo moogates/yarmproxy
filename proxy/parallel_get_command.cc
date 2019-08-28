@@ -79,11 +79,19 @@ void ParallelGetCommand::OnForwardReplyEnabled() {
   // RotateReplyingBackend();
   LOG_DEBUG << "ParallelGetCommand::OnForwardReplyEnabled cmd=" << this << " old replying_backend_=" << replying_backend_;
   if (waiting_reply_queue_.size() > 0) {
-    replying_backend_ = waiting_reply_queue_.front();
+    // replying_backend_ = waiting_reply_queue_.front();
+    auto backend = waiting_reply_queue_.front();
     waiting_reply_queue_.pop_front();
     LOG_DEBUG << "ParallelGetCommand::OnForwardReplyEnabled activate ready backend,"
-              << " replying_backend_=" << replying_backend_;
-    TryForwardReply(replying_backend_);
+              << " backend=" << backend;
+    if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
+      ++completed_backends_;
+      LOG_DEBUG << "OnForwardReplyEnabled backend=" << backend << " empty reply";
+      RotateReplyingBackend();
+    } else {
+      TryForwardReply(backend);
+      replying_backend_ = backend;
+    }
   } else {
     LOG_DEBUG << "ParallelGetCommand::OnForwardReplyEnabled no ready backend to activate,"
               << " replying_backend_=" << replying_backend_;
@@ -132,13 +140,13 @@ bool ParallelGetCommand::ParseReply(BackendConn* backend) {
             backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
           } else {
             LOG_DEBUG << "ParseReply END is really end, is not last, backend=" << backend;
-            backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only
-            // backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
+            // backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only
+            backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
           }
         }
         break;
       } else {
-        LOG_WARN << "ParseReply BAD DATA";
+        LOG_WARN << "ParseReply BAD DATA, line=[" << std::string(entry, p - entry) << "]";
         // TODO : ERROR
         valid = false;
         break;

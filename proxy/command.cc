@@ -243,6 +243,10 @@ void Command::OnForwardReplyFinished(BackendConn* backend, const boost::system::
   }
 }
 
+void Command::RotateReplyingBackend() {
+  client_conn_->RotateReplyingCommand();
+}
+
 void Command::TryForwardReply(BackendConn* backend) {
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
   if (!is_transfering_reply_ && unprocessed > 0) {
