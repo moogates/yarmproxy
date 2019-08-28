@@ -1,5 +1,5 @@
 #include "proxy_server.h"
-#include "base/logging.h"
+#include "logging.h"
 
 int main() {
   // base::InitLogging("yamproxy.log", "TRACE");

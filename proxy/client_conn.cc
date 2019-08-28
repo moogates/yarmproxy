@@ -3,7 +3,7 @@
 #include <atomic>
 #include <memory>
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "allocator.h"
 #include "backend_conn.h"

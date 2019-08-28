@@ -1,6 +1,6 @@
 #include "allocator.h"
 
-#include "base/logging.h"
+#include "logging.h"
 
 namespace yarmproxy {
 

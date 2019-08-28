@@ -1,6 +1,6 @@
 #include "single_get_command.h"
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "backend_conn.h"
 #include "client_conn.h"

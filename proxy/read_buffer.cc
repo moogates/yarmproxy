@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-#include "base/logging.h"
+#include "logging.h"
 
 namespace yarmproxy {
 

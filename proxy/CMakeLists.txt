@@ -7,16 +7,15 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -O0 -g -ggdb")
 set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O2")
 
-include_directories(..)
 include_directories(/usr/local/include)
-# add_definitions("-Wall -std=c++11") 
+
+add_definitions(-DLOGURU_WITH_STREAMS=1) 
 
 file(GLOB SOURCES "*.cc")
 #set(SOURCES src/main.cc src/proxy_server.cc)
-link_directories(../base/build)
 link_directories(/usr/local/lib)
 
 add_executable(yarmproxy ${SOURCES})
 
-target_link_libraries(yarmproxy memc_base boost_system boost_thread pthread dl)
+target_link_libraries(yarmproxy boost_system boost_thread pthread dl)
 

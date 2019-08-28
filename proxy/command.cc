@@ -5,8 +5,7 @@
 
 #include <boost/asio.hpp>
 
-#include "base/logging.h"
-
+#include "logging.h"
 #include "worker_pool.h"
 #include "client_conn.h"
 #include "backend_locator.h"

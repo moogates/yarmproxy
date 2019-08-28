@@ -1,6 +1,6 @@
 #include "worker_pool.h"
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "allocator.h"
 #include "backend_conn.h"
