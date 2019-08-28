@@ -17,7 +17,7 @@
 #include "parallel_get_command.h"
 #include "write_command.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 // 指向行尾的'\n'字符
 const char * GetLineEnd(const char * buf, size_t len) {

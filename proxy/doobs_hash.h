@@ -1,9 +1,9 @@
-#ifndef _DOOBS_HASH_H_
-#define _DOOBS_HASH_H_
+#ifndef _YARMPROXY_DOOBS_HASH_H_
+#define _YARMPROXY_DOOBS_HASH_H_
 
 #include <cstdint>
 
-namespace mcproxy {
+namespace yarmproxy {
 
 /*
 --------------------------------------------------------------------
@@ -41,5 +41,5 @@ uint32_t doobs_hash(const char * k, uint32_t length, uint32_t initval = 0);
 
 }
 
-#endif // _DOOBS_HASH_H_
+#endif // _YARMPROXY_DOOBS_HASH_H_
 

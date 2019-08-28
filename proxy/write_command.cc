@@ -7,7 +7,7 @@
 #include "read_buffer.h"
 #include "worker_pool.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 const char * GetLineEnd(const char * buf, size_t len);
 

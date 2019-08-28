@@ -4,7 +4,7 @@
 
 #include "base/logging.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 size_t ReadBuffer::unparsed_bytes() const {
   if (received_offset_ > parsed_offset_) {

@@ -1,10 +1,10 @@
-#ifndef _BACKEND_LOCATOR_H_
-#define _BACKEND_LOCATOR_H_
+#ifndef _YARMPROXY_BACKEND_LOCATOR_H_
+#define _YARMPROXY_BACKEND_LOCATOR_H_
 
 #include <string>
 #include <boost/asio.hpp>
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class Continuum;
 
@@ -25,4 +25,4 @@ private:
 
 }
 
-#endif // _BACKEND_LOCATOR_H_
+#endif // _YARMPROXY_BACKEND_LOCATOR_H_

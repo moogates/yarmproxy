@@ -7,7 +7,7 @@
 #include "read_buffer.h"
 #include "worker_pool.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 std::atomic_int single_get_cmd_count;
 

@@ -1,5 +1,5 @@
-#ifndef _YAMPROXY_COMMAND_H_
-#define _YAMPROXY_COMMAND_H_
+#ifndef _YARMPROXY_COMMAND_H_
+#define _YARMPROXY_COMMAND_H_
 
 #include <list>
 #include <vector>
@@ -12,7 +12,7 @@
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class BackendConn;
 class WorkerContext;
@@ -80,5 +80,5 @@ private:
 
 }
 
-#endif // _YAMPROXY_COMMAND_H_
+#endif // _YARMPROXY_COMMAND_H_
 

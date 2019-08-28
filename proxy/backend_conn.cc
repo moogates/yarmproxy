@@ -8,7 +8,7 @@
 
 const static size_t kMaxConnPerEndpoint = 64;
 
-namespace mcproxy {
+namespace yarmproxy {
 // TODO: 更好的容错，以及错误返回信息, 例如
 //   客户端格式错误时候，memcached返回错误信息: "CLIENT_ERROR bad data chunk\r\n"
 

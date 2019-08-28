@@ -3,7 +3,7 @@
 #include "doobs_hash.h"
 #include "base/logging.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 bool Continuum::RebuildCachePoints() {
   if(cache_nodes_.empty()) {

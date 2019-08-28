@@ -1,9 +1,9 @@
-#ifndef _READ_BUFFER_H_
-#define _READ_BUFFER_H_
+#ifndef _YARMPROXY_READ_BUFFER_H_
+#define _YARMPROXY_READ_BUFFER_H_
 
 #include <algorithm>
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class ReadBuffer {
 private:
@@ -99,5 +99,5 @@ private:
 
 }
 
-#endif // _READ_BUFFER_H_
+#endif // _YARMPROXY_READ_BUFFER_H_
 

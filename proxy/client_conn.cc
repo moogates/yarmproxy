@@ -13,7 +13,7 @@
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 // TODO : gracefully close connections
 

@@ -1,11 +1,11 @@
-#ifndef _WRITE_COMMAND_H_
-#define _WRITE_COMMAND_H_
+#ifndef _YARMPROXY_WRITE_COMMAND_H_
+#define _YARMPROXY_WRITE_COMMAND_H_
 
 #include "command.h"
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class WriteCommand : public Command {
 private:
@@ -41,4 +41,4 @@ private:
 
 }
 
-#endif // _WRITE_COMMAND_H_
+#endif // _YARMPROXY_WRITE_COMMAND_H_

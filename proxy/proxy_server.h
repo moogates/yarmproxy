@@ -1,11 +1,11 @@
-#ifndef _PROXY_SERVER_H_
-#define _PROXY_SERVER_H_
+#ifndef _YARMPROXY_PROXY_SERVER_H_
+#define _YARMPROXY_PROXY_SERVER_H_
 
 #include <memory>
 #include <vector>
 #include <boost/asio.hpp>
 
-namespace mcproxy {
+namespace yarmproxy {
 
 using namespace boost::asio;
 
@@ -36,5 +36,5 @@ private:
 
 }
 
-#endif // _PROXY_SERVER_H_
+#endif // _YARMPROXY_PROXY_SERVER_H_
 

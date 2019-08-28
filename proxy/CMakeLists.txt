@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.9)
-project(mcproxy)
+project(yarmproxy)
 
 # set (CMAKE_BUILD_TYPE "Debug")
 set (CMAKE_BUILD_TYPE "Release")
@@ -16,7 +16,7 @@ file(GLOB SOURCES "*.cc")
 link_directories(../base/build)
 link_directories(/usr/local/lib)
 
-add_executable(mcproxy ${SOURCES})
+add_executable(yarmproxy ${SOURCES})
 
-target_link_libraries(mcproxy memc_base boost_system boost_thread pthread dl)
+target_link_libraries(yarmproxy memc_base boost_system boost_thread pthread dl)
 

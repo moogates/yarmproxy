@@ -1,11 +1,11 @@
-#ifndef _PARALLEL_GET_COMMAND_H_
-#define _PARALLEL_GET_COMMAND_H_
+#ifndef _YARMPROXY_PARALLEL_GET_COMMAND_H_
+#define _YARMPROXY_PARALLEL_GET_COMMAND_H_
 
 #include "command.h"
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class ParallelGetCommand : public Command {
 public:
@@ -53,5 +53,5 @@ private:
 
 }
 
-#endif  // _PARALLEL_GET_COMMAND_H_
+#endif  // _YARMPROXY_PARALLEL_GET_COMMAND_H_
 

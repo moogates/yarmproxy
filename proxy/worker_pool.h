@@ -1,10 +1,10 @@
-#ifndef _WORKER_POOL_H_
-#define _WORKER_POOL_H_
+#ifndef _YARMPROXY_WORKER_POOL_H_
+#define _YARMPROXY_WORKER_POOL_H_
 
 #include <thread>
 #include <boost/asio.hpp>
 
-namespace mcproxy {
+namespace yarmproxy {
 using namespace boost::asio;
 
 class BackendConnPool;
@@ -48,5 +48,5 @@ private:
 
 }
 
-#endif // _WORKER_POOL_H_
+#endif // _YARMPROXY_WORKER_POOL_H_
 

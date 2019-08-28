@@ -9,7 +9,7 @@
 #include "worker_pool.h"
 #include "backend_locator.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
   size_t pos = ep.find(':');

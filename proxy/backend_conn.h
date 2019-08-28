@@ -1,5 +1,5 @@
-#ifndef _BACKEND_CONN_H_
-#define _BACKEND_CONN_H_
+#ifndef _YARMPROXY_BACKEND_CONN_H_
+#define _YARMPROXY_BACKEND_CONN_H_
 
 #include <map>
 #include <queue>
@@ -9,7 +9,7 @@
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 class WorkerContext;
 class ReadBuffer;
 
@@ -73,4 +73,4 @@ public:
 
 }
 
-#endif // _BACKEND_CONN_H_
+#endif // _YARMPROXY_BACKEND_CONN_H_

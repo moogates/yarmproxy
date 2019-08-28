@@ -6,7 +6,7 @@
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 // static const char * backend_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;127.0.0.1:11213=2000;127.0.0.1:11214=2000;127.0.0.1:11215=2000;";
 static const char * backend_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000";

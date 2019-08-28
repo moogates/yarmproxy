@@ -1,5 +1,5 @@
-#ifndef _CLIENT_CONNECTION_H_
-#define _CLIENT_CONNECTION_H_
+#ifndef _YARMPROXY_CLIENT_CONNECTION_H_
+#define _YARMPROXY_CLIENT_CONNECTION_H_
 
 #include <list>
 #include <queue>
@@ -11,7 +11,7 @@
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class BackendConnPool;
 class Command;
@@ -76,5 +76,5 @@ private:
 
 }
 
-#endif // _CLIENT_CONNECTION_H_
+#endif // _YARMPROXY_CLIENT_CONNECTION_H_
 

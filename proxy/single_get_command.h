@@ -1,11 +1,11 @@
-#ifndef _GET_COMMAND_H_
-#define _GET_COMMAND_H_
+#ifndef _YARMPROXY_SINGLE_GET_COMMAND_H_
+#define _YARMPROXY_SINGLE_GET_COMMAND_H_
 
 #include "command.h"
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class SingleGetCommand : public Command {
 public:
@@ -34,5 +34,5 @@ private:
 
 }
 
-#endif  // _GET_COMMAND_H_
+#endif  // _YARMPROXY_SINGLE_GET_COMMAND_H_
 

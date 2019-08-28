@@ -6,7 +6,7 @@
 #include "backend_conn.h"
 // #include "client_conn.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 #define SLAB_SIZE (4*1024) // TODO : use c++11 enum
 
