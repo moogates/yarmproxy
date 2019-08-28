@@ -39,10 +39,6 @@ public:
 public:
   // void AsyncRead();
   void Abort();
-  virtual std::string cmd_line_without_rn() const = 0; // for debug info only
-  virtual size_t request_body_bytes() const {  // for debug info only
-    return 0;
-  }
 
 private:
   virtual void HookOnUpstreamReplyReceived(BackendConn* backend){}

@@ -29,9 +29,6 @@ private:
   }
   void RotateReplyingBackend() override;
 
-  std::string cmd_line_without_rn() const override {
-    return "PARALLEL GET";
-  }
   size_t request_body_upcoming_bytes() const override {
     return 0;
   }

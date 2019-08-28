@@ -222,7 +222,7 @@ void Command::Abort() {
 void Command::OnForwardReplyFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO
-    LOG_DEBUG << "WriteCommand::OnForwardReplyFinished(" << cmd_line_without_rn() << ") error=" << error;
+    LOG_DEBUG << "Command::OnForwardReplyFinished error, backend=" << backend << " error=" << error;
     return;
   }
   is_transfering_reply_ = false;

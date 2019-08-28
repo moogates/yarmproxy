@@ -39,11 +39,10 @@ size_t WriteCommand::request_body_upcoming_bytes() const {
 
 void WriteCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
-    // LOG_DEBUG << "Command(" << cmd_line_without_rn() << ") create backend conn, worker_id=" << WorkerPool::CurrentWorkerId();
-    LOG_DEBUG << "Command(" << cmd_line_without_rn() << ") create backend conn";
     backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
                                WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
+    LOG_DEBUG << "WriteCommand::ForwardQuery allocated backend=" << backend_conn_;
   }
 
   DoForwardQuery(data, bytes);

@@ -154,10 +154,10 @@ void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
       backend->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend),
                                  WeakBind(&Command::OnUpstreamReplyReceived, backend));
       query->backend_conn_ = backend;
-      LOG_DEBUG << "DoForwardQuery create backend conn, backend=" << backend << " query=("
+      LOG_DEBUG << "ParallelGetCommand ForwardQuery allocated backend=" << backend << " query=("
                 << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
     }
-    LOG_DEBUG << __func__ << "DoForwardQuery ForwardQuery, query=("
+    LOG_DEBUG << "ParallelGetCommand ForwardQuery backend=" << backend << ", query=("
               << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
     backend->ForwardQuery(query->query_line_.data(), query->query_line_.size(), false);
   }
