@@ -1,5 +1,7 @@
-for size in `seq 1 100000`; do
-  ./set.sh 0
+for seq in `seq 1 100000`; do
+  body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
+  echo "round $seq bod_size=$body_size"
+  ./set.sh $body_size
   ./get.sh
   sleep 0.02
 done

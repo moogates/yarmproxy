@@ -157,56 +157,56 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
 
 BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
   {
-  //BackendConn* conn = new BackendConn(io_service_, ep);
-  //return conn;
+  //BackendConn* backend = new BackendConn(io_service_, ep);
+  //return backend;
   }
-  BackendConn* conn;
+  BackendConn* backend;
   auto it = conn_map_.find(ep);
   if ((it != conn_map_.end()) && (!it->second.empty())) {
-    conn = it->second.front();
+    backend = it->second.front();
     it->second.pop();
-    LOG_DEBUG << "BackendConnPool::Allocate reuse conn, thread=" << std::this_thread::get_id() << " ep=" << ep << ", idles=" << it->second.size();
+    LOG_DEBUG << "BackendConnPool::Allocate reuse, backend=" << backend << " ep=" << ep << ", idles=" << it->second.size();
   } else {
-    conn = new BackendConn(context_, ep);
-    LOG_DEBUG << "BackendConnPool::Allocate create conn, thread=" << std::this_thread::get_id() << " ep=" << ep;
+    backend = new BackendConn(context_, ep);
+    LOG_DEBUG << "BackendConnPool::Allocate create, backend=" << backend << " ep=" << ep;
   }
-  active_conns_.insert(std::make_pair(conn, ep));
-  return conn;
+  active_conns_.insert(std::make_pair(backend, ep));
+  return backend;
 }
 
-void BackendConnPool::Release(BackendConn * conn) {
+void BackendConnPool::Release(BackendConn * backend) {
   {
   //LOG_DEBUG << "BackendConnPool::Release delete dtor";
-  //delete conn;
+  //delete backend;
   //return;
   }
 
-  if (conn == nullptr) {
+  if (backend == nullptr) {
     return;
   }
-  auto ep_it = active_conns_.find(conn);
+  auto ep_it = active_conns_.find(backend);
   if (ep_it == active_conns_.end()) {
-    LOG_DEBUG << "BackendConnPool::Release destroyed, thread=" << std::this_thread::get_id() << " conn " << conn << "  not found";
-    delete conn;
+    LOG_WARN << "BackendConnPool::Release unacceptable, backend=" << backend;
+    delete backend;
     return;
   }
   const ip::tcp::endpoint & ep = ep_it->second;
 
   auto it = conn_map_.find(ep);
   if (it == conn_map_.end()) {
-    conn->Reset();
-    // conn->buffer()->Reset();
-    conn_map_[ep].push(conn);
-    LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=1";
+    backend->Reset();
+    // backend->buffer()->Reset();
+    conn_map_[ep].push(backend);
+    LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend << " ep=" << ep << " pool_size=1";
   } else {
     if (it->second.size() >= kMaxConnPerEndpoint){
-      LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " destroyed, size=" << it->second.size();
-      delete conn;
+      LOG_WARN << "BackendConnPool::Release overflow, backend=" << backend << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
+      delete backend;
     } else {
-      conn->Reset();
-      // conn->buffer()->Reset();
-      it->second.push(conn);
-      LOG_DEBUG << "BackendConnPool::Release thread=" << std::this_thread::get_id() << " ep=" << ep << " released, size=" << it->second.size();
+      backend->Reset();
+      // backend->buffer()->Reset();
+      it->second.push(backend);
+      LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend << " ep=" << ep << " pool_size=" << it->second.size();
     }
   }
 }

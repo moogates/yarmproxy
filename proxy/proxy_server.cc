@@ -18,10 +18,16 @@ static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
   return ip::tcp::endpoint(ip::address::from_string(host), port);
 }
 
-ProxyServer::ProxyServer(const std::string & addr, size_t worker_concurrency)
-  : work_(io_service_)
-  , acceptor_(io_service_, ParseEndpoint(addr))
-  , worker_pool_(new WorkerPool(worker_concurrency)) {
+static size_t DefaultConcurrency() {
+  size_t hd_concurrency = std::thread::hardware_concurrency();
+  LOG_INFO << "ProxyServer hardware_concurrency " << hd_concurrency;
+  return hd_concurrency == 0 ? 4 : hd_concurrency;
+}
+
+ProxyServer::ProxyServer(const std::string & addr, size_t concurrency)
+    : work_(io_service_)
+    , acceptor_(io_service_, ParseEndpoint(addr))
+    , worker_pool_(new WorkerPool(concurrency > 0 ? concurrency : DefaultConcurrency())) {
 }
 
 ProxyServer::~ProxyServer() {

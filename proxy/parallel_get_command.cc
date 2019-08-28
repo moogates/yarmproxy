@@ -130,7 +130,8 @@ bool ParallelGetCommand::ParseReply(BackendConn* backend) {
           if (backend == last_backend_) {
             backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
           } else {
-            backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
+            backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only
+            // backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
           }
         }
         break;

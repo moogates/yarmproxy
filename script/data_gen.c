@@ -11,10 +11,10 @@ int main(int argc, char* argv[]) {
     printf("Usage: %s size\r\n", argv[0]);
     return 1;
   }
-  srand(time(NULL));
 
   size = atoi(argv[1]);
   if (size == 0) {
+    srand(time(NULL));
     size = 1 + random() % (128 * 1024);
   }
 
