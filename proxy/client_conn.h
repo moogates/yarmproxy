@@ -48,10 +48,8 @@ public:
     return read_buffer_;
   }
 
-  // boost::asio::io_service& io_service_;
 private:
   ip::tcp::socket socket_;
-public:
   ReadBuffer* read_buffer_;
 
 protected:

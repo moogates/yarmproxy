@@ -29,9 +29,9 @@ size_t GetValueBytes(const char * data, const char * end) {
 }
 
 
-SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep, 
-        std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
-    : Command(owner) 
+SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep,
+        std::shared_ptr<ClientConnection> client, const char * buf, size_t cmd_len)
+    : Command(client)
     , cmd_line_(buf, cmd_len)
     , backend_endpoint_(ep)
     , backend_conn_(nullptr)
@@ -41,14 +41,14 @@ SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep,
 
 SingleGetCommand::~SingleGetCommand() {
   if (backend_conn_) {
-    context_.backend_conn_pool()->Release(backend_conn_);
+    context().backend_conn_pool()->Release(backend_conn_);
   }
   LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
 }
 
 void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
-    backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
+    backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
                                WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
     LOG_DEBUG << "SingleGetCommand::ForwardQuery allocated backend=" << backend_conn_;

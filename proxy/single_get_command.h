@@ -9,8 +9,10 @@ namespace yarmproxy {
 
 class SingleGetCommand : public Command {
 public:
-  SingleGetCommand(const ip::tcp::endpoint & ep, 
-          std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
+  SingleGetCommand(const ip::tcp::endpoint & ep,
+          std::shared_ptr<ClientConnection> client,
+          const char * buf,
+          size_t cmd_len);
   virtual ~SingleGetCommand();
 
 private:
@@ -23,7 +25,7 @@ private:
   bool ParseReply(BackendConn* backend) override;
   void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
 
-  size_t request_body_upcoming_bytes() const override {
+  size_t query_body_upcoming_bytes() const override {
     return 0;
   }
 

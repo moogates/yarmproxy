@@ -20,9 +20,9 @@ typedef std::function<void(const boost::system::error_code& error)> ForwardReply
 
 class Command : public std::enable_shared_from_this<Command> {
 public:
-  static int CreateCommand(std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
-                           std::shared_ptr<Command>* sub_cmds);
-  Command(std::shared_ptr<ClientConnection> owner);
+  static int CreateCommand(std::shared_ptr<ClientConnection> client, const char* buf, size_t size,
+                           std::shared_ptr<Command>* cmd);
+  Command(std::shared_ptr<ClientConnection> client);
 
 public:
   virtual ~Command();
@@ -33,7 +33,7 @@ public:
 
   // backend_conn收到reply数据后, 调用OnUpstreamReplyReceived()
   void OnUpstreamReplyReceived(BackendConn* backend, const boost::system::error_code& error);
-  virtual void OnForwardReplyEnabled() = 0; // TODO : need not in base class
+  virtual void OnForwardReplyEnabled() = 0;
   void OnForwardReplyFinished(BackendConn* backend, const boost::system::error_code& error);
 
 public:
@@ -48,7 +48,7 @@ private:
 
   virtual void DoForwardQuery(const char * data, size_t bytes) = 0;
   virtual bool ParseReply(BackendConn* backend) = 0;
-  virtual size_t request_body_upcoming_bytes() const = 0;
+  virtual size_t query_body_upcoming_bytes() const = 0;
 protected:
   bool is_transfering_reply_;
   BackendConn* replying_backend_;
@@ -56,7 +56,7 @@ protected:
 
   std::shared_ptr<ClientConnection> client_conn_;
 
-  WorkerContext& context_;
+  WorkerContext& context();
 
   void TryForwardReply(BackendConn* backend);
   virtual void PushWaitingReplyQueue(BackendConn* backend) {}

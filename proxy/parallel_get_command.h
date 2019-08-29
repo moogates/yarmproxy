@@ -11,7 +11,7 @@ namespace yarmproxy {
 
 class ParallelGetCommand : public Command {
 public:
-  ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
+  ParallelGetCommand(std::shared_ptr<ClientConnection> client,
                      std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
 
   virtual ~ParallelGetCommand();
@@ -25,13 +25,13 @@ private:
   void DoForwardQuery(const char *, size_t) override;
   bool ParseReply(BackendConn* backend) override;
 
-  void PushWaitingReplyQueue(BackendConn* backend) override; 
+  void PushWaitingReplyQueue(BackendConn* backend) override;
   bool HasMoreBackend() const {
     return completed_backends_ < query_set_.size(); // NOTE: 注意这里要
   }
   void RotateReplyingBackend() override;
 
-  size_t request_body_upcoming_bytes() const override {
+  size_t query_body_upcoming_bytes() const override {
     return 0;
   }
 

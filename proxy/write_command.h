@@ -9,25 +9,22 @@ namespace yarmproxy {
 
 class WriteCommand : public Command {
 private:
-//ip::tcp::endpoint backend_endpoint_;
-//BackendConn* backend_conn_;
+  size_t query_header_bytes_;
 
-  const char * request_cmd_line_; // TODO: request -> query
-  size_t request_cmd_len_;
-
-  size_t request_forwarded_bytes_;
-  size_t request_body_bytes_;
-  size_t bytes_forwarding_;  // TODO : rename to "query_forwarding_bytes_"
+  size_t query_forwarded_bytes_;
+  size_t query_body_bytes_;
+  size_t query_forwarding_bytes_;
 
   ip::tcp::endpoint backend_endpoint_;
   BackendConn* backend_conn_;
 public:
-  WriteCommand(const ip::tcp::endpoint & ep, 
-          std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len, size_t body_bytes);
+  WriteCommand(const ip::tcp::endpoint & ep,
+          std::shared_ptr<ClientConnection> client,
+          const char * buf, size_t cmd_len, size_t body_bytes);
 
   virtual ~WriteCommand();
 
-  size_t request_body_upcoming_bytes() const override;
+  size_t query_body_upcoming_bytes() const override;
   void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
 private:
   void OnForwardReplyEnabled() override {
@@ -36,7 +33,7 @@ private:
 
   void ForwardQuery(const char * data, size_t bytes) override;
   bool ParseReply(BackendConn* backend) override;
-  void DoForwardQuery(const char * request_data, size_t client_buf_received_bytes) override;
+  void DoForwardQuery(const char * query_data, size_t received_bytes) override;
 };
 
 }

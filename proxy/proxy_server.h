@@ -31,7 +31,7 @@ private:
   io_service::work work_;
   ip::tcp::acceptor acceptor_;
 
-  std::unique_ptr<WorkerPool> worker_pool_; 
+  std::unique_ptr<WorkerPool> worker_pool_;
 };
 
 }

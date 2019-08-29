@@ -92,22 +92,25 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 
 
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-Command::Command(std::shared_ptr<ClientConnection> owner) 
+Command::Command(std::shared_ptr<ClientConnection> client) 
     : is_transfering_reply_(false)
     , replying_backend_(nullptr)
     , completed_backends_(0)
-    , client_conn_(owner)
-    , context_(owner->context())
+    , client_conn_(client)
     , loaded_(false) {
 };
 
 Command::~Command() {
 }
 
+WorkerContext& Command::context() {
+  return client_conn_->context();
+}
+
 // 0 : ok, 数据不够解析
 // >0 : ok, 解析成功，返回已解析的字节数
 // <0 : error, 未知命令
-int Command::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
+int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char* buf, size_t size,
           std::shared_ptr<Command>* command) {
   const char * p = GetLineEnd(buf, size);
   if (p == nullptr) {
@@ -121,8 +124,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* 
 #define SINGLE_GET_ONLY 0
 #if SINGLE_GET_ONLY
     auto ep = BackendLoactor::Instance().GetEndpointByKey("1");
-    std::shared_ptr<Command> cmd(new SingleGetCommand(
-                     ep, owner, buf, cmd_line_bytes));
+    std::shared_ptr<Command> cmd(new SingleGetCommand(ep, client, buf, cmd_line_bytes));
     // command->push_back(cmd);
     *command = cmd;
     LOG_DEBUG << "DONT_USE_MAP ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
@@ -131,10 +133,10 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* 
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
     if (endpoint_key_map.size() == 1) {
       auto it = endpoint_key_map.begin();
-      std::shared_ptr<Command> cmd(new SingleGetCommand(it->first, owner, it->second.c_str(), it->second.size()));
+      std::shared_ptr<Command> cmd(new SingleGetCommand(it->first, client, it->second.c_str(), it->second.size()));
       *command = cmd;
     } else {
-      std::shared_ptr<Command> cmd(new ParallelGetCommand(owner, std::move(endpoint_key_map)));
+      std::shared_ptr<Command> cmd(new ParallelGetCommand(client, std::move(endpoint_key_map)));
       *command = cmd;
     }
 #endif
@@ -146,12 +148,12 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* 
 
     //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
     std::shared_ptr<Command> cmd(new WriteCommand(BackendLoactor::Instance().GetEndpointByKey(key),
-              owner, buf, cmd_line_bytes, body_bytes));
+              client, buf, cmd_line_bytes, body_bytes));
     *command = cmd;
     return cmd_line_bytes + body_bytes;
   } else {
     LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
-             << ") len=" << cmd_line_bytes << " client_conn=" << owner.get();
+             << ") len=" << cmd_line_bytes << " client_conn=" << client.get();
     return -1;
   }
 }

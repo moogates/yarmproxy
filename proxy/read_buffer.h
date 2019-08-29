@@ -20,7 +20,7 @@ public:
                , buffer_size_(buffer_size)
                , processed_offset_(0)
                , received_offset_(0)
-               , parsed_offset_(0) 
+               , parsed_offset_(0)
                , recycle_lock_count_(0) {
   }
   ~ReadBuffer();
@@ -29,7 +29,7 @@ public:
   }
 
   void Reset() {
-    received_offset_ = processed_offset_ = parsed_offset_ = 0; // TODO : 这里需要吗？
+    received_offset_ = processed_offset_ = parsed_offset_ = 0;
     recycle_lock_count_ = 0;
   }
 

@@ -19,7 +19,7 @@ BackendConn::BackendConn(WorkerContext& context,
   : context_(context)
   , read_buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , remote_endpoint_(upendpoint)
-  , socket_(context.io_service_) 
+  , socket_(context.io_service_)
   , is_reading_more_(false)
   , reply_complete_(false) {
   LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
@@ -72,7 +72,7 @@ void BackendConn::ForwardQuery(const char* data, size_t bytes, bool has_more_dat
     LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardQuery open socket, req="
               << std::string(data, bytes - 2) << " size=" << bytes
               << " has_more_data=" << has_more_data << " backend=" << this;
-    socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, this, 
+    socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, this,
         data, bytes, has_more_data, std::placeholders::_1));
     return;
   }
@@ -139,17 +139,17 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
     // TODO : 如何通知给外界?
     return;
   }
-  
+
   // TODO : socket option 定制
   ip::tcp::no_delay no_delay(true);
   socket_.set_option(no_delay);
-  
+
   socket_base::keep_alive keep_alive(true);
   socket_.set_option(keep_alive);
-  
+
   boost::asio::socket_base::linger linger(true, 0);
   socket_.set_option(linger);
-  
+
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, this, data, bytes, query_has_more_data,
           std::placeholders::_1, std::placeholders::_2));
