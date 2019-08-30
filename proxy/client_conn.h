@@ -34,6 +34,7 @@ public:
   }
   void StartRead();
   void OnCommandError(std::shared_ptr<Command> cmd, const boost::system::error_code& error);
+  void Close();
 
 public:
   void ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb);

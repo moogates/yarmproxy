@@ -105,6 +105,12 @@ void ClientConnection::ForwardReply(const char* data, size_t bytes, const Forwar
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
+void ClientConnection::Close() {
+  // 对象是如何被销毁的?
+  // active_cmd_queue_.clear();
+  socket_.close();
+}
+
 bool ClientConnection::ProcessUnparsedQuery() {
   static const size_t PIPELINE_ACTIVE_LIMIT = 4;
   while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
