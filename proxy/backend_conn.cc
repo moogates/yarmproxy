@@ -181,9 +181,11 @@ void BackendConnPool::Release(BackendConn * backend) {
   //return;
   }
 
-  if (backend == nullptr) {
-    return;
+  if (!backend->reply_complete()) {
+    LOG_WARN << "BackendConnPool::Release end_of_reply unreceived! backend=" << backend;
+    delete backend;
   }
+
   auto ep_it = active_conns_.find(backend);
   if (ep_it == active_conns_.end()) {
     LOG_WARN << "BackendConnPool::Release unacceptable, backend=" << backend;
