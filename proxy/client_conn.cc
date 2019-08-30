@@ -161,31 +161,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   ProcessUnparsedQuery();
   return;
 
-  static const size_t PIPELINE_ACTIVE_LIMIT = 5;
-  while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
-        && read_buffer_->unparsed_received_bytes() > 0) {
-    std::shared_ptr<Command> command;
-    int parsed_bytes = Command::CreateCommand(shared_from_this(),
-               read_buffer_->unprocessed_data(), read_buffer_->received_bytes(),
-               &command);
-
-    if (parsed_bytes < 0) {
-      // TODO : error handling
-      socket_.close();
-      return;
-    }  else if (parsed_bytes == 0) {
-      TryReadMoreQuery(); // read more data
-      return;
-    } else {
-      size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
-      command->ForwardQuery(read_buffer_->unprocessed_data(), to_process_bytes);
-      active_cmd_queue_.emplace_back(std::move(command));
-
-      read_buffer_->update_parsed_bytes(parsed_bytes);
-      read_buffer_->update_processed_bytes(to_process_bytes);
-    }
-  }
-
 //if (timeout_ > 0) {
 //  // TODO : 改为每个command有一个timer
 //  timer_.expires_from_now(boost::posix_time::millisec(timeout_));
