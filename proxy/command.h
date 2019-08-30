@@ -16,6 +16,15 @@ class BackendConn;
 class WorkerContext;
 class ClientConnection;
 
+enum ErrorCode {
+  E_SUCCESS  = 0,
+  E_CONNECT  = 2,
+  E_READ     = 3,
+  E_WRITE    = 4,
+  E_PROTOCOL = 5,
+  E_OTHERS   = 100,
+};
+
 typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
 
 class Command : public std::enable_shared_from_this<Command> {
@@ -28,6 +37,7 @@ public:
   virtual ~Command();
 
   virtual void ForwardQuery(const char * data, size_t bytes) = 0;
+
   // backend_conn转发完毕ForwardQuery()指定的数据后，调用OnForwardQueryFinished()
   virtual void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) = 0;
 
@@ -38,7 +48,9 @@ public:
 
 public:
   // void AsyncRead();
-  void Abort();
+  void ErrorSilence();
+  void ErrorReport();
+  void ErrorAbort();
 
 private:
   virtual void HookOnUpstreamReplyReceived(BackendConn* backend){}

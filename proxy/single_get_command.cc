@@ -57,10 +57,22 @@ void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
   DoForwardQuery(data, bytes);
 }
 
-void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
-  if (error) {
+// TODO : rename upstream -> backend
+void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& ec) {
+  if (ec) {
     // TODO : error handling
-    LOG_INFO << "WriteCommand OnForwardQueryFinished error";
+    if (ec == boost::system::errc::connection_refused) {
+      LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
+               << " backend=" << backend;
+      backend->Close();
+      // context().backend_conn_pool()->Release(backend);
+
+      static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n";
+      client_conn_->ForwardReply(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1,
+                             WeakBind(&Command::OnForwardReplyFinished, nullptr));
+    } else {
+      LOG_INFO << "WriteCommand OnForwardQueryFinished error";
+    }
     return;
   }
   assert(backend == backend_conn_);

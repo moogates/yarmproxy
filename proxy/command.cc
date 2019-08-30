@@ -209,7 +209,13 @@ bool Command::TryActivateReplyingBackend(BackendConn* backend) {
   return backend == replying_backend_;
 }
 
-void Command::Abort() {
+void Command::ErrorSilence() {
+}
+
+void Command::ErrorReport() {
+}
+
+void Command::ErrorAbort() {
 //if (backend_conn_) {
 //  backend_conn_->Close();
 //  LOG_INFO << "Command Abort OK.";
@@ -224,6 +230,12 @@ void Command::OnForwardReplyFinished(BackendConn* backend, const boost::system::
   if (error) {
     // TODO
     LOG_DEBUG << "Command::OnForwardReplyFinished error, backend=" << backend << " error=" << error;
+    return;
+  }
+  if (backend == nullptr) { // TODO : backend失效的情况, 返回服务端内生对错误描述数据
+    LOG_DEBUG << "Command::OnForwardReplyFinished xxxx null backend, done";
+    ++completed_backends_;
+    RotateReplyingBackend();
     return;
   }
   is_transfering_reply_ = false;

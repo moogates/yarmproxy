@@ -36,9 +36,13 @@ private:
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleConnect(const char * buf, size_t bytes, bool has_more_data, const boost::system::error_code& error);
 public:
+  void Close();
   void Reset();
   ReadBuffer* buffer() {
     return read_buffer_;
+  }
+  const ip::tcp::endpoint& remote_endpoint() const {
+    return remote_endpoint_;
   }
   void set_reply_complete() {
     reply_complete_ = true;

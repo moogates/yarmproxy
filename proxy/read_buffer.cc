@@ -6,6 +6,7 @@
 
 namespace yarmproxy {
 
+// TODO : size_t -> std::size_t
 size_t ReadBuffer::unparsed_bytes() const {
   if (received_offset_ > parsed_offset_) {
     return received_offset_ - parsed_offset_;

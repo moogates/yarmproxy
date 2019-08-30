@@ -33,6 +33,10 @@ BackendConn::~BackendConn() {
   delete read_buffer_;
 }
 
+void BackendConn::Close() {
+  socket_.close();
+}
+
 void BackendConn::Reset() {
   is_reading_more_ = false;
   reply_complete_  = false;
@@ -69,7 +73,7 @@ void BackendConn::TryReadMoreReply() {
 
 void BackendConn::ForwardQuery(const char* data, size_t bytes, bool has_more_data) {
   if (!socket_.is_open()) {
-    LOG_DEBUG << "ParallelGetCommand BackendConn::ForwardQuery open socket, req="
+    LOG_DEBUG << "BackendConn::ForwardQuery open socket, req="
               << std::string(data, bytes - 2) << " size=" << bytes
               << " has_more_data=" << has_more_data << " backend=" << this;
     socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, this,
@@ -137,6 +141,8 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
   if (error) {
     socket_.close();
     // TODO : 如何通知给外界?
+    LOG_DEBUG << "BackendConn::HandleConnect error, backend=" << this;
+    query_sent_callback_(error);
     return;
   }
 
