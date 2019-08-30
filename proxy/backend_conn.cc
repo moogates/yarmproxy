@@ -5,6 +5,7 @@
 #include "allocator.h"
 #include "read_buffer.h"
 #include "worker_pool.h"
+#include "error_code.h"
 
 const static size_t kMaxConnPerEndpoint = 64;
 
@@ -117,7 +118,14 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_
   }
 
   LOG_DEBUG << "HandleWrite 向 backend 写完, 触发回调.";
+  // query_sent_callback_(error);
+
+  if (query_sent_callback_) {
   query_sent_callback_(error);
+  }
+  if (query_sent_callback_2) {
+  query_sent_callback_2(ErrorCode::E_SUCCESS); // TODO : check error
+  }
 }
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
@@ -133,7 +141,9 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
     read_buffer_->update_received_bytes(bytes_transferred);
     read_buffer_->dec_recycle_lock();
 
-    reply_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
+    // reply_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
+    if (reply_received_callback_) reply_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
+    if (reply_received_callback_2) reply_received_callback_2(ErrorCode::E_SUCCESS); // TODO : check error
   }
 }
 
@@ -142,7 +152,13 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
     socket_.close();
     // TODO : 如何通知给外界?
     LOG_DEBUG << "BackendConn::HandleConnect error, backend=" << this;
+    if (query_sent_callback_) {
     query_sent_callback_(error);
+    }
+    if (query_sent_callback_2) {
+    query_sent_callback_2(ErrorCode::E_CONNECT);
+    }
+
     return;
   }
 
@@ -190,6 +206,7 @@ void BackendConnPool::Release(BackendConn * backend) {
   if (!backend->reply_complete()) {
     LOG_WARN << "BackendConnPool::Release end_of_reply unreceived! backend=" << backend;
     delete backend;
+    return;
   }
 
   auto ep_it = active_conns_.find(backend);

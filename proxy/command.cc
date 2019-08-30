@@ -6,6 +6,7 @@
 #include <boost/asio.hpp>
 
 #include "logging.h"
+#include "error_code.h"
 #include "worker_pool.h"
 #include "client_conn.h"
 #include "backend_locator.h"
@@ -121,7 +122,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
 
   if (strncmp(buf, "get ", 4) == 0) {
-#define SINGLE_GET_ONLY 0
+#define SINGLE_GET_ONLY 1
 #if SINGLE_GET_ONLY
     auto ep = BackendLoactor::Instance().GetEndpointByKey("1");
     std::shared_ptr<Command> cmd(new SingleGetCommand(ep, client, buf, cmd_line_bytes));
@@ -158,6 +159,9 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
   }
 }
 
+void Command::OnUpstreamReplyReceived2(BackendConn* backend, ErrorCode ec) {
+  OnUpstreamReplyReceived(backend, boost::system::error_code());
+}
 void Command::OnUpstreamReplyReceived(BackendConn* backend, const boost::system::error_code& error) {
   HookOnUpstreamReplyReceived(backend);
   if (error) {
@@ -226,6 +230,11 @@ void Command::ErrorAbort() {
 //}
 }
 
+void Command::OnForwardReplyFinished2(BackendConn* backend, ErrorCode ec) {
+  boost::system::error_code err;
+  OnForwardReplyFinished(backend, err);
+}
+
 void Command::OnForwardReplyFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO
@@ -266,8 +275,8 @@ void Command::TryForwardReply(BackendConn* backend) {
   if (!is_transfering_reply_ && unprocessed > 0) {
     is_transfering_reply_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
     backend->buffer()->inc_recycle_lock();
-    client_conn_->ForwardReply(backend->buffer()->unprocessed_data(), unprocessed,
-                                  WeakBind(&Command::OnForwardReplyFinished, backend));
+    client_conn_->ForwardReply2(backend->buffer()->unprocessed_data(), unprocessed,
+                                  WeakBind2(&Command::OnForwardReplyFinished2, backend));
     backend->buffer()->update_processed_bytes(unprocessed);
     LOG_DEBUG << __func__ << " to_process_bytes=" << unprocessed
               << " new_unprocessed=" << backend->buffer()->unprocessed_bytes()

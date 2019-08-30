@@ -53,6 +53,11 @@ void ParallelGetCommand::HookOnUpstreamReplyReceived(BackendConn* backend) {
   }
 }
 
+void ParallelGetCommand::OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) {
+  boost::system::error_code err;
+  OnForwardQueryFinished(backend, err);
+}
+
 void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
@@ -161,8 +166,8 @@ void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
     BackendConn* backend = query->backend_conn_;
     if (backend == nullptr) {
       backend = context().backend_conn_pool()->Allocate(query->backend_addr_);
-      backend->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend),
-                                 WeakBind(&Command::OnUpstreamReplyReceived, backend));
+      backend->SetReadWriteCallback2(WeakBind2(&Command::OnForwardQueryFinished2, backend),
+                                 WeakBind2(&Command::OnUpstreamReplyReceived2, backend));
       query->backend_conn_ = backend;
       LOG_DEBUG << "ParallelGetCommand ForwardQuery cmd=" << this << " allocated backend=" << backend << " query=("
                 << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";

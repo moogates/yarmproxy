@@ -24,6 +24,7 @@ private:
   void DoForwardQuery(const char *, size_t) override;
   bool ParseReply(BackendConn* backend) override;
   void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) override;
 
   size_t query_body_upcoming_bytes() const override {
     return 0;

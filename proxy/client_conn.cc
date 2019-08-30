@@ -3,11 +3,11 @@
 #include <atomic>
 #include <memory>
 
-#include "logging.h"
-
 #include "allocator.h"
 #include "backend_conn.h"
 #include "command.h"
+#include "error_code.h"
+#include "logging.h"
 #include "read_buffer.h"
 #include "worker_pool.h"
 
@@ -78,6 +78,32 @@ void ClientConnection::RotateReplyingCommand() {
   } else {
     // LOG_DEBUG << __func__ << " active_cmd_queue_ empty";
   }
+}
+
+void ClientConnection::ForwardReply2(const char* data, size_t bytes, const ForwardReplyCallback2& cb) {
+  // forward_resp_callback_ = cb; // TODO : unused member
+
+  // TODO : 成员函数化
+  std::weak_ptr<ClientConnection> wptr(shared_from_this());
+  auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
+    LOG_DEBUG << "ClientConnection::ForwardReply callback begin, bytes_transferred=" << bytes_transferred;
+    if (!error && bytes_transferred < bytes) {
+      if (auto ptr = wptr.lock()) {
+        LOG_DEBUG << "ClientConnection::ForwardReply try write more, bytes_transferred=" << bytes_transferred
+                 << " left_bytes=" << bytes - bytes_transferred << " conn=" << ptr.get();
+        ptr->ForwardReply2(data + bytes_transferred, bytes - bytes_transferred, cb);
+      } else {
+        LOG_DEBUG << "ClientConnection::ForwardReply try write more, but conn released";
+      }
+    } else {
+      LOG_DEBUG << "ClientConnection::ForwardReply callback, bytes_transferred=" << bytes_transferred
+               << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
+      cb(ErrorCode::E_WRITE_REPLY);  // 发完了，或出错了，才告知Command
+      // TODO : boost::error_code -> ErrorCode
+    }
+  };
+
+  boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
 void ClientConnection::ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb) {

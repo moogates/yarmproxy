@@ -26,6 +26,7 @@ public:
 
   size_t query_body_upcoming_bytes() const override;
   void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) override;
 private:
   void OnForwardReplyEnabled() override {
     TryForwardReply(backend_conn_);

@@ -21,6 +21,8 @@ public:
 
 private:
   void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) override;
+
   void HookOnUpstreamReplyReceived(BackendConn* backend) override;
   void DoForwardQuery(const char *, size_t) override;
   bool ParseReply(BackendConn* backend) override;

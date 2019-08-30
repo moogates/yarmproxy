@@ -39,8 +39,8 @@ size_t WriteCommand::query_body_upcoming_bytes() const {
 void WriteCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
-                               WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
+    backend_conn_->SetReadWriteCallback2(WeakBind2(&Command::OnForwardQueryFinished2, backend_conn_),
+                               WeakBind2(&Command::OnUpstreamReplyReceived2, backend_conn_));
     LOG_DEBUG << "WriteCommand::ForwardQuery allocated backend=" << backend_conn_;
   }
 
@@ -51,6 +51,11 @@ void WriteCommand::DoForwardQuery(const char * query_data, size_t client_buf_rec
   client_conn_->buffer()->inc_recycle_lock();
   query_forwarding_bytes_ = std::min(client_buf_received_bytes, query_header_bytes_ + query_body_bytes_); // FIXME
   backend_conn_->ForwardQuery(query_data, query_forwarding_bytes_, query_body_upcoming_bytes() != 0);
+}
+
+void WriteCommand::OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) {
+  boost::system::error_code err;
+  OnForwardQueryFinished(backend, err);
 }
 
 void WriteCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {

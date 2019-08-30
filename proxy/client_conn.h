@@ -18,7 +18,10 @@ class Command;
 class WorkerContext;
 class ReadBuffer;
 
+enum class ErrorCode;
+
 typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
+typedef std::function<void(ErrorCode ec)> ForwardReplyCallback2;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
 public:
@@ -38,6 +41,7 @@ public:
 
 public:
   void ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb);
+  void ForwardReply2(const char* data, size_t bytes, const ForwardReplyCallback2& cb);
   bool IsFirstCommand(std::shared_ptr<Command> cmd) {
     // TODO : 能否作为一个标记，放在command里面？
     return cmd == active_cmd_queue_.front();

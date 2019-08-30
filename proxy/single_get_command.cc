@@ -49,12 +49,16 @@ SingleGetCommand::~SingleGetCommand() {
 void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
-                               WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
+    backend_conn_->SetReadWriteCallback2(WeakBind2(&Command::OnForwardQueryFinished2, backend_conn_),
+                               WeakBind2(&Command::OnUpstreamReplyReceived2, backend_conn_));
     LOG_DEBUG << "SingleGetCommand::ForwardQuery allocated backend=" << backend_conn_;
   }
 
   DoForwardQuery(data, bytes);
+}
+
+void SingleGetCommand::OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) {
+  OnForwardQueryFinished(backend, boost::system::error_code());
 }
 
 // TODO : rename upstream -> backend
@@ -68,8 +72,8 @@ void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost:
       // context().backend_conn_pool()->Release(backend);
 
       static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n";
-      client_conn_->ForwardReply(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1,
-                             WeakBind(&Command::OnForwardReplyFinished, nullptr));
+      client_conn_->ForwardReply2(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1,
+                             WeakBind2(&Command::OnForwardReplyFinished2, nullptr));
     } else {
       LOG_INFO << "WriteCommand OnForwardQueryFinished error";
     }
