@@ -71,44 +71,12 @@ void ClientConnection::AsyncRead() {
 void ClientConnection::RotateReplyingCommand() {
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
-    // LOG_INFO << __func__ << " PRE active_cmd_queue_.size=" << active_cmd_queue_.size();
     active_cmd_queue_.front()->OnForwardReplyEnabled();
     ProcessUnparsedQuery();
-    // LOG_INFO << __func__ << " POST active_cmd_queue_.size=" << active_cmd_queue_.size();
-  } else {
-    // LOG_DEBUG << __func__ << " active_cmd_queue_ empty";
   }
 }
 
-void ClientConnection::ForwardReply2(const char* data, size_t bytes, const ForwardReplyCallback2& cb) {
-  // forward_resp_callback_ = cb; // TODO : unused member
-
-  // TODO : 成员函数化
-  std::weak_ptr<ClientConnection> wptr(shared_from_this());
-  auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
-    LOG_DEBUG << "ClientConnection::ForwardReply callback begin, bytes_transferred=" << bytes_transferred;
-    if (!error && bytes_transferred < bytes) {
-      if (auto ptr = wptr.lock()) {
-        LOG_DEBUG << "ClientConnection::ForwardReply try write more, bytes_transferred=" << bytes_transferred
-                 << " left_bytes=" << bytes - bytes_transferred << " conn=" << ptr.get();
-        ptr->ForwardReply2(data + bytes_transferred, bytes - bytes_transferred, cb);
-      } else {
-        LOG_DEBUG << "ClientConnection::ForwardReply try write more, but conn released";
-      }
-    } else {
-      LOG_DEBUG << "ClientConnection::ForwardReply callback, bytes_transferred=" << bytes_transferred
-               << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
-      cb(ErrorCode::E_WRITE_REPLY);  // 发完了，或出错了，才告知Command
-      // TODO : boost::error_code -> ErrorCode
-    }
-  };
-
-  boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
-}
-
 void ClientConnection::ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb) {
-  forward_resp_callback_ = cb; // TODO : unused member
-
   // TODO : 成员函数化
   std::weak_ptr<ClientConnection> wptr(shared_from_this());
   auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
@@ -124,7 +92,11 @@ void ClientConnection::ForwardReply(const char* data, size_t bytes, const Forwar
     } else {
       LOG_DEBUG << "ClientConnection::ForwardReply callback, bytes_transferred=" << bytes_transferred
                << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
-      cb(error);  // 发完了，或出错了，才告知Command
+      if (error) { // TODO
+      cb(ErrorCode::E_WRITE_REPLY);  // 发完了，或出错了，才告知Command
+      } else {
+      cb(ErrorCode::E_SUCCESS);  // 发完了，或出错了，才告知Command
+      }
     }
   };
 
@@ -219,16 +191,31 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
 
   socket_.close();
   return;
-  char s[] = "SERVER_ERROR timeout\r\n";
+  char s[] = "SERVER_ERROR timeout\r\n";  // TODO : refining error message protocol
   boost::asio::async_write(socket_,
     boost::asio::buffer(s, sizeof(s) - 1),
       std::bind(&ClientConnection::HandleTimeoutWrite, shared_from_this(), std::placeholders::_1));
 }
 
-void ClientConnection::OnCommandError(std::shared_ptr<Command> cmd, const boost::system::error_code& error) {
-  timer_.cancel();
+void ClientConnection::OnCommandError(std::shared_ptr<Command> cmd, ErrorCode ec) {
+  // timer_.cancel();
   // TODO : 销毁工作
   // TODO : 如果是最后一个error, 要负责client的收尾工作
+}
+
+void ClientConnection::ErrorSilence() {
+}
+
+void ClientConnection::ErrorReport(const char* msg, size_t bytes) {
+  // TODO : how to ensure send all?
+  boost::asio::async_write(socket_, boost::asio::buffer(msg, bytes),
+      std::bind(&ClientConnection::HandleTimeoutWrite, shared_from_this(), std::placeholders::_1));
+  RotateReplyingCommand();
+}
+
+void ClientConnection::ErrorAbort() {
+  active_cmd_queue_.clear(); // TODO : 是否足够? command dtor之后，内部backend的回调指针是否有效?
+  socket_.close();
 }
 
 }

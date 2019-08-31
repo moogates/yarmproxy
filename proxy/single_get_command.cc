@@ -1,5 +1,6 @@
 #include "single_get_command.h"
 
+#include "error_code.h"
 #include "logging.h"
 
 #include "backend_conn.h"
@@ -49,33 +50,30 @@ SingleGetCommand::~SingleGetCommand() {
 void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback2(WeakBind2(&Command::OnForwardQueryFinished2, backend_conn_),
-                               WeakBind2(&Command::OnUpstreamReplyReceived2, backend_conn_));
+    backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
+                               WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
     LOG_DEBUG << "SingleGetCommand::ForwardQuery allocated backend=" << backend_conn_;
   }
 
   DoForwardQuery(data, bytes);
 }
 
-void SingleGetCommand::OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) {
-  OnForwardQueryFinished(backend, boost::system::error_code());
-}
-
-// TODO : rename upstream -> backend
-void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& ec) {
-  if (ec) {
+// TODO : rename forward -> write
+void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) {
+  // OnForwardQueryFinished(backend, boost::system::error_code());
+  if (ec != ErrorCode::E_SUCCESS) {
     // TODO : error handling
-    if (ec == boost::system::errc::connection_refused) {
-      LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
+    if (ec == ErrorCode::E_CONNECT) {
+      LOG_WARN << "SingleGetCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
                << " backend=" << backend;
       backend->Close();
       // context().backend_conn_pool()->Release(backend);
 
-      static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n";
-      client_conn_->ForwardReply2(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1,
-                             WeakBind2(&Command::OnForwardReplyFinished2, nullptr));
+      static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+      client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
     } else {
-      LOG_INFO << "WriteCommand OnForwardQueryFinished error";
+      client_conn_->ErrorAbort();
+      LOG_INFO << "SingleGetCommand OnForwardQueryFinished error";
     }
     return;
   }

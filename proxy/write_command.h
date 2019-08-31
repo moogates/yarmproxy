@@ -1,11 +1,13 @@
 #ifndef _YARMPROXY_WRITE_COMMAND_H_
 #define _YARMPROXY_WRITE_COMMAND_H_
 
+#include <boost/asio.hpp>
+
 #include "command.h"
 
-using namespace boost::asio;
-
 namespace yarmproxy {
+
+using namespace boost::asio;
 
 class WriteCommand : public Command {
 private:
@@ -24,10 +26,9 @@ public:
 
   virtual ~WriteCommand();
 
-  size_t query_body_upcoming_bytes() const override;
-  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
-  void OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) override;
 private:
+  size_t query_body_upcoming_bytes() const override;
+  void OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) override;
   void OnForwardReplyEnabled() override {
     TryForwardReply(backend_conn_);
   }

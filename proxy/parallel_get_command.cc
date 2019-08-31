@@ -1,5 +1,6 @@
 #include "parallel_get_command.h"
 
+#include "error_code.h"
 #include "logging.h"
 
 #include "backend_conn.h"
@@ -53,11 +54,43 @@ void ParallelGetCommand::HookOnUpstreamReplyReceived(BackendConn* backend) {
   }
 }
 
-void ParallelGetCommand::OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) {
-  boost::system::error_code err;
-  OnForwardQueryFinished(backend, err);
+void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) {
+  if (ec != ErrorCode::E_SUCCESS) {
+    // client_conn_->ErrorAbort(); // TODO : 模拟Abort
+    if (ec == ErrorCode::E_CONNECT) {
+      // backend->Close();
+
+      if (HasMoreBackend()) {
+        LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, call ErrorSilence, endpoint=" << backend->remote_endpoint()
+               << " backend=" << backend;
+        ++unreachable_backends_;
+        RotateReplyingBackend();
+        client_conn_->ErrorSilence();
+      } else {
+        if (completed_backends_ > 0) {
+          LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, report END, endpoint=" << backend->remote_endpoint()
+               << " backend=" << backend;
+          // TODO : 返回END\r\n, 注意要避免重复
+          static const char BACKEND_ERROR[] = "END\r\n";
+          client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+        } else {
+          LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, report ALL_BACKENDS_CONNECTION_REFUSED, endpoint=" << backend->remote_endpoint()
+               << " backend=" << backend;
+          static const char BACKEND_ERROR[] = "ALL_BACKENDS_CONNECTION_REFUSED\r\n"; // TODO : 统一错误码
+          client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+        }
+      }
+    } else {
+      client_conn_->ErrorAbort();
+      LOG_INFO << "WriteCommand OnForwardQueryFinished error";
+    }
+    return;
+  }
+  LOG_DEBUG << "ParallelGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
+  backend->ReadReply();
 }
 
+/*
 void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
@@ -67,6 +100,7 @@ void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boos
   LOG_DEBUG << "ParallelGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
   backend->ReadReply();
 }
+*/
 
 void ParallelGetCommand::PushWaitingReplyQueue(BackendConn* backend) {
   if (std::find(waiting_reply_queue_.begin(), waiting_reply_queue_.end(), backend)
@@ -166,8 +200,8 @@ void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
     BackendConn* backend = query->backend_conn_;
     if (backend == nullptr) {
       backend = context().backend_conn_pool()->Allocate(query->backend_addr_);
-      backend->SetReadWriteCallback2(WeakBind2(&Command::OnForwardQueryFinished2, backend),
-                                 WeakBind2(&Command::OnUpstreamReplyReceived2, backend));
+      backend->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend),
+                                 WeakBind(&Command::OnUpstreamReplyReceived, backend));
       query->backend_conn_ = backend;
       LOG_DEBUG << "ParallelGetCommand ForwardQuery cmd=" << this << " allocated backend=" << backend << " query=("
                 << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";

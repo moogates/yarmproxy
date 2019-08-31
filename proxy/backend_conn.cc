@@ -101,6 +101,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_
     LOG_DEBUG << "BackendConn::HandleWrite error, backend=" << this << " ep="
              << remote_endpoint_ << " err=" << error.message();
     socket_.close();
+    query_sent_callback_(ErrorCode::E_WRITE_QUERY); // TODO : check error
     return;
   }
 
@@ -120,12 +121,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_
   LOG_DEBUG << "HandleWrite 向 backend 写完, 触发回调.";
   // query_sent_callback_(error);
 
-  if (query_sent_callback_) {
-  query_sent_callback_(error);
-  }
-  if (query_sent_callback_2) {
-  query_sent_callback_2(ErrorCode::E_SUCCESS); // TODO : check error
-  }
+  query_sent_callback_(ErrorCode::E_SUCCESS); // TODO : check error
 }
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
@@ -134,6 +130,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
              << " ep=" << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     // TODO : 如何通知给外界?
+    reply_received_callback_(ErrorCode::E_READ_REPLY); // TODO : error type
   } else {
     LOG_DEBUG << "BackendConn::HandleRead read ok, bytes_transferred=" << bytes_transferred << " backend=" << this;
     is_reading_more_ = false;  // finish reading, you could memmove now
@@ -141,9 +138,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
     read_buffer_->update_received_bytes(bytes_transferred);
     read_buffer_->dec_recycle_lock();
 
-    // reply_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
-    if (reply_received_callback_) reply_received_callback_(error); // TODO : error总是false，所以这个参数应当去掉
-    if (reply_received_callback_2) reply_received_callback_2(ErrorCode::E_SUCCESS); // TODO : check error
+    reply_received_callback_(ErrorCode::E_SUCCESS);
   }
 }
 
@@ -152,13 +147,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
     socket_.close();
     // TODO : 如何通知给外界?
     LOG_DEBUG << "BackendConn::HandleConnect error, backend=" << this;
-    if (query_sent_callback_) {
-    query_sent_callback_(error);
-    }
-    if (query_sent_callback_2) {
-    query_sent_callback_2(ErrorCode::E_CONNECT);
-    }
-
+    query_sent_callback_(ErrorCode::E_CONNECT);
     return;
   }
 

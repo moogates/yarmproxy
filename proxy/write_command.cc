@@ -1,7 +1,7 @@
 #include "write_command.h"
 
 #include "logging.h"
-
+#include "error_code.h"
 #include "backend_conn.h"
 #include "client_conn.h"
 #include "read_buffer.h"
@@ -39,8 +39,8 @@ size_t WriteCommand::query_body_upcoming_bytes() const {
 void WriteCommand::ForwardQuery(const char * data, size_t bytes) {
   if (backend_conn_ == nullptr) {
     backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback2(WeakBind2(&Command::OnForwardQueryFinished2, backend_conn_),
-                               WeakBind2(&Command::OnUpstreamReplyReceived2, backend_conn_));
+    backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
+                               WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
     LOG_DEBUG << "WriteCommand::ForwardQuery allocated backend=" << backend_conn_;
   }
 
@@ -53,11 +53,39 @@ void WriteCommand::DoForwardQuery(const char * query_data, size_t client_buf_rec
   backend_conn_->ForwardQuery(query_data, query_forwarding_bytes_, query_body_upcoming_bytes() != 0);
 }
 
-void WriteCommand::OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) {
-  boost::system::error_code err;
-  OnForwardQueryFinished(backend, err);
+void WriteCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) {
+  if (ec != ErrorCode::E_SUCCESS) {
+    // TODO : error handling
+    if (ec == ErrorCode::E_CONNECT) {
+      LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
+               << " backend=" << backend;
+      backend->Close();
+
+      static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+      client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+    } else {
+      client_conn_->ErrorAbort();
+      LOG_INFO << "WriteCommand OnForwardQueryFinished error";
+    }
+    return;
+  }
+  assert(backend == backend_conn_);
+  LOG_DEBUG << "WriteCommand OnForwardQueryFinished ok, query_forwarding_bytes_=" << query_forwarding_bytes_;
+  client_conn_->buffer()->dec_recycle_lock();
+
+  query_forwarded_bytes_ += query_forwarding_bytes_;
+  query_forwarding_bytes_ = 0;
+
+  if (query_forwarded_bytes_ < query_header_bytes_ + query_body_bytes_) {
+    LOG_DEBUG << "WriteCommand::OnForwardQueryFinished 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
+    client_conn_->TryReadMoreQuery();
+  } else {
+    LOG_DEBUG << "WriteCommand::OnForwardQueryFinished 转发了当前命令的所有数据, 等待 backend 的响应.";
+    backend_conn_->ReadReply();
+  }
 }
 
+/*
 void WriteCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
   if (error) {
     // TODO : error handling
@@ -79,6 +107,7 @@ void WriteCommand::OnForwardQueryFinished(BackendConn* backend, const boost::sys
     backend_conn_->ReadReply();
   }
 }
+*/
 
 bool WriteCommand::ParseReply(BackendConn* backend) {
   assert(backend_conn_ == backend);

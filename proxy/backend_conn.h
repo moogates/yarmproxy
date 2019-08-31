@@ -15,11 +15,8 @@ class ReadBuffer;
 
 enum class ErrorCode;
 
-typedef std::function<void(const boost::system::error_code& error)> BackendReplyReceivedCallback;
-typedef std::function<void(const boost::system::error_code& error)> BackendQuerySentCallback;
-
-typedef std::function<void(ErrorCode ec)> BackendReplyReceivedCallback2;
-typedef std::function<void(ErrorCode ec)> BackendQuerySentCallback2;
+typedef std::function<void(ErrorCode ec)> BackendReplyReceivedCallback;
+typedef std::function<void(ErrorCode ec)> BackendQuerySentCallback;
 
 class BackendConn {
 public:
@@ -31,16 +28,16 @@ public:
   void ReadReply();
   void TryReadMoreReply();
 
+//void SetReadWriteCallback(const BackendQuerySentCallback& query_sent_callback,
+//                          const BackendReplyReceivedCallback& reply_received_callback) {
+//  query_sent_callback_ = query_sent_callback;
+//  reply_received_callback_ = reply_received_callback;
+//}
+
   void SetReadWriteCallback(const BackendQuerySentCallback& query_sent_callback,
                             const BackendReplyReceivedCallback& reply_received_callback) {
     query_sent_callback_ = query_sent_callback;
     reply_received_callback_ = reply_received_callback;
-  }
-
-  void SetReadWriteCallback2(const BackendQuerySentCallback2& query_sent_callback,
-                            const BackendReplyReceivedCallback2& reply_received_callback) {
-    query_sent_callback_2 = query_sent_callback;
-    reply_received_callback_2 = reply_received_callback;
   }
 private:
   void HandleWrite(const char * buf, const size_t bytes, bool has_more_data,
@@ -67,11 +64,9 @@ private:
   ReadBuffer* read_buffer_;
   ip::tcp::endpoint remote_endpoint_;
   ip::tcp::socket socket_;
+
   BackendReplyReceivedCallback reply_received_callback_;
   BackendQuerySentCallback query_sent_callback_;
-
-  BackendReplyReceivedCallback2 reply_received_callback_2;
-  BackendQuerySentCallback2 query_sent_callback_2;
 
   bool is_reading_more_;
   bool reply_complete_;  // if reveived end of reply from backend server. TODO : rename to "received_end_of_reply_"

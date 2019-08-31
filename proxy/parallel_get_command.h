@@ -1,13 +1,16 @@
 #ifndef _YARMPROXY_PARALLEL_GET_COMMAND_H_
 #define _YARMPROXY_PARALLEL_GET_COMMAND_H_
 
+#include <map>
 #include <set>
+
+#include <boost/asio.hpp>
 
 #include "command.h"
 
-using namespace boost::asio;
-
 namespace yarmproxy {
+
+using namespace boost::asio;
 
 class ParallelGetCommand : public Command {
 public:
@@ -20,16 +23,16 @@ public:
   void OnForwardReplyEnabled() override;
 
 private:
-  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
-  void OnForwardQueryFinished2(BackendConn* backend, ErrorCode ec) override;
+  // void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  void OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) override;
 
   void HookOnUpstreamReplyReceived(BackendConn* backend) override;
   void DoForwardQuery(const char *, size_t) override;
   bool ParseReply(BackendConn* backend) override;
 
   void PushWaitingReplyQueue(BackendConn* backend) override;
-  bool HasMoreBackend() const {
-    return completed_backends_ < query_set_.size(); // NOTE: 注意这里要
+  bool HasMoreBackend() const { // rename -> HasUnfinishedBanckends()
+    return unreachable_backends_ + completed_backends_ < query_set_.size(); // NOTE: 注意这里要
   }
   void RotateReplyingBackend() override;
 
