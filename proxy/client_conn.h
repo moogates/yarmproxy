@@ -36,8 +36,6 @@ public:
     return socket_;
   }
   void StartRead();
-  // void OnCommandError(std::shared_ptr<Command> cmd, const boost::system::error_code& error);
-  void OnCommandError(std::shared_ptr<Command> cmd, ErrorCode ec);
   void Close();
 
 public:

@@ -197,12 +197,6 @@ void ClientConnection::HandleMemcCommandTimeout(const boost::system::error_code&
       std::bind(&ClientConnection::HandleTimeoutWrite, shared_from_this(), std::placeholders::_1));
 }
 
-void ClientConnection::OnCommandError(std::shared_ptr<Command> cmd, ErrorCode ec) {
-  // timer_.cancel();
-  // TODO : 销毁工作
-  // TODO : 如果是最后一个error, 要负责client的收尾工作
-}
-
 void ClientConnection::ErrorSilence() {
 }
 
@@ -210,7 +204,6 @@ void ClientConnection::ErrorReport(const char* msg, size_t bytes) {
   // TODO : how to ensure send all?
   boost::asio::async_write(socket_, boost::asio::buffer(msg, bytes),
       std::bind(&ClientConnection::HandleTimeoutWrite, shared_from_this(), std::placeholders::_1));
-  RotateReplyingCommand();
 }
 
 void ClientConnection::ErrorAbort() {

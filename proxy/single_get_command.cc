@@ -71,6 +71,7 @@ void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode ec
 
       static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
       client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+      client_conn_->RotateReplyingCommand();
     } else {
       client_conn_->ErrorAbort();
       LOG_INFO << "SingleGetCommand OnForwardQueryFinished error";

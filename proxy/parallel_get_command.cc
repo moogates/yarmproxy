@@ -48,7 +48,8 @@ void ParallelGetCommand::ForwardQuery(const char *, size_t) {
 
 void ParallelGetCommand::HookOnUpstreamReplyReceived(BackendConn* backend) {
   if (received_reply_backends_.insert(backend).second) {
-    if (received_reply_backends_.size() == query_set_.size()) {
+    if (unreachable_backends_ + received_reply_backends_.size() == query_set_.size()) {
+    // if (received_reply_backends_.size() == query_set_.size()) {
       last_backend_ = backend;
     }
   }
@@ -79,6 +80,7 @@ void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode 
           static const char BACKEND_ERROR[] = "ALL_BACKENDS_CONNECTION_REFUSED\r\n"; // TODO : 统一错误码
           client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
         }
+        client_conn_->RotateReplyingCommand();
       }
     } else {
       client_conn_->ErrorAbort();
@@ -142,6 +144,10 @@ void ParallelGetCommand::RotateReplyingBackend() {
   if (HasMoreBackend()) {
     OnForwardReplyEnabled();
   } else {
+    if (last_backend_ == nullptr && completed_backends_ > 0) {
+      static const char END_RN[] = "END\r\n";
+      client_conn_->ErrorReport(END_RN, sizeof(END_RN) - 1); // FIXME : why this line cause core dump?
+    }
     client_conn_->RotateReplyingCommand();
   }
 }
