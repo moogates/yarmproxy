@@ -14,7 +14,7 @@ using namespace boost::asio;
 
 class ParallelGetCommand : public Command {
 public:
-  ParallelGetCommand(std::shared_ptr<ClientConnection> client,
+  ParallelGetCommand(std::shared_ptr<ClientConnection> client, const std::string& original_header, 
                      std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
 
   virtual ~ParallelGetCommand();
@@ -23,16 +23,15 @@ public:
   void OnForwardReplyEnabled() override;
 
 private:
-  // void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
-  void OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) override;
+  void OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
-  void HookOnUpstreamReplyReceived(BackendConn* backend) override;
-  void OnBackendConnectError(BackendConn* backend) override;
+  void HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend) override;
+  void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
 
   void DoForwardQuery(const char *, size_t) override;
-  bool ParseReply(BackendConn* backend) override;
+  bool ParseReply(std::shared_ptr<BackendConn> backend) override;
 
-  void PushWaitingReplyQueue(BackendConn* backend) override;
+  void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend) override;
   bool HasMoreBackend() const override;// rename -> HasUnfinishedBanckends()
   void RotateReplyingBackend() override;
 
@@ -49,13 +48,13 @@ private:
     ~BackendQuery();
     std::string query_line_;
     ip::tcp::endpoint backend_addr_;
-    BackendConn* backend_conn_;
+    std::shared_ptr<BackendConn> backend_conn_;
   };
 
   std::vector<std::unique_ptr<BackendQuery>> query_set_;
-  std::list<BackendConn*> waiting_reply_queue_;
-  BackendConn* last_backend_;
-  std::set<BackendConn*> received_reply_backends_;
+  std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
+  std::shared_ptr<BackendConn> last_backend_;
+  std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 };
 
 }

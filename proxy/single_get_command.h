@@ -24,8 +24,8 @@ private:
   }
 
   void DoForwardQuery(const char *, size_t) override;
-  bool ParseReply(BackendConn* backend) override;
-  void OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) override;
+  bool ParseReply(std::shared_ptr<BackendConn> backend) override;
+  void OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
   size_t query_body_upcoming_bytes() const override {
     return 0;
@@ -33,7 +33,7 @@ private:
 
   std::string cmd_line_;
   ip::tcp::endpoint backend_endpoint_;
-  BackendConn* backend_conn_;
+  std::shared_ptr<BackendConn> backend_conn_;
 };
 
 }

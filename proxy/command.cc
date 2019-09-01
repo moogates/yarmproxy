@@ -91,12 +91,13 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 
 
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-Command::Command(std::shared_ptr<ClientConnection> client)
+Command::Command(std::shared_ptr<ClientConnection> client, const std::string& original_header)
     : is_transfering_reply_(false)
     , replying_backend_(nullptr)
     , completed_backends_(0)
     , unreachable_backends_(0)
     , client_conn_(client)
+    , original_header_(original_header)
     , loaded_(false) {
 };
 
@@ -136,7 +137,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
       std::shared_ptr<Command> cmd(new SingleGetCommand(it->first, client, it->second.c_str(), it->second.size()));
       *command = cmd;
     } else {
-      std::shared_ptr<Command> cmd(new ParallelGetCommand(client, std::move(endpoint_key_map)));
+      std::shared_ptr<Command> cmd(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
       *command = cmd;
     }
 #endif
@@ -158,29 +159,28 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
   }
 }
 
-void Command::OnUpstreamReplyReceived(BackendConn* backend, ErrorCode ec) {
+void Command::OnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   HookOnUpstreamReplyReceived(backend);
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_DEBUG << "Command::OnUpstreamReplyReceived read error, backend=" << backend;
-    client_conn_->ErrorAbort(); // TODO : error
+    LOG_DEBUG << "Command::OnUpstreamReplyReceived read error, backend=" << backend.get();
+    client_conn_->Abort(); // TODO : error
     return;
   }
 
-  LOG_DEBUG << "OnUpstreamReplyReceived, backend=" << backend;
+  LOG_DEBUG << "OnUpstreamReplyReceived, backend=" << backend.get();
   bool valid = ParseReply(backend);
   if (!valid) {
     LOG_WARN << __func__ << " parsing error! valid=false";
     // TODO : error handling
-    client_conn_->ErrorAbort();
+    client_conn_->Abort();
     return;
   }
 
   if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-    LOG_DEBUG << __func__ << " no new data to process, backend=" << backend
+    LOG_DEBUG << __func__ << " no new data to process, backend=" << backend.get()
                          << " replying_backend_=" << replying_backend_;
     // 新收的新数据，可能不需要转发，而且不止一遍！例如收到的刚好是"END\r\n"
     if (backend == replying_backend_) { // this check is necessary
-      LOG_WARN << __func__ << " no new data to process 2, backend=" << backend;
       ++completed_backends_;
       RotateReplyingBackend();
     } else {
@@ -200,7 +200,7 @@ void Command::OnUpstreamReplyReceived(BackendConn* backend, ErrorCode ec) {
 }
 
 // return : is the backend successfully activated
-bool Command::TryActivateReplyingBackend(BackendConn* backend) {
+bool Command::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
   if (replying_backend_ == nullptr) {
     replying_backend_ = backend;
     LOG_DEBUG << "TryActivateReplyingBackend ok, backend=" << backend << " replying_backend_=" << replying_backend_;
@@ -209,10 +209,10 @@ bool Command::TryActivateReplyingBackend(BackendConn* backend) {
   return backend == replying_backend_;
 }
 
-void Command::OnForwardReplyFinished(BackendConn* backend, ErrorCode ec) {
+void Command::OnForwardReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     LOG_DEBUG << "Command::OnForwardReplyFinished error, backend=" << backend;
-    client_conn_->ErrorAbort();
+    client_conn_->Abort();
     return;
   }
 
@@ -239,11 +239,11 @@ void Command::RotateReplyingBackend() {
   client_conn_->RotateReplyingCommand();
 }
 
-void Command::OnBackendConnectError(BackendConn* backend) {
+void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
   LOG_WARN << "Command::OnBackendConnectError endpoint=" << backend->remote_endpoint()
            << " backend=" << backend;
   if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
-    static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+    static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码, refining error message protocol
     backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
     backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
         backend->set_no_recycle();
@@ -259,7 +259,7 @@ void Command::OnBackendConnectError(BackendConn* backend) {
   }
 }
 
-void Command::TryForwardReply(BackendConn* backend) {
+void Command::TryForwardReply(std::shared_ptr<BackendConn> backend) {
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
   if (!is_transfering_reply_ && unprocessed > 0) {
     is_transfering_reply_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求

@@ -18,9 +18,9 @@ size_t GetValueBytes(const char * data, const char * end);
 ParallelGetCommand::BackendQuery::~BackendQuery() {
 }
 
-ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> client,
+ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> client, const std::string& original_header,
                    std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map)
-    : Command(client)
+    : Command(client, original_header)
     , last_backend_(nullptr)
 {
   for(auto& it : endpoint_query_map) {
@@ -32,7 +32,7 @@ ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> client,
 
 ParallelGetCommand::~ParallelGetCommand() {
   for(auto& query : query_set_) {
-    if (query->backend_conn_ == nullptr) {
+    if (!query->backend_conn_) {
       LOG_DEBUG << "ParallelGetCommand dtor Release null backend";
     } else {
       LOG_DEBUG << "ParallelGetCommand dtor Release backend";
@@ -46,7 +46,7 @@ void ParallelGetCommand::ForwardQuery(const char *, size_t) {
   DoForwardQuery(nullptr, 0);
 }
 
-void ParallelGetCommand::HookOnUpstreamReplyReceived(BackendConn* backend) {
+void ParallelGetCommand::HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend) {
   if (received_reply_backends_.insert(backend).second) {
     // if (unreachable_backends_ + received_reply_backends_.size() == query_set_.size()) {
     if (received_reply_backends_.size() == query_set_.size()) {
@@ -55,7 +55,7 @@ void ParallelGetCommand::HookOnUpstreamReplyReceived(BackendConn* backend) {
   }
 }
 
-void ParallelGetCommand::OnBackendConnectError(BackendConn* backend) {
+void ParallelGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
   LOG_WARN << "ParallelGetCommand::OnBackendConnectError endpoint=" << backend->remote_endpoint()
            << " backend=" << backend;
   ++unreachable_backends_;
@@ -118,43 +118,13 @@ void ParallelGetCommand::OnBackendConnectError(BackendConn* backend) {
   }
 }
 
-void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) {
+void ParallelGetCommand::OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
-    // client_conn_->ErrorAbort(); // TODO : 模拟Abort
+    // client_conn_->Abort(); // TODO : 模拟Abort
     if (ec == ErrorCode::E_CONNECT) {
       OnBackendConnectError(backend);
-      return;
-      // backend->Close();
-      ++unreachable_backends_;
-
-    //LOG_WARN << "SingleGetCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
-    //         << " backend=" << backend;
-    //OnBackendConnectError(backend);
-
-      if (HasMoreBackend()) {
-        LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, call ErrorSilence, endpoint=" << backend->remote_endpoint()
-               << " backend=" << backend;
-        if (backend == replying_backend_) {
-          RotateReplyingBackend();
-        }
-        client_conn_->ErrorSilence();
-      } else {
-        if (completed_backends_ > 0) {
-          LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, report END, endpoint=" << backend->remote_endpoint()
-               << " backend=" << backend;
-          // TODO : 返回END\r\n, 注意要避免重复
-          static const char BACKEND_ERROR[] = "END\r\n";
-          client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-        } else {
-          LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, report ALL_BACKENDS_CONNECTION_REFUSED, endpoint=" << backend->remote_endpoint()
-               << " backend=" << backend;
-          static const char BACKEND_ERROR[] = "ALL_BACKENDS_CONNECTION_REFUSED\r\n"; // TODO : 统一错误码
-          client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-        }
-        client_conn_->RotateReplyingCommand();
-      }
     } else {
-      client_conn_->ErrorAbort();
+      client_conn_->Abort();
       LOG_INFO << "WriteCommand OnForwardQueryFinished error";
     }
     return;
@@ -163,33 +133,21 @@ void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode 
   backend->ReadReply();
 }
 
-/*
-void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
-  if (error) {
-    // TODO : error handling
-    LOG_DEBUG << "ParallelGetCommand OnForwardQueryFinished error";
-    return;
-  }
-  LOG_DEBUG << "ParallelGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
-  backend->ReadReply();
-}
-*/
-
-void ParallelGetCommand::PushWaitingReplyQueue(BackendConn* backend) {
+void ParallelGetCommand::PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend) {
   if (std::find(waiting_reply_queue_.begin(), waiting_reply_queue_.end(), backend)
       == waiting_reply_queue_.end()) {
     waiting_reply_queue_.push_back(backend);
-    LOG_DEBUG << "ParallelGetCommand PushWaitingReplyQueue, backend=" << backend
+    LOG_DEBUG << "ParallelGetCommand PushWaitingReplyQueue, backend=" << backend.get()
               << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
   } else {
-    LOG_DEBUG << "ParallelGetCommand PushWaitingReplyQueue already in queue, backend=" << backend
+    LOG_DEBUG << "ParallelGetCommand PushWaitingReplyQueue already in queue, backend=" << backend.get()
               << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
   }
 }
 
 void ParallelGetCommand::OnForwardReplyEnabled() {
   // RotateReplyingBackend();
-  LOG_DEBUG << "ParallelGetCommand::OnForwardReplyEnabled cmd=" << this << " old replying_backend_=" << replying_backend_;
+  LOG_DEBUG << "ParallelGetCommand::OnForwardReplyEnabled cmd=" << this << " old replying_backend_=" << replying_backend_.get();
   if (waiting_reply_queue_.size() > 0) {
     // replying_backend_ = waiting_reply_queue_.front();
     auto backend = waiting_reply_queue_.front();
@@ -212,7 +170,7 @@ void ParallelGetCommand::OnForwardReplyEnabled() {
 }
 
 bool ParallelGetCommand::HasMoreBackend() const { // rename -> HasUnfinishedBanckends()
-  LOG_DEBUG << "ParallelGetCommand::HasMoreBackend "
+  LOG_WARN << "ParallelGetCommand::HasMoreBackend "
             << " unreachable_backends_=" << unreachable_backends_
             << " completed_backends_=" << completed_backends_ 
             << " total_backends=" << query_set_.size();
@@ -224,16 +182,12 @@ void ParallelGetCommand::RotateReplyingBackend() {
     LOG_DEBUG << "ParallelGetCommand::Rotate to next backend";
     OnForwardReplyEnabled();
   } else {
-  //if (last_backend_ == nullptr && completed_backends_ > 0) {
-  //  static const char END_RN[] = "END\r\n";
-  //  client_conn_->ErrorReport(END_RN, sizeof(END_RN) - 1);
-  //}
     LOG_DEBUG << "ParallelGetCommand::Rotate to next COMMAND";
     client_conn_->RotateReplyingCommand();
   }
 }
 
-bool ParallelGetCommand::ParseReply(BackendConn* backend) {
+bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   bool valid = true;
   while(backend->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend->buffer()->unparsed_data();
@@ -284,8 +238,8 @@ bool ParallelGetCommand::ParseReply(BackendConn* backend) {
 
 void ParallelGetCommand::DoForwardQuery(const char *, size_t) {
   for(auto& query : query_set_) {
-    BackendConn* backend = query->backend_conn_;
-    if (backend == nullptr) {
+    std::shared_ptr<BackendConn> backend = query->backend_conn_;
+    if (!backend) {
       backend = context().backend_conn_pool()->Allocate(query->backend_addr_);
       backend->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend),
                                  WeakBind(&Command::OnUpstreamReplyReceived, backend));

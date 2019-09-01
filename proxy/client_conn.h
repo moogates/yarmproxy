@@ -39,9 +39,7 @@ public:
   void Close();
 
 public:
-  void ErrorSilence();
-  void ErrorReport(const char* msg, size_t bytes);
-  void ErrorAbort();
+  void Abort();
 
 public:
   void ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb);
@@ -68,15 +66,14 @@ private:
 
   // ForwardReplyCallback forward_resp_callback_;
 
-  size_t timeout_;
-  boost::asio::deadline_timer timer_;
+//size_t timeout_;
+//boost::asio::deadline_timer timer_;
 
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   bool ProcessUnparsedQuery();
 
-  void HandleMemcCommandTimeout(const boost::system::error_code& error);
   void HandleTimeoutWrite(const boost::system::error_code& error);
 };
 

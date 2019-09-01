@@ -16,10 +16,10 @@ namespace yarmproxy {
 std::atomic_int backend_conn_count;
 
 BackendConn::BackendConn(WorkerContext& context,
-                           const ip::tcp::endpoint& upendpoint)
+    const ip::tcp::endpoint& endpoint)
   : context_(context)
   , read_buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
-  , remote_endpoint_(upendpoint)
+  , remote_endpoint_(endpoint)
   , socket_(context.io_service_)
   , is_reading_more_(false)
   , reply_complete_(false)
@@ -57,7 +57,7 @@ void BackendConn::ReadReply() {
   // return;
   read_buffer_->inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
-      std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
+      std::bind(&BackendConn::HandleRead, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
 }
 
 void BackendConn::TryReadMoreReply() {
@@ -71,7 +71,7 @@ void BackendConn::TryReadMoreReply() {
     read_buffer_->inc_recycle_lock();
 
     socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
-        std::bind(&BackendConn::HandleRead, this, std::placeholders::_1, std::placeholders::_2));
+        std::bind(&BackendConn::HandleRead, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
     LOG_DEBUG << "TryReadMoreReply async_read_some, backend=" << this;
   } else {
     LOG_DEBUG << "TryReadMoreReply do nothing, is_reading_more_=" << is_reading_more_
@@ -85,7 +85,7 @@ void BackendConn::ForwardQuery(const char* data, size_t bytes, bool has_more_dat
     LOG_DEBUG << "BackendConn::ForwardQuery open socket, req="
               << std::string(data, bytes - 2) << " size=" << bytes
               << " has_more_data=" << has_more_data << " backend=" << this;
-    socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, this,
+    socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, shared_from_this(),
         data, bytes, has_more_data, std::placeholders::_1));
     return;
   }
@@ -96,7 +96,7 @@ void BackendConn::ForwardQuery(const char* data, size_t bytes, bool has_more_dat
             // << " req_data=" << std::string(data, bytes - 2)
             << " backend=" << this;
   async_write(socket_, boost::asio::buffer(data, bytes),
-      std::bind(&BackendConn::HandleWrite, this, data, bytes, has_more_data,
+      std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes, has_more_data,
           std::placeholders::_1, std::placeholders::_2));
 }
 
@@ -120,7 +120,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_
     LOG_DEBUG << "HandleWrite 向 backend 没写完, 继续写.";
     boost::asio::async_write(socket_,
         boost::asio::buffer(data + bytes_transferred, bytes - bytes_transferred),
-        std::bind(&BackendConn::HandleWrite, this, data + bytes_transferred, query_has_more_data,
+        std::bind(&BackendConn::HandleWrite, shared_from_this(), data + bytes_transferred, query_has_more_data,
           bytes - bytes_transferred,
           std::placeholders::_1, std::placeholders::_2));
     return;
@@ -170,53 +170,53 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
   socket_.set_option(linger);
 
   async_write(socket_, boost::asio::buffer(data, bytes),
-      std::bind(&BackendConn::HandleWrite, this, data, bytes, query_has_more_data,
+      std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes, query_has_more_data,
           std::placeholders::_1, std::placeholders::_2));
 }
 
-BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
+std::shared_ptr<BackendConn> BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
   {
-  //BackendConn* backend = new BackendConn(io_service_, ep);
-  //return backend;
+    std::shared_ptr<BackendConn> backend(new BackendConn(context_, ep));
+    return backend;
   }
-  BackendConn* backend;
+  std::shared_ptr<BackendConn> backend;
   auto it = conn_map_.find(ep);
   if ((it != conn_map_.end()) && (!it->second.empty())) {
     backend = it->second.front();
     it->second.pop();
-    LOG_DEBUG << "BackendConnPool::Allocate reuse, backend=" << backend << " ep=" << ep << ", idles=" << it->second.size();
+    LOG_DEBUG << "BackendConnPool::Allocate reuse, backend=" << backend.get() << " ep=" << ep << ", idles=" << it->second.size();
   } else {
-    backend = new BackendConn(context_, ep);
-    LOG_DEBUG << "BackendConnPool::Allocate create, backend=" << backend << " ep=" << ep;
+    backend.reset(new BackendConn(context_, ep));
+    LOG_DEBUG << "BackendConnPool::Allocate create, backend=" << backend.get() << " ep=" << ep;
   }
   auto res = active_conns_.insert(std::make_pair(backend, ep));
   assert(res.second);
   return backend;
 }
 
-void BackendConnPool::Release(BackendConn * backend) {
+void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
   {
-  //LOG_DEBUG << "BackendConnPool::Release delete dtor";
-  //delete backend;
-  //return;
+    LOG_DEBUG << "BackendConnPool::Release delete dtor";
+    // delete backend;
+    return;
   }
 
   const auto ep_it = active_conns_.find(backend);
   if (ep_it == active_conns_.end()) {
-    LOG_WARN << "BackendConnPool::Release unacceptable, backend=" << backend;
-    delete backend;
+    LOG_WARN << "BackendConnPool::Release unacceptable, backend=" << backend.get();
+    // delete backend;
     return;
   }
 
   const ip::tcp::endpoint & ep = ep_it->second;
-  LOG_DEBUG << "BackendConnPool::Release backend=" << backend << " ep=" << ep;
+  LOG_DEBUG << "BackendConnPool::Release backend=" << backend.get() << " ep=" << ep;
   active_conns_.erase(ep_it);
 
   if (backend->no_recycle() || !backend->reply_complete()) {
-    LOG_WARN << "BackendConnPool::Release end_of_reply unreceived! backend=" << backend
+    LOG_WARN << "BackendConnPool::Release end_of_reply unreceived! backend=" << backend.get()
              << " no_recycle=" << backend->no_recycle()
              << " reply_complete=" << backend->reply_complete();
-    delete backend;
+    // delete backend;
     return;
   }
 
@@ -225,16 +225,16 @@ void BackendConnPool::Release(BackendConn * backend) {
     backend->Reset();
     // backend->buffer()->Reset();
     conn_map_[ep].push(backend);
-    LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend << " ep=" << ep << " pool_size=1";
+    LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend.get() << " ep=" << ep << " pool_size=1";
   } else {
     if (it->second.size() >= kMaxConnPerEndpoint){
-      LOG_WARN << "BackendConnPool::Release overflow, backend=" << backend << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
-      delete backend;
+      LOG_WARN << "BackendConnPool::Release overflow, backend=" << backend.get() << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
+      // delete backend;
     } else {
       backend->Reset();
       // backend->buffer()->Reset();
       it->second.push(backend);
-      LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend << " ep=" << ep << " pool_size=" << it->second.size();
+      LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend.get() << " ep=" << ep << " pool_size=" << it->second.size();
     }
   }
 }

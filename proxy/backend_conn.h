@@ -4,6 +4,7 @@
 #include <map>
 #include <queue>
 #include <functional>
+#include <memory>
 
 #include <boost/asio.hpp>
 
@@ -18,9 +19,9 @@ enum class ErrorCode;
 typedef std::function<void(ErrorCode ec)> BackendReplyReceivedCallback;
 typedef std::function<void(ErrorCode ec)> BackendQuerySentCallback;
 
-class BackendConn {
+class BackendConn : public std::enable_shared_from_this<BackendConn> {
 public:
-  BackendConn(WorkerContext& context, const ip::tcp::endpoint& upendpoint);
+  BackendConn(WorkerContext& context, const ip::tcp::endpoint& endpoint);
   ~BackendConn();
 
   void ForwardQuery(const char* data, size_t bytes, bool has_more_data);
@@ -29,12 +30,6 @@ public:
   void TryReadMoreReply();
 
   void SetReplyData(const char* data, size_t bytes);
-
-//void SetReadWriteCallback(const BackendQuerySentCallback& query_sent_callback,
-//                          const BackendReplyReceivedCallback& reply_received_callback) {
-//  query_sent_callback_ = query_sent_callback;
-//  reply_received_callback_ = reply_received_callback;
-//}
 
   void SetReadWriteCallback(const BackendQuerySentCallback& query_sent_callback,
                             const BackendReplyReceivedCallback& reply_received_callback) {
@@ -84,14 +79,14 @@ private:
 class BackendConnPool {
 private:
   WorkerContext& context_;
-  std::map<ip::tcp::endpoint, std::queue<BackendConn*>> conn_map_;
-  std::map<BackendConn*, ip::tcp::endpoint> active_conns_;
+  std::map<ip::tcp::endpoint, std::queue<std::shared_ptr<BackendConn>>> conn_map_;  // rename to idle_conns_
+  std::map<std::shared_ptr<BackendConn>, ip::tcp::endpoint> active_conns_;
 public:
   BackendConnPool(WorkerContext& context) : context_(context) {
   }
 
-  BackendConn * Allocate(const ip::tcp::endpoint & ep);
-  void Release(BackendConn * conn);
+  std::shared_ptr<BackendConn> Allocate(const ip::tcp::endpoint & ep);
+  void Release(std::shared_ptr<BackendConn> conn);
 };
 
 }
