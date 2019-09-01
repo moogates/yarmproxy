@@ -58,8 +58,14 @@ public:
   void set_reply_complete() {
     reply_complete_ = true;
   }
+  void set_no_recycle() {
+    no_recycle_ = true;
+  }
   bool reply_complete() const {
     return reply_complete_;
+  }
+  bool no_recycle() const {
+    return no_recycle_;
   }
 private:
   WorkerContext& context_;
@@ -72,6 +78,7 @@ private:
 
   bool is_reading_more_;
   bool reply_complete_;  // if reveived end of reply from backend server. TODO : rename to "received_end_of_reply_"
+  bool no_recycle_;
 };
 
 class BackendConnPool {

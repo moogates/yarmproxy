@@ -39,9 +39,13 @@ public:
 private:
   virtual void HookOnUpstreamReplyReceived(BackendConn* backend){}
   virtual void RotateReplyingBackend();
-
+  virtual bool HasMoreBackend() const { // rename -> HasUnfinishedBanckends()
+    return false;
+  }
+protected:
   bool TryActivateReplyingBackend(BackendConn* backend);
 
+private:
   virtual void DoForwardQuery(const char * data, size_t bytes) = 0;
   virtual bool ParseReply(BackendConn* backend) = 0;
   virtual size_t query_body_upcoming_bytes() const = 0;
@@ -56,6 +60,7 @@ protected:
 
   void TryForwardReply(BackendConn* backend);
   virtual void PushWaitingReplyQueue(BackendConn* backend) {}
+  virtual void OnBackendConnectError(BackendConn* backend);
 
   typedef void(Command::*BackendCallbackFunc)(BackendConn* backend, ErrorCode ec);
   ForwardReplyCallback WeakBind(BackendCallbackFunc mem_func, BackendConn* backend) {

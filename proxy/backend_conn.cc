@@ -22,7 +22,8 @@ BackendConn::BackendConn(WorkerContext& context,
   , remote_endpoint_(upendpoint)
   , socket_(context.io_service_)
   , is_reading_more_(false)
-  , reply_complete_(false) {
+  , reply_complete_(false)
+  , no_recycle_(false) {
   LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
 }
 
@@ -39,8 +40,8 @@ void BackendConn::Close() {
 }
 
 void BackendConn::SetReplyData(const char* data, size_t bytes) {
-  is_reading_more_ = false;
-  reply_complete_  = true;
+  assert(is_reading_more_ == false);
+  // reply_complete_  = true;
   buffer()->Reset();
   buffer()->push_reply_data(data, bytes);
 }
@@ -188,7 +189,8 @@ BackendConn* BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
     backend = new BackendConn(context_, ep);
     LOG_DEBUG << "BackendConnPool::Allocate create, backend=" << backend << " ep=" << ep;
   }
-  active_conns_.insert(std::make_pair(backend, ep));
+  auto res = active_conns_.insert(std::make_pair(backend, ep));
+  assert(res.second);
   return backend;
 }
 
@@ -199,21 +201,26 @@ void BackendConnPool::Release(BackendConn * backend) {
   //return;
   }
 
-  if (!backend->reply_complete()) {
-    LOG_WARN << "BackendConnPool::Release end_of_reply unreceived! backend=" << backend;
-    delete backend;
-    return;
-  }
-
-  auto ep_it = active_conns_.find(backend);
+  const auto ep_it = active_conns_.find(backend);
   if (ep_it == active_conns_.end()) {
     LOG_WARN << "BackendConnPool::Release unacceptable, backend=" << backend;
     delete backend;
     return;
   }
-  const ip::tcp::endpoint & ep = ep_it->second;
 
-  auto it = conn_map_.find(ep);
+  const ip::tcp::endpoint & ep = ep_it->second;
+  LOG_DEBUG << "BackendConnPool::Release backend=" << backend << " ep=" << ep;
+  active_conns_.erase(ep_it);
+
+  if (backend->no_recycle() || !backend->reply_complete()) {
+    LOG_WARN << "BackendConnPool::Release end_of_reply unreceived! backend=" << backend
+             << " no_recycle=" << backend->no_recycle()
+             << " reply_complete=" << backend->reply_complete();
+    delete backend;
+    return;
+  }
+
+  const auto it = conn_map_.find(ep);
   if (it == conn_map_.end()) {
     backend->Reset();
     // backend->buffer()->Reset();

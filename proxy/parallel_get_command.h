@@ -27,11 +27,13 @@ private:
   void OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) override;
 
   void HookOnUpstreamReplyReceived(BackendConn* backend) override;
+  void OnBackendConnectError(BackendConn* backend) override;
+
   void DoForwardQuery(const char *, size_t) override;
   bool ParseReply(BackendConn* backend) override;
 
   void PushWaitingReplyQueue(BackendConn* backend) override;
-  bool HasMoreBackend() const { // rename -> HasUnfinishedBanckends()
+  bool HasMoreBackend() const override { // rename -> HasUnfinishedBanckends()
     return unreachable_backends_ + completed_backends_ < query_set_.size(); // NOTE: 注意这里要
   }
   void RotateReplyingBackend() override;

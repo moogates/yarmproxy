@@ -91,7 +91,7 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 
 
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-Command::Command(std::shared_ptr<ClientConnection> client) 
+Command::Command(std::shared_ptr<ClientConnection> client)
     : is_transfering_reply_(false)
     , replying_backend_(nullptr)
     , completed_backends_(0)
@@ -235,6 +235,26 @@ void Command::OnForwardReplyFinished(BackendConn* backend, ErrorCode ec) {
 
 void Command::RotateReplyingBackend() {
   client_conn_->RotateReplyingCommand();
+}
+
+void Command::OnBackendConnectError(BackendConn* backend) {
+  LOG_WARN << "Command::OnBackendConnectError endpoint=" << backend->remote_endpoint()
+           << " backend=" << backend;
+  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
+    static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+    backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
+        backend->set_no_recycle();
+
+    TryForwardReply(backend);
+  } else {
+    static const char BACKEND_ERROR[] = "wait_BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+    backend->set_reply_complete();
+        backend->set_no_recycle();
+
+    PushWaitingReplyQueue(backend);
+  }
 }
 
 void Command::TryForwardReply(BackendConn* backend) {

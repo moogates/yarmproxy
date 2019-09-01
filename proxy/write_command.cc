@@ -66,20 +66,7 @@ void WriteCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) {
     if (ec == ErrorCode::E_CONNECT) {
       LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
                << " backend=" << backend;
-      // backend->Close();
-
-      // TODO : pipeline的情况下，要排队写
-      if (client_conn_->IsFirstCommand(shared_from_this())) {
-        static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
-        // client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1); // TODO : do not use ErrorReport() anymore
-        backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-        TryForwardReply(backend_conn_);
-        // client_conn_->RotateReplyingCommand();
-      } else {
-        static const char BACKEND_ERROR[] = "wait_BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
-        backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-        // TODO : should wait to reply
-      }
+      OnBackendConnectError(backend);
     } else {
       client_conn_->ErrorAbort();
       LOG_INFO << "WriteCommand OnForwardQueryFinished error";

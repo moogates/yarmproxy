@@ -66,12 +66,7 @@ void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode ec
     if (ec == ErrorCode::E_CONNECT) {
       LOG_WARN << "SingleGetCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
                << " backend=" << backend;
-      backend->Close();
-      // context().backend_conn_pool()->Release(backend);
-
-      static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
-      client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-      client_conn_->RotateReplyingCommand();
+      OnBackendConnectError(backend);
     } else {
       client_conn_->ErrorAbort();
       LOG_INFO << "SingleGetCommand OnForwardQueryFinished error";

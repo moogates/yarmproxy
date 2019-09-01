@@ -48,10 +48,73 @@ void ParallelGetCommand::ForwardQuery(const char *, size_t) {
 
 void ParallelGetCommand::HookOnUpstreamReplyReceived(BackendConn* backend) {
   if (received_reply_backends_.insert(backend).second) {
-    if (unreachable_backends_ + received_reply_backends_.size() == query_set_.size()) {
-    // if (received_reply_backends_.size() == query_set_.size()) {
+    // if (unreachable_backends_ + received_reply_backends_.size() == query_set_.size()) {
+    if (received_reply_backends_.size() == query_set_.size()) {
       last_backend_ = backend;
     }
+  }
+}
+
+void ParallelGetCommand::OnBackendConnectError(BackendConn* backend) {
+  LOG_WARN << "ParallelGetCommand::OnBackendConnectError endpoint=" << backend->remote_endpoint()
+           << " backend=" << backend;
+  ++unreachable_backends_;
+  // backend->Close();
+
+  // pipeline的情况下，要排队写
+  //
+  HookOnUpstreamReplyReceived(backend);
+
+  if (HasMoreBackend()) {
+    backend->set_reply_complete();
+    backend->set_no_recycle();
+    if (backend == replying_backend_) {
+      // ++unreachable_backends_;
+      RotateReplyingBackend();
+    }
+    LOG_WARN << "ParallelGetCommand::OnBackendConnectError silence, endpoint=" << backend->remote_endpoint()
+           << " backend=" << backend;
+    return;
+  }
+
+  if (completed_backends_ > 0) {
+    if (backend == last_backend_) {
+      if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
+        static const char BACKEND_ERROR[] = "inst_END\r\n"; // TODO : 统一放置错误码
+        backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+        backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
+        backend->set_no_recycle();
+
+        TryForwardReply(backend);
+      } else {
+        static const char BACKEND_ERROR[] = "wait_END\r\n"; // TODO : 统一放置错误码
+        backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+        backend->set_reply_complete();
+        backend->set_no_recycle();
+ 
+        PushWaitingReplyQueue(backend);
+      }
+    } else {
+        backend->set_reply_complete();
+        backend->set_no_recycle();
+        PushWaitingReplyQueue(backend);
+    }
+  } else {
+  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
+    static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+    backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
+        backend->set_no_recycle();
+
+    TryForwardReply(backend);
+  } else {
+    static const char BACKEND_ERROR[] = "wait_BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+    backend->set_reply_complete();
+        backend->set_no_recycle();
+
+    PushWaitingReplyQueue(backend);
+  }
   }
 }
 
@@ -59,8 +122,15 @@ void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode 
   if (ec != ErrorCode::E_SUCCESS) {
     // client_conn_->ErrorAbort(); // TODO : 模拟Abort
     if (ec == ErrorCode::E_CONNECT) {
+      OnBackendConnectError(backend);
+      return;
       // backend->Close();
       ++unreachable_backends_;
+
+    //LOG_WARN << "SingleGetCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
+    //         << " backend=" << backend;
+    //OnBackendConnectError(backend);
+
       if (HasMoreBackend()) {
         LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, call ErrorSilence, endpoint=" << backend->remote_endpoint()
                << " backend=" << backend;
@@ -145,10 +215,10 @@ void ParallelGetCommand::RotateReplyingBackend() {
   if (HasMoreBackend()) {
     OnForwardReplyEnabled();
   } else {
-    if (last_backend_ == nullptr && completed_backends_ > 0) {
-      static const char END_RN[] = "END\r\n";
-      client_conn_->ErrorReport(END_RN, sizeof(END_RN) - 1); // FIXME : why this line cause core dump?
-    }
+  //if (last_backend_ == nullptr && completed_backends_ > 0) {
+  //  static const char END_RN[] = "END\r\n";
+  //  client_conn_->ErrorReport(END_RN, sizeof(END_RN) - 1);
+  //}
     client_conn_->RotateReplyingCommand();
   }
 }
