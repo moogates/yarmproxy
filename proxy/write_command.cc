@@ -54,7 +54,7 @@ void WriteCommand::DoForwardQuery(const char * query_data, size_t client_buf_rec
 }
 
 void WriteCommand::OnForwardReplyEnabled() {
-  LOG_WARN << "OnForwardReplyEnabled TryForwardReply backend_conn_=" << backend_conn_;
+  LOG_DEBUG << "OnForwardReplyEnabled TryForwardReply backend_conn_=" << backend_conn_;
   // TODO : if connection refused, should report error & rotate
   TryForwardReply(backend_conn_);
 }

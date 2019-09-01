@@ -176,13 +176,15 @@ void Command::OnUpstreamReplyReceived(BackendConn* backend, ErrorCode ec) {
   }
 
   if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-    LOG_WARN << __func__ << " no new data to process, backend=" << backend
+    LOG_DEBUG << __func__ << " no new data to process, backend=" << backend
                          << " replying_backend_=" << replying_backend_;
     // 新收的新数据，可能不需要转发，而且不止一遍！例如收到的刚好是"END\r\n"
     if (backend == replying_backend_) { // this check is necessary
       LOG_WARN << __func__ << " no new data to process 2, backend=" << backend;
       ++completed_backends_;
       RotateReplyingBackend();
+    } else {
+      PushWaitingReplyQueue(backend);
     }
     return;
   }

@@ -33,9 +33,7 @@ private:
   bool ParseReply(BackendConn* backend) override;
 
   void PushWaitingReplyQueue(BackendConn* backend) override;
-  bool HasMoreBackend() const override { // rename -> HasUnfinishedBanckends()
-    return unreachable_backends_ + completed_backends_ < query_set_.size(); // NOTE: 注意这里要
-  }
+  bool HasMoreBackend() const override;// rename -> HasUnfinishedBanckends()
   void RotateReplyingBackend() override;
 
   size_t query_body_upcoming_bytes() const override {

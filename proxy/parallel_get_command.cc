@@ -27,7 +27,7 @@ ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> client,
     LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first << " query=" << it.second;
     query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
   }
-  LOG_DEBUG << "ParallelGetCommand ctor, connt=" << ++parallel_get_cmd_count;
+  LOG_DEBUG << "ParallelGetCommand ctor, query_set_.size=" << query_set_.size() << " connt=" << ++parallel_get_cmd_count;
 }
 
 ParallelGetCommand::~ParallelGetCommand() {
@@ -211,14 +211,24 @@ void ParallelGetCommand::OnForwardReplyEnabled() {
   }
 }
 
+bool ParallelGetCommand::HasMoreBackend() const { // rename -> HasUnfinishedBanckends()
+  LOG_DEBUG << "ParallelGetCommand::HasMoreBackend "
+            << " unreachable_backends_=" << unreachable_backends_
+            << " completed_backends_=" << completed_backends_ 
+            << " total_backends=" << query_set_.size();
+  return unreachable_backends_ + completed_backends_ < query_set_.size(); // NOTE: 注意这里要
+}
+
 void ParallelGetCommand::RotateReplyingBackend() {
   if (HasMoreBackend()) {
+    LOG_DEBUG << "ParallelGetCommand::Rotate to next backend";
     OnForwardReplyEnabled();
   } else {
   //if (last_backend_ == nullptr && completed_backends_ > 0) {
   //  static const char END_RN[] = "END\r\n";
   //  client_conn_->ErrorReport(END_RN, sizeof(END_RN) - 1);
   //}
+    LOG_DEBUG << "ParallelGetCommand::Rotate to next COMMAND";
     client_conn_->RotateReplyingCommand();
   }
 }

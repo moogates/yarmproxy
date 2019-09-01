@@ -6,7 +6,7 @@ int main() {
   // loguru::g_stderr_verbosity = 0;
   // loguru::g_stderr_verbosity = -8;
   // loguru::g_stderr_verbosity = 8;
-  base::InitLogging("proxy.log", "TRACE");
+  // base::InitLogging("proxy.log", "TRACE");
 
   std::string endpoint("127.0.0.1:11311");
   LOG_INFO << "Service listening on " << endpoint;
