@@ -27,7 +27,7 @@ ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> client,
     LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first << " query=" << it.second;
     query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
   }
-  LOG_DEBUG << "ParallelGetCommand ctor, query_set_.size=" << query_set_.size() << " connt=" << ++parallel_get_cmd_count;
+  LOG_DEBUG << "ParallelGetCommand ctor, query_set_.size=" << query_set_.size() << " count=" << ++parallel_get_cmd_count;
 }
 
 ParallelGetCommand::~ParallelGetCommand() {
@@ -39,7 +39,7 @@ ParallelGetCommand::~ParallelGetCommand() {
       context().backend_conn_pool()->Release(query->backend_conn_);
     }
   }
-  LOG_DEBUG << "ParallelGetCommand dtor, cmd=" << this << " connt=" << --parallel_get_cmd_count;
+  LOG_DEBUG << "ParallelGetCommand dtor, cmd=" << this << " count=" << --parallel_get_cmd_count;
 }
 
 void ParallelGetCommand::ForwardQuery(const char *, size_t) {

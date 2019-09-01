@@ -90,6 +90,8 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 }
 
 
+std::atomic_int cmd_count;
+
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 Command::Command(std::shared_ptr<ClientConnection> client, const std::string& original_header)
     : is_transfering_reply_(false)
@@ -99,9 +101,11 @@ Command::Command(std::shared_ptr<ClientConnection> client, const std::string& or
     , client_conn_(client)
     , original_header_(original_header)
     , loaded_(false) {
+  LOG_DEBUG << "Command ctor " << ++cmd_count;
 };
 
 Command::~Command() {
+  LOG_DEBUG << "Command dtor " << --cmd_count;
 }
 
 WorkerContext& Command::context() {

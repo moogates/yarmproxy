@@ -24,7 +24,7 @@ BackendConn::BackendConn(WorkerContext& context,
   , is_reading_more_(false)
   , reply_complete_(false)
   , no_recycle_(false) {
-  LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
+  LOG_WARN << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
 }
 
 BackendConn::~BackendConn() {
@@ -36,6 +36,7 @@ BackendConn::~BackendConn() {
 }
 
 void BackendConn::Close() {
+  LOG_DEBUG << "BackendConn Close, backend=" << this;
   socket_.close();
 }
 
@@ -58,6 +59,7 @@ void BackendConn::ReadReply() {
   read_buffer_->inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
       std::bind(&BackendConn::HandleRead, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+  LOG_DEBUG << "BackendConn ReadReply async_read_some, backend=" << this;
 }
 
 void BackendConn::TryReadMoreReply() {
@@ -72,7 +74,7 @@ void BackendConn::TryReadMoreReply() {
 
     socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
         std::bind(&BackendConn::HandleRead, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
-    LOG_DEBUG << "TryReadMoreReply async_read_some, backend=" << this;
+    LOG_DEBUG << "BackendConn TryReadMoreReply async_read_some, backend=" << this;
   } else {
     LOG_DEBUG << "TryReadMoreReply do nothing, is_reading_more_=" << is_reading_more_
              << " has_much_free_space=" << read_buffer_->has_much_free_space()
@@ -196,7 +198,9 @@ std::shared_ptr<BackendConn> BackendConnPool::Allocate(const ip::tcp::endpoint &
 
 void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
   {
-    LOG_DEBUG << "BackendConnPool::Release delete dtor";
+    LOG_WARN << "BackendConnPool::Release delete";
+    backend->Close(); // necessary, to trigger the callbacks
+    backend.reset();
     // delete backend;
     return;
   }
