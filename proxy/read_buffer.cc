@@ -26,6 +26,12 @@ void ReadBuffer::update_received_bytes(size_t received_bytes) {
            << " new received_offset_=" << received_offset_;
 }
 
+void ReadBuffer::push_reply_data(const char* data, size_t bytes) {
+  memcpy(data_, data, bytes);
+  received_offset_ += bytes;
+  parsed_offset_ += bytes;
+}
+
 size_t ReadBuffer::unprocessed_bytes() const {  // 已经接收，且已经解析，但尚未处理的数据
   size_t ret = std::min(received_offset_, parsed_offset_) - processed_offset_;
   LOG_DEBUG << "ReadBuffer::unprocessed_bytes this=" << this << " received_offset_="

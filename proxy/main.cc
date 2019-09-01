@@ -2,8 +2,8 @@
 #include "logging.h"
 
 int main() {
-  // base::InitLogging("yarmproxy.log", "TRACE");
-  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+  base::InitLogging("yarmproxy.log", "TRACE");
+  // loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
   // loguru::g_stderr_verbosity = 0;
   // loguru::g_stderr_verbosity = -8;
   // loguru::g_stderr_verbosity = 8;

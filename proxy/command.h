@@ -36,7 +36,6 @@ public:
   virtual void OnForwardReplyEnabled() = 0;
 
   void OnForwardReplyFinished(BackendConn* backend, ErrorCode ec);
-  void Abort();
 private:
   virtual void HookOnUpstreamReplyReceived(BackendConn* backend){}
   virtual void RotateReplyingBackend();

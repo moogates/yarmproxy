@@ -28,6 +28,8 @@ public:
   void ReadReply();
   void TryReadMoreReply();
 
+  void SetReplyData(const char* data, size_t bytes);
+
 //void SetReadWriteCallback(const BackendQuerySentCallback& query_sent_callback,
 //                          const BackendReplyReceivedCallback& reply_received_callback) {
 //  query_sent_callback_ = query_sent_callback;

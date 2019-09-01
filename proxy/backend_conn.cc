@@ -38,6 +38,13 @@ void BackendConn::Close() {
   socket_.close();
 }
 
+void BackendConn::SetReplyData(const char* data, size_t bytes) {
+  is_reading_more_ = false;
+  reply_complete_  = true;
+  buffer()->Reset();
+  buffer()->push_reply_data(data, bytes);
+}
+
 void BackendConn::Reset() {
   is_reading_more_ = false;
   reply_complete_  = false;

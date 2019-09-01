@@ -175,22 +175,21 @@ void Command::OnUpstreamReplyReceived(BackendConn* backend, ErrorCode ec) {
     return;
   }
 
-  // 判断是否最靠前的command, 是才可以转发
-  if (client_conn_->IsFirstCommand(shared_from_this())) {
-    LOG_DEBUG << __func__ << " IsFirstCommand true, backend=" << backend;
-    if (TryActivateReplyingBackend(backend)) {
-      LOG_DEBUG << __func__ << " TryActivateReplyingBackend OK, backend=" << backend;
-      if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-        // 新收的新数据，可能不需要转发！例如收到的刚好是"END\r\n"
-        // TODO : 合并重复代码
-        ++completed_backends_;
-        RotateReplyingBackend();
-      } else {
-        TryForwardReply(backend);
-      }
-    } else {
-      PushWaitingReplyQueue(backend);
+  if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
+    LOG_WARN << __func__ << " no new data to process, backend=" << backend
+                         << " replying_backend_=" << replying_backend_;
+    // 新收的新数据，可能不需要转发，而且不止一遍！例如收到的刚好是"END\r\n"
+    if (backend == replying_backend_) { // this check is necessary
+      LOG_WARN << __func__ << " no new data to process 2, backend=" << backend;
+      ++completed_backends_;
+      RotateReplyingBackend();
     }
+    return;
+  }
+
+  // 判断是否最靠前的command, 是才可以转发
+  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
+    TryForwardReply(backend);
   } else {
     PushWaitingReplyQueue(backend);
   }
@@ -208,23 +207,10 @@ bool Command::TryActivateReplyingBackend(BackendConn* backend) {
   return backend == replying_backend_;
 }
 
-
-void Command::Abort() {
-  LOG_DEBUG << "Command " << this << " Abort";
-}
-
 void Command::OnForwardReplyFinished(BackendConn* backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     LOG_DEBUG << "Command::OnForwardReplyFinished error, backend=" << backend;
     client_conn_->ErrorAbort();
-    return;
-  }
-
-  if (backend == nullptr) { // TODO : backend失效的情况, 返回服务端内生的错误描述数据
-    assert(false); // 这里走不到了
-    LOG_DEBUG << "Command::OnForwardReplyFinished xxxx null backend, done";
-    ++completed_backends_;
-    RotateReplyingBackend();
     return;
   }
 

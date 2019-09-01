@@ -66,6 +66,7 @@ public:
 
   void update_processed_bytes(size_t processes_bytes);
   void update_received_bytes(size_t received_bytes);
+  void push_reply_data(const char* data, size_t bytes);
 
   void update_parsed_bytes(size_t parsed_bytes) {
     parsed_offset_ += parsed_bytes;

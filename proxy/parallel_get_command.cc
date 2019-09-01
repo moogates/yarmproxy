@@ -60,12 +60,13 @@ void ParallelGetCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode 
     // client_conn_->ErrorAbort(); // TODO : 模拟Abort
     if (ec == ErrorCode::E_CONNECT) {
       // backend->Close();
-
+      ++unreachable_backends_;
       if (HasMoreBackend()) {
         LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, call ErrorSilence, endpoint=" << backend->remote_endpoint()
                << " backend=" << backend;
-        ++unreachable_backends_;
-        RotateReplyingBackend();
+        if (backend == replying_backend_) {
+          RotateReplyingBackend();
+        }
         client_conn_->ErrorSilence();
       } else {
         if (completed_backends_ > 0) {

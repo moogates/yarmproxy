@@ -53,17 +53,33 @@ void WriteCommand::DoForwardQuery(const char * query_data, size_t client_buf_rec
   backend_conn_->ForwardQuery(query_data, query_forwarding_bytes_, query_body_upcoming_bytes() != 0);
 }
 
+void WriteCommand::OnForwardReplyEnabled() {
+  LOG_WARN << "OnForwardReplyEnabled TryForwardReply backend_conn_=" << backend_conn_;
+  // TODO : if connection refused, should report error & rotate
+  TryForwardReply(backend_conn_);
+}
+
 void WriteCommand::OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) {
+  assert(backend == backend_conn_);
   if (ec != ErrorCode::E_SUCCESS) {
-    // TODO : error handling
+    // TODO : sync this code to single_get_command
     if (ec == ErrorCode::E_CONNECT) {
       LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
                << " backend=" << backend;
-      backend->Close();
+      // backend->Close();
 
-      static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
-      client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-      client_conn_->RotateReplyingCommand();
+      // TODO : pipeline的情况下，要排队写
+      if (client_conn_->IsFirstCommand(shared_from_this())) {
+        static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+        // client_conn_->ErrorReport(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1); // TODO : do not use ErrorReport() anymore
+        backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+        TryForwardReply(backend_conn_);
+        // client_conn_->RotateReplyingCommand();
+      } else {
+        static const char BACKEND_ERROR[] = "wait_BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+        backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+        // TODO : should wait to reply
+      }
     } else {
       client_conn_->ErrorAbort();
       LOG_INFO << "WriteCommand OnForwardQueryFinished error";

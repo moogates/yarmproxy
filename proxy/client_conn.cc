@@ -70,6 +70,7 @@ void ClientConnection::AsyncRead() {
 
 void ClientConnection::RotateReplyingCommand() {
   active_cmd_queue_.pop_front();
+  LOG_WARN << "RotateReplyingCommand active_size=" << active_cmd_queue_.size();
   if (!active_cmd_queue_.empty()) {
     active_cmd_queue_.front()->OnForwardReplyEnabled();
     ProcessUnparsedQuery();

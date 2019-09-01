@@ -29,9 +29,7 @@ public:
 private:
   size_t query_body_upcoming_bytes() const override;
   void OnForwardQueryFinished(BackendConn* backend, ErrorCode ec) override;
-  void OnForwardReplyEnabled() override {
-    TryForwardReply(backend_conn_);
-  }
+  void OnForwardReplyEnabled() override;
 
   void ForwardQuery(const char * data, size_t bytes) override;
   bool ParseReply(BackendConn* backend) override;
