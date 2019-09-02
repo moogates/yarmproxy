@@ -49,11 +49,6 @@ void ClientConnection::StartRead() {
     socket_.set_option(linger, ec);
   }
 
-  if (!ec) {
-    boost::asio::socket_base::send_buffer_size send_buf_size(32 * 1024);
-    socket_.set_option(send_buf_size, ec);
-  }
-
   if (ec) {
     socket_.close();
   } else {

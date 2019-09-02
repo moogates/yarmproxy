@@ -30,6 +30,7 @@ private:
   io_service io_service_;
   io_service::work work_;
   ip::tcp::acceptor acceptor_;
+  std::string listen_addr_;
 
   std::unique_ptr<WorkerPool> worker_pool_;
 };

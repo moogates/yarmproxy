@@ -147,24 +147,17 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
 }
 
 void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_more_data, const boost::system::error_code& connect_ec) {
-//ip::tcp::no_delay no_delay(true);
-//socket_.set_option(no_delay);
-
-//socket_base::keep_alive keep_alive(true);
-//socket_.set_option(keep_alive);
-
-//boost::asio::socket_base::linger linger(true, 0);
-//socket_.set_option(linger);
-
   boost::system::error_code option_ec;
   if (!connect_ec) {
     // TODO : socket option 定制
     ip::tcp::no_delay no_delay(true);
     socket_.set_option(no_delay, option_ec);
+
     if (!option_ec) {
       socket_base::keep_alive keep_alive(true);
       socket_.set_option(keep_alive, option_ec);
     }
+
     if (!option_ec) {
       boost::asio::socket_base::linger linger(true, 0);
       socket_.set_option(linger, option_ec);

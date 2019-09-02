@@ -26,7 +26,8 @@ static size_t DefaultConcurrency() {
 
 ProxyServer::ProxyServer(const std::string & addr, size_t concurrency)
     : work_(io_service_)
-    , acceptor_(io_service_, ParseEndpoint(addr))
+    , acceptor_(io_service_)
+    , listen_addr_(addr)
     , worker_pool_(new WorkerPool(concurrency > 0 ? concurrency : DefaultConcurrency())) {
 }
 
@@ -37,7 +38,20 @@ ProxyServer::~ProxyServer() {
 
 void ProxyServer::Run() {
   if (!BackendLoactor::Instance().Initialize()) {
-    LOG_ERROR << "BackendLoactor initialization error ...";
+    LOG_ERROR << "ProxyServer BackendLoactor init error ...";
+    return;
+  }
+
+  auto endpoint = ParseEndpoint(listen_addr_);
+  acceptor_.open(endpoint.protocol());
+  acceptor_.set_option(ip::tcp::acceptor::reuse_address(true));
+  acceptor_.bind(endpoint);
+
+  boost::system::error_code ec;
+  static const int BACKLOG = 1024; // TODO : config
+  acceptor_.listen(BACKLOG, ec);
+  if (ec) {
+    LOG_ERROR << "BackendLoactor listen error " << ec.message();
     return;
   }
 
