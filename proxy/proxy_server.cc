@@ -44,16 +44,19 @@ void ProxyServer::Run() {
   worker_pool_->StartDispatching();
   StartAccept();
 
-  try {
-    io_service_.run();
-  } catch (std::exception& e) {
-    LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
+  for(;;) {
+    try {
+      io_service_.run();
+    } catch (std::exception& e) {
+      LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
+    }
   }
 }
 
 void ProxyServer::StartAccept() {
   WorkerContext& worker = worker_pool_->NextWorker();
   std::shared_ptr<ClientConnection> client_conn(new ClientConnection(worker));
+  LOG_DEBUG << "ProxyServer create new conn, client=" << client_conn.get();
 
   acceptor_.async_accept(client_conn->socket(),
       std::bind(&ProxyServer::HandleAccept, this, client_conn,

@@ -166,7 +166,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
 void Command::OnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   HookOnUpstreamReplyReceived(backend);
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_DEBUG << "Command::OnUpstreamReplyReceived read error, backend=" << backend.get();
+    LOG_WARN << "Command::OnUpstreamReplyReceived read error, backend=" << backend.get();
     client_conn_->Abort(); // TODO : error
     return;
   }
@@ -215,7 +215,7 @@ bool Command::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
 
 void Command::OnForwardReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_DEBUG << "Command::OnForwardReplyFinished error, backend=" << backend;
+    LOG_WARN << "Command::OnForwardReplyFinished error, backend=" << backend;
     client_conn_->Abort();
     return;
   }
@@ -244,7 +244,7 @@ void Command::RotateReplyingBackend() {
 }
 
 void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
-  LOG_WARN << "Command::OnBackendConnectError endpoint=" << backend->remote_endpoint()
+  LOG_DEBUG << "Command::OnBackendConnectError endpoint=" << backend->remote_endpoint()
            << " backend=" << backend;
   if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
     static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码, refining error message protocol

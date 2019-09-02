@@ -69,7 +69,7 @@ void WriteCommand::OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, 
       OnBackendConnectError(backend);
     } else {
       client_conn_->Abort();
-      LOG_INFO << "WriteCommand OnForwardQueryFinished error";
+      LOG_WARN << "WriteCommand OnForwardQueryFinished error";
     }
     return;
   }

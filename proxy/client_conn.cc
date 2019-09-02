@@ -36,20 +36,29 @@ ClientConnection::~ClientConnection() {
   }
   context_.allocator_->Release(read_buffer_->data());
   delete read_buffer_;
-  LOG_DEBUG << "ClientConnection destroyed." << --g_cc_count;
+  LOG_DEBUG << "ClientConnection destroyed." << --g_cc_count << " client=" << this;
 }
 
 void ClientConnection::StartRead() {
+  boost::system::error_code ec;
   ip::tcp::no_delay nodelay(true);
-  socket_.set_option(nodelay);
+  socket_.set_option(nodelay, ec);
 
-  boost::asio::socket_base::linger linger(true, 0);
-  socket_.set_option(linger);
+  if (!ec) {
+    boost::asio::socket_base::linger linger(true, 0);
+    socket_.set_option(linger, ec);
+  }
 
-  boost::asio::socket_base::send_buffer_size send_buf_size(48 * 1024);
-  socket_.set_option(send_buf_size);
+  if (!ec) {
+    boost::asio::socket_base::send_buffer_size send_buf_size(32 * 1024);
+    socket_.set_option(send_buf_size, ec);
+  }
 
-  AsyncRead();
+  if (ec) {
+    socket_.close();
+  } else {
+    AsyncRead();
+  }
 }
 
 void ClientConnection::TryReadMoreQuery() {
@@ -65,15 +74,11 @@ void ClientConnection::AsyncRead() {
 }
 
 void ClientConnection::RotateReplyingCommand() {
-  auto popped_cmd = active_cmd_queue_.front();
   active_cmd_queue_.pop_front();
-  LOG_WARN << "RotateReplyingCommand popped_cmd=" << popped_cmd->original_header()
-           << " PRE active_cmd_queue_.size=" << active_cmd_queue_.size();
   if (!active_cmd_queue_.empty()) {
     active_cmd_queue_.front()->OnForwardReplyEnabled();
     ProcessUnparsedQuery();
   }
-  LOG_WARN << "RotateReplyingCommand POST active_cmd_queue_.size=" << active_cmd_queue_.size();
 }
 
 void ClientConnection::ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& callback) {
@@ -140,7 +145,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   }
 
   read_buffer_->update_received_bytes(bytes_transferred);
-  LOG_WARN << "ClientConnection::HandleRead bytes_transferred=" << bytes_transferred
+  LOG_DEBUG << "ClientConnection::HandleRead bytes_transferred=" << bytes_transferred
             << " data=(" << std::string(read_buffer_->unprocessed_data(), bytes_transferred)
             << ") conn=" << this;
 
@@ -165,6 +170,7 @@ void ClientConnection::HandleTimeoutWrite(const boost::system::error_code& error
 }
 
 void ClientConnection::Abort() {
+  LOG_DEBUG << "ClientConnection::Abort client=" << this;
   active_cmd_queue_.clear(); // TODO : 是否足够? command dtor之后，内部backend的回调指针是否有效?
   socket_.close();
 }

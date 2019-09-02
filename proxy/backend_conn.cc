@@ -24,7 +24,7 @@ BackendConn::BackendConn(WorkerContext& context,
   , is_reading_more_(false)
   , reply_complete_(false)
   , no_recycle_(false) {
-  LOG_WARN << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
+  LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
 }
 
 BackendConn::~BackendConn() {
@@ -123,15 +123,11 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_
     boost::asio::async_write(socket_,
         boost::asio::buffer(data + bytes_transferred, bytes - bytes_transferred),
         std::bind(&BackendConn::HandleWrite, shared_from_this(), data + bytes_transferred, query_has_more_data,
-          bytes - bytes_transferred,
-          std::placeholders::_1, std::placeholders::_2));
-    return;
+                  bytes - bytes_transferred, std::placeholders::_1, std::placeholders::_2));
+  } else {
+    LOG_DEBUG << "HandleWrite 向 backend 写完, 触发回调.";
+    query_sent_callback_(ErrorCode::E_SUCCESS);
   }
-
-  LOG_DEBUG << "HandleWrite 向 backend 写完, 触发回调.";
-  // query_sent_callback_(error);
-
-  query_sent_callback_(ErrorCode::E_SUCCESS); // TODO : check error
 }
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
@@ -152,24 +148,38 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
   }
 }
 
-void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_more_data, const boost::system::error_code& error) {
-  if (error) {
+void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_more_data, const boost::system::error_code& connect_ec) {
+//ip::tcp::no_delay no_delay(true);
+//socket_.set_option(no_delay);
+
+//socket_base::keep_alive keep_alive(true);
+//socket_.set_option(keep_alive);
+
+//boost::asio::socket_base::linger linger(true, 0);
+//socket_.set_option(linger);
+
+  boost::system::error_code option_ec;
+  if (!connect_ec) {
+    // TODO : socket option 定制
+    ip::tcp::no_delay no_delay(true);
+    socket_.set_option(no_delay, option_ec);
+    if (!option_ec) {
+      socket_base::keep_alive keep_alive(true);
+      socket_.set_option(keep_alive, option_ec);
+    }
+    if (!option_ec) {
+      boost::asio::socket_base::linger linger(true, 0);
+      socket_.set_option(linger, option_ec);
+    }
+  }
+
+  if (connect_ec || option_ec) {
     socket_.close();
-    // TODO : 如何通知给外界?
-    LOG_DEBUG << "BackendConn::HandleConnect error, backend=" << this;
+    LOG_WARN << "BackendConn::HandleConnect error, connect_ec=" << connect_ec.message()
+             << " option_ec=" << option_ec.message() << " , backend=" << this;
     query_sent_callback_(ErrorCode::E_CONNECT);
     return;
   }
-
-  // TODO : socket option 定制
-  ip::tcp::no_delay no_delay(true);
-  socket_.set_option(no_delay);
-
-  socket_base::keep_alive keep_alive(true);
-  socket_.set_option(keep_alive);
-
-  boost::asio::socket_base::linger linger(true, 0);
-  socket_.set_option(linger);
 
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes, query_has_more_data,
@@ -178,8 +188,8 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
 
 std::shared_ptr<BackendConn> BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
   {
-    std::shared_ptr<BackendConn> backend(new BackendConn(context_, ep));
-    return backend;
+  //std::shared_ptr<BackendConn> backend(new BackendConn(context_, ep));
+  //return backend;
   }
   std::shared_ptr<BackendConn> backend;
   auto it = conn_map_.find(ep);
@@ -198,17 +208,15 @@ std::shared_ptr<BackendConn> BackendConnPool::Allocate(const ip::tcp::endpoint &
 
 void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
   {
-    LOG_WARN << "BackendConnPool::Release delete";
-    backend->Close(); // necessary, to trigger the callbacks
-    backend.reset();
-    // delete backend;
-    return;
+  //LOG_WARN << "BackendConnPool::Release delete";
+  //backend->Close(); // necessary, to trigger the callbacks
+  //return;
   }
 
   const auto ep_it = active_conns_.find(backend);
   if (ep_it == active_conns_.end()) {
-    LOG_WARN << "BackendConnPool::Release unacceptable, backend=" << backend.get();
-    // delete backend;
+    assert(false);
+    backend->Close();
     return;
   }
 
@@ -217,10 +225,10 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
   active_conns_.erase(ep_it);
 
   if (backend->no_recycle() || !backend->reply_complete()) {
-    LOG_WARN << "BackendConnPool::Release end_of_reply unreceived! backend=" << backend.get()
+    LOG_DEBUG << "BackendConnPool::Release end_of_reply unreceived! backend=" << backend.get()
              << " no_recycle=" << backend->no_recycle()
              << " reply_complete=" << backend->reply_complete();
-    // delete backend;
+    backend->Close();
     return;
   }
 
@@ -233,7 +241,7 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
   } else {
     if (it->second.size() >= kMaxConnPerEndpoint){
       LOG_WARN << "BackendConnPool::Release overflow, backend=" << backend.get() << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
-      // delete backend;
+      backend->Close();
     } else {
       backend->Reset();
       // backend->buffer()->Reset();

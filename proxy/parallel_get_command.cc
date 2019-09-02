@@ -56,7 +56,7 @@ void ParallelGetCommand::HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn
 }
 
 void ParallelGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
-  LOG_WARN << "ParallelGetCommand::OnBackendConnectError endpoint=" << backend->remote_endpoint()
+  LOG_DEBUG << "ParallelGetCommand::OnBackendConnectError endpoint=" << backend->remote_endpoint()
            << " backend=" << backend;
   ++unreachable_backends_;
   // backend->Close();
@@ -72,7 +72,7 @@ void ParallelGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> back
       // ++unreachable_backends_;
       RotateReplyingBackend();
     }
-    LOG_WARN << "ParallelGetCommand::OnBackendConnectError silence, endpoint=" << backend->remote_endpoint()
+    LOG_DEBUG << "ParallelGetCommand::OnBackendConnectError silence, endpoint=" << backend->remote_endpoint()
            << " backend=" << backend;
     return;
   }
@@ -170,7 +170,7 @@ void ParallelGetCommand::OnForwardReplyEnabled() {
 }
 
 bool ParallelGetCommand::HasMoreBackend() const { // rename -> HasUnfinishedBanckends()
-  LOG_WARN << "ParallelGetCommand::HasMoreBackend "
+  LOG_DEBUG << "ParallelGetCommand::HasMoreBackend "
             << " unreachable_backends_=" << unreachable_backends_
             << " completed_backends_=" << completed_backends_ 
             << " total_backends=" << query_set_.size();

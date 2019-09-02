@@ -23,19 +23,18 @@ BackendConnPool* WorkerContext::backend_conn_pool() {
   return backend_conn_pool_;
 }
 
-thread_local int WorkerPool::worker_id_;
-
 void WorkerPool::StartDispatching() {
   for(size_t i = 0; i < concurrency_; ++i) {
     WorkerContext& woker = workers_[i];
-    std::thread th([&woker, i]() {
-          WorkerPool::worker_id_ = i;
+    std::thread th([&woker]() {
+        for(;;) { // TODO: use loop?
           try {
             woker.io_service_.run();
           } catch (std::exception& e) {
             LOG_ERROR << "WorkerThread io_service.run error:" << e.what();
           }
-        });
+        }
+      });
     th.detach();
     woker.thread_ = std::move(th); // what to to with this thread handle?
   }
