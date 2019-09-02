@@ -3,8 +3,7 @@
 #include "logging.h"
 
 #include "allocator.h"
-#include "backend_conn.h"
-// #include "client_conn.h"
+#include "backend_pool.h"
 
 namespace yarmproxy {
 

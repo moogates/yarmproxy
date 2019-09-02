@@ -1,13 +1,10 @@
 #ifndef _YARMPROXY_BACKEND_CONN_H_
 #define _YARMPROXY_BACKEND_CONN_H_
 
-#include <map>
-#include <queue>
 #include <functional>
 #include <memory>
 
 #include <boost/asio.hpp>
-
 using namespace boost::asio;
 
 namespace yarmproxy {
@@ -59,8 +56,8 @@ public:
   bool reply_complete() const {
     return reply_complete_;
   }
-  bool no_recycle() const {
-    return no_recycle_;
+  bool recyclable() const {
+    return !no_recycle_ && reply_complete_;
   }
 private:
   WorkerContext& context_;
@@ -74,19 +71,6 @@ private:
   bool is_reading_more_;
   bool reply_complete_;  // if reveived end of reply from backend server. TODO : rename to "received_end_of_reply_"
   bool no_recycle_;
-};
-
-class BackendConnPool {
-private:
-  WorkerContext& context_;
-  std::map<ip::tcp::endpoint, std::queue<std::shared_ptr<BackendConn>>> conn_map_;  // rename to idle_conns_
-  std::map<std::shared_ptr<BackendConn>, ip::tcp::endpoint> active_conns_;
-public:
-  BackendConnPool(WorkerContext& context) : context_(context) {
-  }
-
-  std::shared_ptr<BackendConn> Allocate(const ip::tcp::endpoint & ep);
-  void Release(std::shared_ptr<BackendConn> conn);
 };
 
 }

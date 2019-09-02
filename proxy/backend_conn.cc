@@ -7,8 +7,6 @@
 #include "worker_pool.h"
 #include "error_code.h"
 
-const static size_t kMaxConnPerEndpoint = 64;
-
 namespace yarmproxy {
 // TODO: 更好的容错，以及错误返回信息, 例如
 //   客户端格式错误时候，memcached返回错误信息: "CLIENT_ERROR bad data chunk\r\n"
@@ -184,71 +182,6 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes, query_has_more_data,
           std::placeholders::_1, std::placeholders::_2));
-}
-
-std::shared_ptr<BackendConn> BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
-  {
-  //std::shared_ptr<BackendConn> backend(new BackendConn(context_, ep));
-  //return backend;
-  }
-  std::shared_ptr<BackendConn> backend;
-  auto it = conn_map_.find(ep);
-  if ((it != conn_map_.end()) && (!it->second.empty())) {
-    backend = it->second.front();
-    it->second.pop();
-    LOG_DEBUG << "BackendConnPool::Allocate reuse, backend=" << backend.get() << " ep=" << ep << ", idles=" << it->second.size();
-  } else {
-    backend.reset(new BackendConn(context_, ep));
-    LOG_DEBUG << "BackendConnPool::Allocate create, backend=" << backend.get() << " ep=" << ep;
-  }
-  auto res = active_conns_.insert(std::make_pair(backend, ep));
-  assert(res.second);
-  return backend;
-}
-
-void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
-  {
-  //LOG_WARN << "BackendConnPool::Release delete";
-  //backend->Close(); // necessary, to trigger the callbacks
-  //return;
-  }
-
-  const auto ep_it = active_conns_.find(backend);
-  if (ep_it == active_conns_.end()) {
-    assert(false);
-    backend->Close();
-    return;
-  }
-
-  const ip::tcp::endpoint & ep = ep_it->second;
-  LOG_DEBUG << "BackendConnPool::Release backend=" << backend.get() << " ep=" << ep;
-  active_conns_.erase(ep_it);
-
-  if (backend->no_recycle() || !backend->reply_complete()) {
-    LOG_DEBUG << "BackendConnPool::Release end_of_reply unreceived! backend=" << backend.get()
-             << " no_recycle=" << backend->no_recycle()
-             << " reply_complete=" << backend->reply_complete();
-    backend->Close();
-    return;
-  }
-
-  const auto it = conn_map_.find(ep);
-  if (it == conn_map_.end()) {
-    backend->Reset();
-    // backend->buffer()->Reset();
-    conn_map_[ep].push(backend);
-    LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend.get() << " ep=" << ep << " pool_size=1";
-  } else {
-    if (it->second.size() >= kMaxConnPerEndpoint){
-      LOG_WARN << "BackendConnPool::Release overflow, backend=" << backend.get() << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
-      backend->Close();
-    } else {
-      backend->Reset();
-      // backend->buffer()->Reset();
-      it->second.push(backend);
-      LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend.get() << " ep=" << ep << " pool_size=" << it->second.size();
-    }
-  }
 }
 
 }
