@@ -21,7 +21,7 @@ public:
   BackendConn(WorkerContext& context, const ip::tcp::endpoint& endpoint);
   ~BackendConn();
 
-  void ForwardQuery(const char* data, size_t bytes, bool has_more_data);
+  void WriteQuery(const char* data, size_t bytes, bool has_more_data);
 
   void ReadReply();
   void TryReadMoreReply();

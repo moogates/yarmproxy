@@ -8,7 +8,7 @@ enum class ErrorCode {
   E_CONNECT  = 1,
 
   E_READ_QUERY  = 2,
-  E_WRITE_QUERY = 3, // TODO : "write query" is better than "forward query"
+  E_WRITE_QUERY = 3,
 
   E_READ_REPLY  = 4,
   E_WRITE_REPLY = 5,

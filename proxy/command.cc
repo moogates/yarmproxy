@@ -11,9 +11,9 @@
 #include "backend_conn.h"
 #include "read_buffer.h"
 
-#include "single_get_command.h"
+#include "mono_get_command.h"
 #include "parallel_get_command.h"
-#include "write_command.h"
+#include "set_command.h"
 
 namespace yarmproxy {
 
@@ -62,7 +62,7 @@ bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip
   return true;
 }
 
-int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key, size_t* bytes) {
+int ParseSetCommandLine(const char* cmd_line, size_t cmd_len, std::string* key, size_t* bytes) {
   //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
   {
     const char *p = cmd_line;
@@ -83,7 +83,7 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
     }
     *bytes = std::atoi(p) + 2; // 2 is lenght of the ending "\r\n"
   }
-  LOG_DEBUG << "ParseWriteCommandLine cmd=" << std::string(cmd_line, cmd_len - 2)
+  LOG_DEBUG << "ParseSetCommandLine cmd=" << std::string(cmd_line, cmd_len - 2)
             << " key=[" << *key << "]" << " body_bytes=" << *bytes;
 
   return 0;
@@ -126,19 +126,19 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
 
   if (strncmp(buf, "get ", 4) == 0) {
-#define SINGLE_GET_ONLY 0
-#if SINGLE_GET_ONLY
+#define MONO_GET_ONLY 0
+#if MONO_GET_ONLY
     auto ep = BackendLoactor::Instance().GetEndpointByKey("1");
-    std::shared_ptr<Command> cmd(new SingleGetCommand(ep, client, buf, cmd_line_bytes));
+    std::shared_ptr<Command> cmd(new MonoGetCommand(ep, client, buf, cmd_line_bytes));
     // command->push_back(cmd);
     *command = cmd;
-    LOG_DEBUG << "SINGLE_GET_ONLY ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
+    LOG_DEBUG << "MONO_GET_ONLY ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
 #else
     std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
     if (endpoint_key_map.size() == 1) {
       auto it = endpoint_key_map.begin();
-      std::shared_ptr<Command> cmd(new SingleGetCommand(it->first, client, it->second.c_str(), it->second.size()));
+      std::shared_ptr<Command> cmd(new MonoGetCommand(it->first, client, it->second.c_str(), it->second.size()));
       *command = cmd;
     } else {
       std::shared_ptr<Command> cmd(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
@@ -149,10 +149,10 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
   } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0 || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
     std::string key;
     size_t body_bytes;
-    ParseWriteCommandLine(buf, cmd_line_bytes, &key, &body_bytes);
+    ParseSetCommandLine(buf, cmd_line_bytes, &key, &body_bytes);
 
     //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-    std::shared_ptr<Command> cmd(new WriteCommand(BackendLoactor::Instance().GetEndpointByKey(key),
+    std::shared_ptr<Command> cmd(new SetCommand(BackendLoactor::Instance().GetEndpointByKey(key),
               client, buf, cmd_line_bytes, body_bytes));
     *command = cmd;
     return cmd_line_bytes + body_bytes;
@@ -167,15 +167,14 @@ void Command::OnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend, Erro
   HookOnUpstreamReplyReceived(backend);
   if (ec != ErrorCode::E_SUCCESS) {
     LOG_WARN << "Command::OnUpstreamReplyReceived read error, backend=" << backend.get();
-    client_conn_->Abort(); // TODO : error
+    client_conn_->Abort();
     return;
   }
 
   LOG_DEBUG << "OnUpstreamReplyReceived, backend=" << backend.get();
   bool valid = ParseReply(backend);
   if (!valid) {
-    LOG_WARN << __func__ << " parsing error! valid=false";
-    // TODO : error handling
+    LOG_WARN << "OnUpstreamReplyReceived ParseReply error, backend=" << backend.get();
     client_conn_->Abort();
     return;
   }
@@ -195,7 +194,7 @@ void Command::OnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend, Erro
 
   // 判断是否最靠前的command, 是才可以转发
   if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
-    TryForwardReply(backend);
+    TryWriteReply(backend);
   } else {
     PushWaitingReplyQueue(backend);
   }
@@ -213,9 +212,9 @@ bool Command::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
   return backend == replying_backend_;
 }
 
-void Command::OnForwardReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_WARN << "Command::OnForwardReplyFinished error, backend=" << backend;
+    LOG_WARN << "Command::OnWriteReplyFinished error, backend=" << backend;
     client_conn_->Abort();
     return;
   }
@@ -226,16 +225,16 @@ void Command::OnForwardReplyFinished(std::shared_ptr<BackendConn> backend, Error
   if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
     ++completed_backends_;
     RotateReplyingBackend();
-    LOG_DEBUG << "WriteCommand::OnForwardReplyFinished backend no more reply, and all data forwarded to client,"
+    LOG_DEBUG << "SetCommand::OnWriteReplyFinished backend no more reply, and all data written to client,"
               << " backend=" << backend;
   } else {
-    LOG_DEBUG << "WriteCommand::OnForwardReplyFinished has more reply to forward, ready_to_transfer_bytes=" << backend->buffer()->unprocessed_bytes()
+    LOG_DEBUG << "SetCommand::OnWriteReplyFinished has more reply to write, ready_to_transfer_bytes=" << backend->buffer()->unprocessed_bytes()
               << " reply_complete=" << backend->reply_complete()
               << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes()
               << " parsed_unreceived_bytes=" << backend->buffer()->parsed_unreceived_bytes()
               << " backend=" << backend;
     backend->TryReadMoreReply(); // 这里必须继续try
-    TryForwardReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
+    TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }
 }
 
@@ -252,7 +251,7 @@ void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
     backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
         backend->set_no_recycle();
 
-    TryForwardReply(backend);
+    TryWriteReply(backend);
   } else {
     static const char BACKEND_ERROR[] = "wait_BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
     backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
@@ -263,13 +262,13 @@ void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
   }
 }
 
-void Command::TryForwardReply(std::shared_ptr<BackendConn> backend) {
+void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
   if (!is_transfering_reply_ && unprocessed > 0) {
     is_transfering_reply_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
     backend->buffer()->inc_recycle_lock();
-    client_conn_->ForwardReply(backend->buffer()->unprocessed_data(), unprocessed,
-                                  WeakBind(&Command::OnForwardReplyFinished, backend));
+    client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
+                                  WeakBind(&Command::OnWriteReplyFinished, backend));
     backend->buffer()->update_processed_bytes(unprocessed);
     LOG_DEBUG << __func__ << " to_process_bytes=" << unprocessed
               << " new_unprocessed=" << backend->buffer()->unprocessed_bytes()

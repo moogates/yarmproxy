@@ -14,7 +14,7 @@ class ClientConnection;
 
 enum class ErrorCode;
 
-typedef std::function<void(ErrorCode ec)> ForwardReplyCallback;
+typedef std::function<void(ErrorCode ec)> WriteReplyCallback;
 
 class Command : public std::enable_shared_from_this<Command> {
 public:
@@ -26,16 +26,16 @@ public:
 public:
   virtual ~Command();
 
-  virtual void ForwardQuery(const char * data, size_t bytes) = 0;
+  virtual void WriteQuery(const char * data, size_t bytes) = 0;
 
-  // backend_conn转发完毕ForwardQuery()指定的数据后，调用OnForwardQueryFinished()
-  virtual void OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
+  // backend_conn转发完毕WriteQuery()指定的数据后，调用OnWriteQueryFinished()
+  virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
 
   // backend_conn收到reply数据后, 调用OnUpstreamReplyReceived()
   void OnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec);
-  virtual void OnForwardReplyEnabled() = 0;
+  virtual void OnWriteReplyEnabled() = 0;
 
-  void OnForwardReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+  void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 private:
   virtual void HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend){}
   virtual void RotateReplyingBackend();
@@ -51,7 +51,7 @@ public:
   }
 
 private:
-  virtual void DoForwardQuery(const char * data, size_t bytes) = 0;
+  virtual void DoWriteQuery(const char * data, size_t bytes) = 0;
   virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
   virtual size_t query_body_upcoming_bytes() const = 0;
 protected:
@@ -65,12 +65,12 @@ protected:
 
   WorkerContext& context();
 
-  void TryForwardReply(std::shared_ptr<BackendConn> backend);
+  void TryWriteReply(std::shared_ptr<BackendConn> backend);
   virtual void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend) {}
   virtual void OnBackendConnectError(std::shared_ptr<BackendConn> backend);
 
   typedef void(Command::*BackendCallbackFunc)(std::shared_ptr<BackendConn> backend, ErrorCode ec);
-  ForwardReplyCallback WeakBind(BackendCallbackFunc mem_func, std::shared_ptr<BackendConn> backend) {
+  WriteReplyCallback WeakBind(BackendCallbackFunc mem_func, std::shared_ptr<BackendConn> backend) {
     std::weak_ptr<Command> cmd_wptr(shared_from_this());
     std::weak_ptr<BackendConn> backend_wptr(backend);
     return [cmd_wptr, mem_func, backend_wptr](ErrorCode ec) {

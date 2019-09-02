@@ -71,23 +71,23 @@ void ClientConnection::AsyncRead() {
 void ClientConnection::RotateReplyingCommand() {
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
-    active_cmd_queue_.front()->OnForwardReplyEnabled();
+    active_cmd_queue_.front()->OnWriteReplyEnabled();
     ProcessUnparsedQuery();
   }
 }
 
-void ClientConnection::ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& callback) {
+void ClientConnection::WriteReply(const char* data, size_t bytes, const WriteReplyCallback& callback) {
   // TODO : 成员函数化
   // std::weak_ptr<ClientConnection> wptr(shared_from_this());
   std::shared_ptr<ClientConnection> ptr(shared_from_this());
   // auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
   auto cb_wrap = [ptr, data, bytes, callback](const boost::system::error_code& error, size_t bytes_transferred) {
-    LOG_DEBUG << "ClientConnection::ForwardReply callback begin, bytes_transferred=" << bytes_transferred;
+    LOG_DEBUG << "ClientConnection::WriteReply callback begin, bytes_transferred=" << bytes_transferred;
     if (!error && bytes_transferred < bytes) {
-      ptr->ForwardReply(data + bytes_transferred, bytes - bytes_transferred, callback);
+      ptr->WriteReply(data + bytes_transferred, bytes - bytes_transferred, callback);
     } else {
       // 发完了，或出错了，才告知Command
-      LOG_DEBUG << "ClientConnection::ForwardReply callback, bytes_transferred=" << bytes_transferred
+      LOG_DEBUG << "ClientConnection::WriteReply callback, bytes_transferred=" << bytes_transferred
                << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
     }
@@ -121,7 +121,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       return true;
     } else {
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
-      command->ForwardQuery(read_buffer_->unprocessed_data(), to_process_bytes);
+      command->WriteQuery(read_buffer_->unprocessed_data(), to_process_bytes);
       active_cmd_queue_.emplace_back(std::move(command));
 
       read_buffer_->update_parsed_bytes(parsed_bytes);
@@ -146,10 +146,10 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
-    active_cmd_queue_.back()->ForwardQuery(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
+    active_cmd_queue_.back()->WriteQuery(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
     read_buffer_->update_processed_bytes(read_buffer_->unprocessed_bytes());
     if (read_buffer_->parsed_unreceived_bytes() > 0) {
-      // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在ForwardQuery的回调函数里面才继续read. 这并不是最佳方式
+      // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery的回调函数里面才继续read. 这并不是最佳方式
       return;
     }
   }

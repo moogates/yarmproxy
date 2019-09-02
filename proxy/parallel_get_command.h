@@ -19,16 +19,16 @@ public:
 
   virtual ~ParallelGetCommand();
 
-  void ForwardQuery(const char * data, size_t bytes) override;
-  void OnForwardReplyEnabled() override;
+  void WriteQuery(const char * data, size_t bytes) override;
+  void OnWriteReplyEnabled() override;
 
 private:
-  void OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
+  void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
   void HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend) override;
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
 
-  void DoForwardQuery(const char *, size_t) override;
+  void DoWriteQuery(const char *, size_t) override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
 
   void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend) override;

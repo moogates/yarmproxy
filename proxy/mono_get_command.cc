@@ -1,4 +1,4 @@
-#include "single_get_command.h"
+#include "mono_get_command.h"
 
 #include "backend_conn.h"
 #include "backend_pool.h"
@@ -30,55 +30,53 @@ size_t GetValueBytes(const char * data, const char * end) {
 }
 
 
-SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep,
+MonoGetCommand::MonoGetCommand(const ip::tcp::endpoint & ep,
         std::shared_ptr<ClientConnection> client, const char * buf, size_t cmd_len)
     : Command(client, std::string(buf, cmd_len))
     , cmd_line_(buf, cmd_len)
     , backend_endpoint_(ep)
     , backend_conn_(nullptr)
 {
-  LOG_DEBUG << "SingleGetCommand ctor " << ++single_get_cmd_count;
+  LOG_DEBUG << "MonoGetCommand ctor " << ++single_get_cmd_count;
 }
 
-SingleGetCommand::~SingleGetCommand() {
+MonoGetCommand::~MonoGetCommand() {
   if (backend_conn_) {
     context().backend_conn_pool()->Release(backend_conn_);
   }
-  LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
+  LOG_DEBUG << "MonoGetCommand dtor " << --single_get_cmd_count;
 }
 
-void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
+void MonoGetCommand::WriteQuery(const char * data, size_t bytes) {
   if (!backend_conn_) {
     backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
+    backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend_conn_),
                                WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
-    LOG_DEBUG << "SingleGetCommand::ForwardQuery allocated backend=" << backend_conn_.get();
+    LOG_DEBUG << "MonoGetCommand::WriteQuery allocated backend=" << backend_conn_.get();
   }
 
-  DoForwardQuery(data, bytes);
+  DoWriteQuery(data, bytes);
 }
 
-// TODO : rename forward -> write
-void SingleGetCommand::OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  // OnForwardQueryFinished(backend, boost::system::error_code());
+void MonoGetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  // OnWriteQueryFinished(backend, boost::system::error_code());
   if (ec != ErrorCode::E_SUCCESS) {
-    // TODO : error handling
     if (ec == ErrorCode::E_CONNECT) {
-      LOG_WARN << "SingleGetCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
+      LOG_WARN << "MonoGetCommand OnWriteQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
                << " backend=" << backend.get();
       OnBackendConnectError(backend);
     } else {
       client_conn_->Abort();
-      LOG_INFO << "SingleGetCommand OnForwardQueryFinished error";
+      LOG_INFO << "MonoGetCommand OnWriteQueryFinished error";
     }
     return;
   }
   assert(backend == backend_conn_);
-  LOG_DEBUG << "SingleGetCommand::OnForwardQueryFinished 转发了当前命令, 等待backend的响应.";
+  LOG_DEBUG << "MonoGetCommand::OnWriteQueryFinished 转发了当前命令, 等待backend的响应.";
   backend_conn_->ReadReply();
 }
 
-bool SingleGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
+bool MonoGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   bool valid = true;
   assert(backend_conn_ == backend);
   while(backend_conn_->buffer()->unparsed_bytes() > 0) {
@@ -105,8 +103,7 @@ bool SingleGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0) {
         backend_conn_->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
-        // if (backend->buffer()->unparsed_bytes() != (sizeof("END\r\n") - 1)) { // TODO : pipeline的情况呢?
-        if (backend->buffer()->unparsed_bytes() != 0) { // TODO : pipeline的情况呢?
+        if (backend->buffer()->unparsed_bytes() != 0) {
           valid = false;
           LOG_DEBUG << "ParseReply END not really end!";
         } else {
@@ -126,8 +123,8 @@ bool SingleGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   return valid;
 }
 
-void SingleGetCommand::DoForwardQuery(const char *, size_t) {
-  backend_conn_->ForwardQuery(cmd_line_.data(), cmd_line_.size(), false);
+void MonoGetCommand::DoWriteQuery(const char *, size_t) {
+  backend_conn_->WriteQuery(cmd_line_.data(), cmd_line_.size(), false);
 }
 
 }

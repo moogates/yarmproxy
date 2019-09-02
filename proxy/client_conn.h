@@ -20,8 +20,8 @@ class ReadBuffer;
 
 enum class ErrorCode;
 
-// typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
-typedef std::function<void(ErrorCode ec)> ForwardReplyCallback;
+// typedef std::function<void(const boost::system::error_code& error)> WriteReplyCallback;
+typedef std::function<void(ErrorCode ec)> WriteReplyCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
 public:
@@ -42,7 +42,7 @@ public:
   void Abort();
 
 public:
-  void ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb);
+  void WriteReply(const char* data, size_t bytes, const WriteReplyCallback& cb);
   bool IsFirstCommand(std::shared_ptr<Command> cmd) {
     // TODO : 能否作为一个标记，放在command里面？
     return cmd == active_cmd_queue_.front();
@@ -63,11 +63,6 @@ protected:
 
 private:
   std::list<std::shared_ptr<Command>> active_cmd_queue_;
-
-  // ForwardReplyCallback forward_resp_callback_;
-
-//size_t timeout_;
-//boost::asio::deadline_timer timer_;
 
   void AsyncRead();
 
