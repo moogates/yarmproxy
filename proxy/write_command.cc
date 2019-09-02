@@ -1,9 +1,10 @@
 #include "write_command.h"
 
 #include "logging.h"
-
 #include "backend_conn.h"
+#include "backend_pool.h"
 #include "client_conn.h"
+#include "error_code.h"
 #include "read_buffer.h"
 #include "worker_pool.h"
 
@@ -12,14 +13,13 @@ namespace yarmproxy {
 const char * GetLineEnd(const char * buf, size_t len);
 
 std::atomic_int write_cmd_count;
-WriteCommand::WriteCommand(const ip::tcp::endpoint & ep, 
-        std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len, size_t body_bytes)
-    : Command(owner) 
-    , request_cmd_line_(buf)
-    , request_cmd_len_(cmd_len)
-    , request_forwarded_bytes_(0)
-    , request_body_bytes_(body_bytes)
-    , bytes_forwarding_(0)
+WriteCommand::WriteCommand(const ip::tcp::endpoint & ep,
+        std::shared_ptr<ClientConnection> client, const char * buf, size_t cmd_len, size_t body_bytes)
+    : Command(client, std::string(buf, cmd_len))
+    , query_header_bytes_(cmd_len)
+    , query_forwarded_bytes_(0)
+    , query_body_bytes_(body_bytes)
+    , query_forwarding_bytes_(0)
     , backend_endpoint_(ep)
     , backend_conn_(nullptr)
 {
@@ -28,46 +28,60 @@ WriteCommand::WriteCommand(const ip::tcp::endpoint & ep,
 
 WriteCommand::~WriteCommand() {
   if (backend_conn_) {
-    context_.backend_conn_pool()->Release(backend_conn_);
+    context().backend_conn_pool()->Release(backend_conn_);
   }
   LOG_DEBUG << "WriteCommand dtor " << --write_cmd_count;
 }
 
-size_t WriteCommand::request_body_upcoming_bytes() const {
-  return request_cmd_len_ + request_body_bytes_ - bytes_forwarding_ - request_forwarded_bytes_;
+size_t WriteCommand::query_body_upcoming_bytes() const {
+  return query_header_bytes_ + query_body_bytes_ - query_forwarding_bytes_ - query_forwarded_bytes_;
 }
 
 void WriteCommand::ForwardQuery(const char * data, size_t bytes) {
-  if (backend_conn_ == nullptr) {
-    backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
+  if (!backend_conn_) {
+    backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
                                WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
-    LOG_DEBUG << "WriteCommand::ForwardQuery allocated backend=" << backend_conn_;
+    LOG_DEBUG << "WriteCommand::ForwardQuery allocated backend=" << backend_conn_.get();
   }
 
   DoForwardQuery(data, bytes);
 }
 
-void WriteCommand::DoForwardQuery(const char * request_data, size_t client_buf_received_bytes) {
+void WriteCommand::DoForwardQuery(const char * query_data, size_t client_buf_received_bytes) {
   client_conn_->buffer()->inc_recycle_lock();
-  bytes_forwarding_ = std::min(client_buf_received_bytes, request_cmd_len_ + request_body_bytes_); // FIXME
-  backend_conn_->ForwardQuery(request_data, bytes_forwarding_, request_body_upcoming_bytes() != 0);
+  query_forwarding_bytes_ = std::min(client_buf_received_bytes, query_header_bytes_ + query_body_bytes_); // FIXME
+  backend_conn_->ForwardQuery(query_data, query_forwarding_bytes_, query_body_upcoming_bytes() != 0);
 }
 
-void WriteCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
-  if (error) {
-    // TODO : error handling
-    LOG_DEBUG << "WriteCommand OnForwardQueryFinished error";
+void WriteCommand::OnForwardReplyEnabled() {
+  LOG_DEBUG << "OnForwardReplyEnabled TryForwardReply backend_conn_=" << backend_conn_;
+  // TODO : if connection refused, should report error & rotate
+  TryForwardReply(backend_conn_);
+}
+
+void WriteCommand::OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  assert(backend == backend_conn_);
+  if (ec != ErrorCode::E_SUCCESS) {
+    // TODO : sync this code to single_get_command
+    if (ec == ErrorCode::E_CONNECT) {
+      LOG_WARN << "WriteCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
+               << " backend=" << backend.get();
+      OnBackendConnectError(backend);
+    } else {
+      client_conn_->Abort();
+      LOG_WARN << "WriteCommand OnForwardQueryFinished error";
+    }
     return;
   }
   assert(backend == backend_conn_);
-  LOG_DEBUG << "WriteCommand OnForwardQueryFinished ok, bytes_forwarding_=" << bytes_forwarding_;
+  LOG_DEBUG << "WriteCommand OnForwardQueryFinished ok, query_forwarding_bytes_=" << query_forwarding_bytes_;
   client_conn_->buffer()->dec_recycle_lock();
 
-  request_forwarded_bytes_ += bytes_forwarding_;
-  bytes_forwarding_ = 0;
+  query_forwarded_bytes_ += query_forwarding_bytes_;
+  query_forwarding_bytes_ = 0;
 
-  if (request_forwarded_bytes_ < request_cmd_len_ + request_body_bytes_) {
+  if (query_forwarded_bytes_ < query_header_bytes_ + query_body_bytes_) {
     LOG_DEBUG << "WriteCommand::OnForwardQueryFinished 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
     client_conn_->TryReadMoreQuery();
   } else {
@@ -76,7 +90,7 @@ void WriteCommand::OnForwardQueryFinished(BackendConn* backend, const boost::sys
   }
 }
 
-bool WriteCommand::ParseReply(BackendConn* backend) {
+bool WriteCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(backend_conn_ == backend);
   const char * entry = backend_conn_->buffer()->unparsed_data();
   const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
@@ -91,7 +105,7 @@ bool WriteCommand::ParseReply(BackendConn* backend) {
   backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
   LOG_DEBUG << "WriteCommand ParseReply resp.size=" << p - entry + 1
             // << " contont=[" << std::string(entry, p - entry - 1) << "]"
-            << " set_reply_complete, backend=" << backend;
+            << " set_reply_complete, backend=" << backend.get();
   backend->set_reply_complete();
   return true;
 }

@@ -1,1 +1,1 @@
-cp /dev/null ../proxy/build/yamproxy.log && wc -l ../proxy/build/yamproxy.log
+cp /dev/null ../proxy/build/yarmproxy.log && wc -l ../proxy/build/yamproxy.log

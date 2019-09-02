@@ -3,9 +3,8 @@
 #include <vector>
 #include <functional>
 
-#include <boost/asio.hpp>
-
 #include "logging.h"
+#include "error_code.h"
 #include "worker_pool.h"
 #include "client_conn.h"
 #include "backend_locator.h"
@@ -91,23 +90,32 @@ int ParseWriteCommandLine(const char* cmd_line, size_t cmd_len, std::string* key
 }
 
 
+std::atomic_int cmd_count;
+
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-Command::Command(std::shared_ptr<ClientConnection> owner) 
+Command::Command(std::shared_ptr<ClientConnection> client, const std::string& original_header)
     : is_transfering_reply_(false)
     , replying_backend_(nullptr)
     , completed_backends_(0)
-    , client_conn_(owner)
-    , context_(owner->context())
+    , unreachable_backends_(0)
+    , client_conn_(client)
+    , original_header_(original_header)
     , loaded_(false) {
+  LOG_DEBUG << "Command ctor " << ++cmd_count;
 };
 
 Command::~Command() {
+  LOG_DEBUG << "Command dtor " << --cmd_count;
+}
+
+WorkerContext& Command::context() {
+  return client_conn_->context();
 }
 
 // 0 : ok, 数据不够解析
 // >0 : ok, 解析成功，返回已解析的字节数
 // <0 : error, 未知命令
-int Command::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* buf, size_t size,
+int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char* buf, size_t size,
           std::shared_ptr<Command>* command) {
   const char * p = GetLineEnd(buf, size);
   if (p == nullptr) {
@@ -121,20 +129,19 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* 
 #define SINGLE_GET_ONLY 0
 #if SINGLE_GET_ONLY
     auto ep = BackendLoactor::Instance().GetEndpointByKey("1");
-    std::shared_ptr<Command> cmd(new SingleGetCommand(
-                     ep, owner, buf, cmd_line_bytes));
+    std::shared_ptr<Command> cmd(new SingleGetCommand(ep, client, buf, cmd_line_bytes));
     // command->push_back(cmd);
     *command = cmd;
-    LOG_DEBUG << "DONT_USE_MAP ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
+    LOG_DEBUG << "SINGLE_GET_ONLY ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
 #else
     std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
     if (endpoint_key_map.size() == 1) {
       auto it = endpoint_key_map.begin();
-      std::shared_ptr<Command> cmd(new SingleGetCommand(it->first, owner, it->second.c_str(), it->second.size()));
+      std::shared_ptr<Command> cmd(new SingleGetCommand(it->first, client, it->second.c_str(), it->second.size()));
       *command = cmd;
     } else {
-      std::shared_ptr<Command> cmd(new ParallelGetCommand(owner, std::move(endpoint_key_map)));
+      std::shared_ptr<Command> cmd(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
       *command = cmd;
     }
 #endif
@@ -146,50 +153,49 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> owner, const char* 
 
     //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
     std::shared_ptr<Command> cmd(new WriteCommand(BackendLoactor::Instance().GetEndpointByKey(key),
-              owner, buf, cmd_line_bytes, body_bytes));
+              client, buf, cmd_line_bytes, body_bytes));
     *command = cmd;
     return cmd_line_bytes + body_bytes;
   } else {
     LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
-             << ") len=" << cmd_line_bytes << " client_conn=" << owner.get();
+             << ") len=" << cmd_line_bytes << " client_conn=" << client.get();
     return -1;
   }
 }
 
-void Command::OnUpstreamReplyReceived(BackendConn* backend, const boost::system::error_code& error) {
+void Command::OnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   HookOnUpstreamReplyReceived(backend);
-  if (error) {
-    LOG_DEBUG << "Command::OnUpstreamReplyReceived read error, backend=" << backend
-              << " err="  << error << " " << error.message();
-    client_conn_->OnCommandError(shared_from_this(), error);
+  if (ec != ErrorCode::E_SUCCESS) {
+    LOG_WARN << "Command::OnUpstreamReplyReceived read error, backend=" << backend.get();
+    client_conn_->Abort(); // TODO : error
     return;
   }
 
-  LOG_DEBUG << "OnUpstreamReplyReceived, backend=" << backend;
+  LOG_DEBUG << "OnUpstreamReplyReceived, backend=" << backend.get();
   bool valid = ParseReply(backend);
   if (!valid) {
     LOG_WARN << __func__ << " parsing error! valid=false";
     // TODO : error handling
-    client_conn_->OnCommandError(shared_from_this(), error);
+    client_conn_->Abort();
+    return;
+  }
+
+  if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
+    LOG_DEBUG << __func__ << " no new data to process, backend=" << backend.get()
+                         << " replying_backend_=" << replying_backend_;
+    // 新收的新数据，可能不需要转发，而且不止一遍！例如收到的刚好是"END\r\n"
+    if (backend == replying_backend_) { // this check is necessary
+      ++completed_backends_;
+      RotateReplyingBackend();
+    } else {
+      PushWaitingReplyQueue(backend);
+    }
     return;
   }
 
   // 判断是否最靠前的command, 是才可以转发
-  if (client_conn_->IsFirstCommand(shared_from_this())) {
-    LOG_DEBUG << __func__ << " IsFirstCommand true, backend=" << backend;
-    if (TryActivateReplyingBackend(backend)) {
-      LOG_DEBUG << __func__ << " TryActivateReplyingBackend OK, backend=" << backend;
-      if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-        // 新收的新数据，可能不需要转发！例如收到的刚好是"END\r\n"
-        // TODO : 合并重复代码
-        ++completed_backends_;
-        RotateReplyingBackend();
-      } else {
-        TryForwardReply(backend);
-      }
-    } else {
-      PushWaitingReplyQueue(backend);
-    }
+  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
+    TryForwardReply(backend);
   } else {
     PushWaitingReplyQueue(backend);
   }
@@ -198,7 +204,7 @@ void Command::OnUpstreamReplyReceived(BackendConn* backend, const boost::system:
 }
 
 // return : is the backend successfully activated
-bool Command::TryActivateReplyingBackend(BackendConn* backend) {
+bool Command::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
   if (replying_backend_ == nullptr) {
     replying_backend_ = backend;
     LOG_DEBUG << "TryActivateReplyingBackend ok, backend=" << backend << " replying_backend_=" << replying_backend_;
@@ -207,23 +213,13 @@ bool Command::TryActivateReplyingBackend(BackendConn* backend) {
   return backend == replying_backend_;
 }
 
-void Command::Abort() {
-//if (backend_conn_) {
-//  backend_conn_->Close();
-//  LOG_INFO << "Command Abort OK.";
-//  delete backend_conn_;
-//  backend_conn_ = 0;
-//} else {
-//  // LOG_WARN << "Command Abort NULL backend_conn_.";
-//}
-}
-
-void Command::OnForwardReplyFinished(BackendConn* backend, const boost::system::error_code& error) {
-  if (error) {
-    // TODO
-    LOG_DEBUG << "Command::OnForwardReplyFinished error, backend=" << backend << " error=" << error;
+void Command::OnForwardReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  if (ec != ErrorCode::E_SUCCESS) {
+    LOG_WARN << "Command::OnForwardReplyFinished error, backend=" << backend;
+    client_conn_->Abort();
     return;
   }
+
   is_transfering_reply_ = false;
   backend->buffer()->dec_recycle_lock();
 
@@ -247,7 +243,27 @@ void Command::RotateReplyingBackend() {
   client_conn_->RotateReplyingCommand();
 }
 
-void Command::TryForwardReply(BackendConn* backend) {
+void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+  LOG_DEBUG << "Command::OnBackendConnectError endpoint=" << backend->remote_endpoint()
+           << " backend=" << backend;
+  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
+    static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码, refining error message protocol
+    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+    backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
+        backend->set_no_recycle();
+
+    TryForwardReply(backend);
+  } else {
+    static const char BACKEND_ERROR[] = "wait_BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
+    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+    backend->set_reply_complete();
+        backend->set_no_recycle();
+
+    PushWaitingReplyQueue(backend);
+  }
+}
+
+void Command::TryForwardReply(std::shared_ptr<BackendConn> backend) {
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
   if (!is_transfering_reply_ && unprocessed > 0) {
     is_transfering_reply_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求

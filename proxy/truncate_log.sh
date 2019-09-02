@@ -1,1 +1,1 @@
-cp /dev/null build/yamproxy.log
+cp /dev/null build/yarmproxy.log

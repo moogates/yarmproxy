@@ -1,17 +1,20 @@
 #ifndef _YARMPROXY_PARALLEL_GET_COMMAND_H_
 #define _YARMPROXY_PARALLEL_GET_COMMAND_H_
 
+#include <map>
 #include <set>
+
+#include <boost/asio.hpp>
 
 #include "command.h"
 
-using namespace boost::asio;
-
 namespace yarmproxy {
+
+using namespace boost::asio;
 
 class ParallelGetCommand : public Command {
 public:
-  ParallelGetCommand(std::shared_ptr<ClientConnection> owner,
+  ParallelGetCommand(std::shared_ptr<ClientConnection> client, const std::string& original_header, 
                      std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
 
   virtual ~ParallelGetCommand();
@@ -20,18 +23,19 @@ public:
   void OnForwardReplyEnabled() override;
 
 private:
-  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
-  void HookOnUpstreamReplyReceived(BackendConn* backend) override;
-  void DoForwardQuery(const char *, size_t) override;
-  bool ParseReply(BackendConn* backend) override;
+  void OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
-  void PushWaitingReplyQueue(BackendConn* backend) override; 
-  bool HasMoreBackend() const {
-    return completed_backends_ < query_set_.size(); // NOTE: 注意这里要
-  }
+  void HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend) override;
+  void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
+
+  void DoForwardQuery(const char *, size_t) override;
+  bool ParseReply(std::shared_ptr<BackendConn> backend) override;
+
+  void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend) override;
+  bool HasMoreBackend() const override;// rename -> HasUnfinishedBanckends()
   void RotateReplyingBackend() override;
 
-  size_t request_body_upcoming_bytes() const override {
+  size_t query_body_upcoming_bytes() const override {
     return 0;
   }
 
@@ -44,13 +48,13 @@ private:
     ~BackendQuery();
     std::string query_line_;
     ip::tcp::endpoint backend_addr_;
-    BackendConn* backend_conn_;
+    std::shared_ptr<BackendConn> backend_conn_;
   };
 
   std::vector<std::unique_ptr<BackendQuery>> query_set_;
-  std::list<BackendConn*> waiting_reply_queue_;
-  BackendConn* last_backend_;
-  std::set<BackendConn*> received_reply_backends_;
+  std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
+  std::shared_ptr<BackendConn> last_backend_;
+  std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 };
 
 }

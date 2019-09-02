@@ -6,6 +6,7 @@
 
 namespace yarmproxy {
 
+// TODO : size_t -> std::size_t
 size_t ReadBuffer::unparsed_bytes() const {
   if (received_offset_ > parsed_offset_) {
     return received_offset_ - parsed_offset_;
@@ -23,6 +24,12 @@ void ReadBuffer::update_received_bytes(size_t received_bytes) {
   received_offset_ += received_bytes;
   LOG_DEBUG << "ReadBuffer::update_received_bytes, this=" << this << " received=" << received_bytes
            << " new received_offset_=" << received_offset_;
+}
+
+void ReadBuffer::push_reply_data(const char* data, size_t bytes) {
+  memcpy(data_, data, bytes);
+  received_offset_ += bytes;
+  parsed_offset_ += bytes;
 }
 
 size_t ReadBuffer::unprocessed_bytes() const {  // 已经接收，且已经解析，但尚未处理的数据

@@ -20,7 +20,7 @@ public:
                , buffer_size_(buffer_size)
                , processed_offset_(0)
                , received_offset_(0)
-               , parsed_offset_(0) 
+               , parsed_offset_(0)
                , recycle_lock_count_(0) {
   }
   ~ReadBuffer();
@@ -29,7 +29,7 @@ public:
   }
 
   void Reset() {
-    received_offset_ = processed_offset_ = parsed_offset_ = 0; // TODO : 这里需要吗？
+    received_offset_ = processed_offset_ = parsed_offset_ = 0;
     recycle_lock_count_ = 0;
   }
 
@@ -66,6 +66,7 @@ public:
 
   void update_processed_bytes(size_t processes_bytes);
   void update_received_bytes(size_t received_bytes);
+  void push_reply_data(const char* data, size_t bytes);
 
   void update_parsed_bytes(size_t parsed_bytes) {
     parsed_offset_ += parsed_bytes;

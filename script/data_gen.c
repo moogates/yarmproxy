@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
 
   printf("set EXAMPLE_KEY 0 86400 %d\r\n", size);
   for(i = 0; (i + 1) * 50 <= size; ++i) {
-    printf("%08d__10_abcdef_20_abcdef_30_abcdef_40_abcde\r\n", i * 50);
+    printf("%08d__10_%06d_20_abcdef_30_abcdef_40_abcde\r\n", i * 50, size);
   }
   if (size % 50 > 0) {
     ending_line[size % 50] = 0;

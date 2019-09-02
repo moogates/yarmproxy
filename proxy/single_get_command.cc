@@ -1,9 +1,10 @@
 #include "single_get_command.h"
 
-#include "logging.h"
-
 #include "backend_conn.h"
+#include "backend_pool.h"
 #include "client_conn.h"
+#include "error_code.h"
+#include "logging.h"
 #include "read_buffer.h"
 #include "worker_pool.h"
 
@@ -29,9 +30,9 @@ size_t GetValueBytes(const char * data, const char * end) {
 }
 
 
-SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep, 
-        std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len)
-    : Command(owner) 
+SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep,
+        std::shared_ptr<ClientConnection> client, const char * buf, size_t cmd_len)
+    : Command(client, std::string(buf, cmd_len))
     , cmd_line_(buf, cmd_len)
     , backend_endpoint_(ep)
     , backend_conn_(nullptr)
@@ -41,26 +42,35 @@ SingleGetCommand::SingleGetCommand(const ip::tcp::endpoint & ep,
 
 SingleGetCommand::~SingleGetCommand() {
   if (backend_conn_) {
-    context_.backend_conn_pool()->Release(backend_conn_);
+    context().backend_conn_pool()->Release(backend_conn_);
   }
   LOG_DEBUG << "SingleGetCommand dtor " << --single_get_cmd_count;
 }
 
 void SingleGetCommand::ForwardQuery(const char * data, size_t bytes) {
-  if (backend_conn_ == nullptr) {
-    backend_conn_ = context_.backend_conn_pool()->Allocate(backend_endpoint_);
+  if (!backend_conn_) {
+    backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnForwardQueryFinished, backend_conn_),
                                WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
-    LOG_DEBUG << "SingleGetCommand::ForwardQuery allocated backend=" << backend_conn_;
+    LOG_DEBUG << "SingleGetCommand::ForwardQuery allocated backend=" << backend_conn_.get();
   }
 
   DoForwardQuery(data, bytes);
 }
 
-void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) {
-  if (error) {
+// TODO : rename forward -> write
+void SingleGetCommand::OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  // OnForwardQueryFinished(backend, boost::system::error_code());
+  if (ec != ErrorCode::E_SUCCESS) {
     // TODO : error handling
-    LOG_INFO << "WriteCommand OnForwardQueryFinished error";
+    if (ec == ErrorCode::E_CONNECT) {
+      LOG_WARN << "SingleGetCommand OnForwardQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
+               << " backend=" << backend.get();
+      OnBackendConnectError(backend);
+    } else {
+      client_conn_->Abort();
+      LOG_INFO << "SingleGetCommand OnForwardQueryFinished error";
+    }
     return;
   }
   assert(backend == backend_conn_);
@@ -68,7 +78,7 @@ void SingleGetCommand::OnForwardQueryFinished(BackendConn* backend, const boost:
   backend_conn_->ReadReply();
 }
 
-bool SingleGetCommand::ParseReply(BackendConn* backend) {
+bool SingleGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   bool valid = true;
   assert(backend_conn_ == backend);
   while(backend_conn_->buffer()->unparsed_bytes() > 0) {
@@ -88,7 +98,8 @@ bool SingleGetCommand::ParseReply(BackendConn* backend) {
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
 
       backend_conn_->buffer()->update_parsed_bytes(entry_bytes);
-      LOG_DEBUG << __func__ << " VALUE data, backend=" << backend << " recv_body=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
+      LOG_DEBUG << __func__ << " VALUE data, backend=" << backend.get()
+                << " recv_body=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
       // break; // TODO : 每次转发一条，only for test
     } else {
       // "END\r\n"
@@ -99,7 +110,7 @@ bool SingleGetCommand::ParseReply(BackendConn* backend) {
           valid = false;
           LOG_DEBUG << "ParseReply END not really end!";
         } else {
-          LOG_DEBUG << "ParseReply END is really end! set_reply_complete, backend=" << backend;
+          LOG_DEBUG << "ParseReply END is really end! set_reply_complete, backend=" << backend.get();
           backend->set_reply_complete();
           // backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
         }

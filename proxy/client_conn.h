@@ -18,7 +18,10 @@ class Command;
 class WorkerContext;
 class ReadBuffer;
 
-typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
+enum class ErrorCode;
+
+// typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
+typedef std::function<void(ErrorCode ec)> ForwardReplyCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
 public:
@@ -33,7 +36,10 @@ public:
     return socket_;
   }
   void StartRead();
-  void OnCommandError(std::shared_ptr<Command> cmd, const boost::system::error_code& error);
+  void Close();
+
+public:
+  void Abort();
 
 public:
   void ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb);
@@ -48,10 +54,8 @@ public:
     return read_buffer_;
   }
 
-  // boost::asio::io_service& io_service_;
 private:
   ip::tcp::socket socket_;
-public:
   ReadBuffer* read_buffer_;
 
 protected:
@@ -60,17 +64,16 @@ protected:
 private:
   std::list<std::shared_ptr<Command>> active_cmd_queue_;
 
-  ForwardReplyCallback forward_resp_callback_;
+  // ForwardReplyCallback forward_resp_callback_;
 
-  size_t timeout_;
-  boost::asio::deadline_timer timer_;
+//size_t timeout_;
+//boost::asio::deadline_timer timer_;
 
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   bool ProcessUnparsedQuery();
 
-  void HandleMemcCommandTimeout(const boost::system::error_code& error);
   void HandleTimeoutWrite(const boost::system::error_code& error);
 };
 

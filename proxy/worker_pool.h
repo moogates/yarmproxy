@@ -38,8 +38,6 @@ public:
     return workers_[next_worker_++ % concurrency_];
   }
 private:
-  static thread_local int worker_id_;
-
   size_t concurrency_;
   WorkerContext* workers_; // TODO : use std::unique_ptr
 

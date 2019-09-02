@@ -1,16 +1,20 @@
 #ifndef _YARMPROXY_SINGLE_GET_COMMAND_H_
 #define _YARMPROXY_SINGLE_GET_COMMAND_H_
 
-#include "command.h"
+#include <boost/asio.hpp>
 
-using namespace boost::asio;
+#include "command.h"
 
 namespace yarmproxy {
 
+using namespace boost::asio;
+
 class SingleGetCommand : public Command {
 public:
-  SingleGetCommand(const ip::tcp::endpoint & ep, 
-          std::shared_ptr<ClientConnection> owner, const char * buf, size_t cmd_len);
+  SingleGetCommand(const ip::tcp::endpoint & ep,
+          std::shared_ptr<ClientConnection> client,
+          const char * buf,
+          size_t cmd_len);
   virtual ~SingleGetCommand();
 
 private:
@@ -20,16 +24,16 @@ private:
   }
 
   void DoForwardQuery(const char *, size_t) override;
-  bool ParseReply(BackendConn* backend) override;
-  void OnForwardQueryFinished(BackendConn* backend, const boost::system::error_code& error) override;
+  bool ParseReply(std::shared_ptr<BackendConn> backend) override;
+  void OnForwardQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
-  size_t request_body_upcoming_bytes() const override {
+  size_t query_body_upcoming_bytes() const override {
     return 0;
   }
 
   std::string cmd_line_;
   ip::tcp::endpoint backend_endpoint_;
-  BackendConn* backend_conn_;
+  std::shared_ptr<BackendConn> backend_conn_;
 };
 
 }
