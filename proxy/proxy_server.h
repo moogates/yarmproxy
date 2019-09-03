@@ -18,6 +18,7 @@ public:
   ~ProxyServer();
 
   void Run();
+  void Stop();
 
 private:
   ProxyServer(ProxyServer&) = delete;
@@ -31,6 +32,7 @@ private:
   io_service::work work_;
   ip::tcp::acceptor acceptor_;
   std::string listen_addr_;
+  bool stopped_;
 
   std::unique_ptr<WorkerPool> worker_pool_;
 };

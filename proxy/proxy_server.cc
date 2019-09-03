@@ -1,6 +1,6 @@
 #include "proxy_server.h"
 
-// #include <thread>
+#include <iostream>
 // #include <functional>
 
 #include "logging.h"
@@ -8,6 +8,7 @@
 #include "client_conn.h"
 #include "worker_pool.h"
 #include "backend_locator.h"
+#include "signal_watcher.h"
 
 namespace yarmproxy {
 
@@ -28,12 +29,14 @@ ProxyServer::ProxyServer(const std::string & addr, size_t concurrency)
     : work_(io_service_)
     , acceptor_(io_service_)
     , listen_addr_(addr)
+    , stopped_(false)
     , worker_pool_(new WorkerPool(concurrency > 0 ? concurrency : DefaultConcurrency())) {
 }
 
 ProxyServer::~ProxyServer() {
-  io_service_.stop();
-  worker_pool_->StopDispatching();
+  if (!stopped_) {
+    Stop();
+  }
 }
 
 void ProxyServer::Run() {
@@ -55,16 +58,29 @@ void ProxyServer::Run() {
     return;
   }
 
+  SignalWatcher::Instance().RegisterHandler(SIGHUP, [this](int) { Stop(); });
+  SignalWatcher::Instance().RegisterHandler(SIGINT, [this](int) { Stop(); });
+
   worker_pool_->StartDispatching();
   StartAccept();
 
-  for(;;) {
+  while(!stopped_) {
     try {
+      std::cout << "ProxyServer io_service.run begin." << std::endl;
       io_service_.run();
+      std::cout << "ProxyServer io_service.run end." << std::endl;
     } catch (std::exception& e) {
       LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
     }
   }
+}
+
+void ProxyServer::Stop() {
+  std::cout << "ProxyServer Stop." << std::endl;
+  stopped_ = true;
+  io_service_.stop();
+  std::cout << "ProxyServer Stop 2." << std::endl;
+  worker_pool_->StopDispatching();
 }
 
 void ProxyServer::StartAccept() {

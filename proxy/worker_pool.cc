@@ -1,5 +1,7 @@
 #include "worker_pool.h"
 
+#include <iostream>
+
 #include "logging.h"
 
 #include "allocator.h"
@@ -25,23 +27,30 @@ BackendConnPool* WorkerContext::backend_conn_pool() {
 void WorkerPool::StartDispatching() {
   for(size_t i = 0; i < concurrency_; ++i) {
     WorkerContext& woker = workers_[i];
-    std::thread th([&woker]() {
-        for(;;) { // TODO: use loop?
+    std::atomic_bool& stopped(stopped_);
+    std::thread th([&woker, &stopped, i]() {
+        while(!stopped) { // TODO: use loop?
           try {
             woker.io_service_.run();
           } catch (std::exception& e) {
-            LOG_ERROR << "WorkerThread io_service.run error:" << e.what();
+            LOG_ERROR << "WorkerThread " << i << " io_service.run error:" << e.what();
           }
         }
+        LOG_WARN << "WorkerThread " << i << " stopped.";
       });
-    th.detach();
     woker.thread_ = std::move(th); // what to to with this thread handle?
   }
 }
 
 void WorkerPool::StopDispatching() {
+  std::cout << "WorkerPool Stop." << std::endl;
   for(size_t i = 0; i < concurrency_; ++i) {
+  std::cout << "WorkerPool Stop i." << std::endl;
     workers_[i].io_service_.stop();
+  }
+  for(size_t i = 0; i < concurrency_; ++i) {
+    std::cout << "WorkerPool join i." << std::endl;
+    workers_[i].thread_.join();
   }
 }
 
