@@ -58,17 +58,17 @@ void ProxyServer::Run() {
     return;
   }
 
-  SignalWatcher::Instance().RegisterHandler(SIGHUP, [this](int) { Stop(); });
+  // SignalWatcher::Instance().RegisterHandler(SIGHUP, [this](int) { Stop(); });
   SignalWatcher::Instance().RegisterHandler(SIGINT, [this](int) { Stop(); });
+  SignalWatcher::Instance().RegisterHandler(SIGTERM, [this](int) { Stop(); });
 
   worker_pool_->StartDispatching();
   StartAccept();
 
   while(!stopped_) {
     try {
-      std::cout << "ProxyServer io_service.run begin." << std::endl;
       io_service_.run();
-      std::cout << "ProxyServer io_service.run end." << std::endl;
+      LOG_WARN << "ProxyServer io_service stopped.";
     } catch (std::exception& e) {
       LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
     }
@@ -76,10 +76,9 @@ void ProxyServer::Run() {
 }
 
 void ProxyServer::Stop() {
-  std::cout << "ProxyServer Stop." << std::endl;
+  LOG_WARN << "ProxyServer Stop";
   stopped_ = true;
   io_service_.stop();
-  std::cout << "ProxyServer Stop 2." << std::endl;
   worker_pool_->StopDispatching();
 }
 

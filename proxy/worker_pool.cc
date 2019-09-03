@@ -43,13 +43,12 @@ void WorkerPool::StartDispatching() {
 }
 
 void WorkerPool::StopDispatching() {
-  std::cout << "WorkerPool Stop." << std::endl;
+  stopped_ = true;
   for(size_t i = 0; i < concurrency_; ++i) {
-  std::cout << "WorkerPool Stop i." << std::endl;
     workers_[i].io_service_.stop();
   }
   for(size_t i = 0; i < concurrency_; ++i) {
-    std::cout << "WorkerPool join i." << std::endl;
+    LOG_WARN << "WorkerPool StopDispatching join " << i;
     workers_[i].thread_.join();
   }
 }
