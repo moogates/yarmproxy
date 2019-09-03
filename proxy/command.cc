@@ -11,8 +11,7 @@
 #include "backend_conn.h"
 #include "read_buffer.h"
 
-#include "mono_get_command.h"
-#include "parallel_get_command.h"
+#include "get_command.h"
 #include "set_command.h"
 
 namespace yarmproxy {
@@ -130,24 +129,9 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
 
   if (strncmp(buf, "get ", 4) == 0) {
-#define MONO_GET_ONLY 0
-#if MONO_GET_ONLY
-    auto ep = BackendLoactor::Instance().GetEndpointByKey("1");
-    std::shared_ptr<Command> cmd(new MonoGetCommand(ep, client, buf, cmd_line_bytes));
-    // command->push_back(cmd);
-    *command = cmd;
-    LOG_DEBUG << "MONO_GET_ONLY ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
-#else
     std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
-    if (false && endpoint_key_map.size() == 1) {
-      auto it = endpoint_key_map.begin();
-      // std::shared_ptr<Command> cmd();
-      command->reset(new MonoGetCommand(it->first, client, it->second.c_str(), it->second.size()));
-    } else {
-      command->reset(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
-    }
-#endif
+    command->reset(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
     return cmd_line_bytes;
   } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0
              || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {

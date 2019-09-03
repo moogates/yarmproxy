@@ -1,4 +1,4 @@
-#include "parallel_get_command.h"
+#include "get_command.h"
 
 #include "error_code.h"
 #include "logging.h"
@@ -14,7 +14,20 @@ namespace yarmproxy {
 std::atomic_int parallel_get_cmd_count;
 
 const char * GetLineEnd(const char * buf, size_t len);
-size_t GetValueBytes(const char * data, const char * end);
+size_t GetValueBytes(const char * data, const char * end) {
+  // "VALUE <key> <flag> <bytes>\r\n"
+  const char * p = data + sizeof("VALUE ");
+  int count = 0;
+  while(p != end) {
+    if (*p == ' ') {
+      if (++count == 2) {
+        return std::stoi(p + 1);
+      }
+    }
+    ++p;
+  }
+  return 0;
+}
 
 ParallelGetCommand::BackendQuery::~BackendQuery() {
 }
