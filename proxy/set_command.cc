@@ -41,7 +41,7 @@ void SetCommand::WriteQuery(const char * data, size_t bytes) {
   if (!backend_conn_) {
     backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend_conn_),
-                               WeakBind(&Command::OnUpstreamReplyReceived, backend_conn_));
+                               WeakBind(&Command::OnBackendReplyReceived, backend_conn_));
     LOG_DEBUG << "SetCommand::WriteQuery allocated backend=" << backend_conn_.get();
   }
 

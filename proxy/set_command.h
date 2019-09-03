@@ -27,7 +27,7 @@ public:
   virtual ~SetCommand();
 
 private:
-  size_t query_body_upcoming_bytes() const override;
+  size_t query_body_upcoming_bytes() const;
   void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   void OnWriteReplyEnabled() override;
 

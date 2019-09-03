@@ -27,9 +27,9 @@ private:
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
-  size_t query_body_upcoming_bytes() const override {
-    return 0;
-  }
+//size_t query_body_upcoming_bytes() const override {
+//  return 0;
+//}
 
   std::string cmd_line_;
   ip::tcp::endpoint backend_endpoint_;

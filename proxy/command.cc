@@ -34,9 +34,11 @@ const char * GetLineEnd(const char * buf, size_t len) {
   return p;
 }
 
-bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
+bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size,
+        std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
   LOG_DEBUG << "GroupKeysByEndpoint begin, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
-  for(const char* p = cmd_line + 4/*strlen("get ")*/; p < cmd_line + cmd_line_size - 2/*strlen("\r\n")*/; ++p) {
+  for(const char* p = cmd_line + 4/*strlen("get ")*/
+      ; p < cmd_line + cmd_line_size - 2/*strlen("\r\n")*/; ++p) {
     const char* q = p;
     while(*q != ' ' && *q != '\r') {
       ++q;
@@ -49,7 +51,8 @@ bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip
     }
 
     it->second.append(p - 1, 1 + q - p);
-    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first << " key=[" << std::string(p-1, 1+q-p) << "]"
+    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first
+              << " key=[" << std::string(p-1, 1+q-p) << "]"
               << " current=" << it->second;
 
     p = q;
@@ -115,8 +118,9 @@ WorkerContext& Command::context() {
 // 0 : ok, 数据不够解析
 // >0 : ok, 解析成功，返回已解析的字节数
 // <0 : error, 未知命令
-int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char* buf, size_t size,
-          std::shared_ptr<Command>* command) {
+int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
+                           const char* buf, size_t size,
+                           std::shared_ptr<Command>* command) {
   const char * p = GetLineEnd(buf, size);
   if (p == nullptr) {
     LOG_DEBUG << "CreateCommand no complete cmd line found";
@@ -136,17 +140,17 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
 #else
     std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
-    if (endpoint_key_map.size() == 1) {
+    if (false && endpoint_key_map.size() == 1) {
       auto it = endpoint_key_map.begin();
-      std::shared_ptr<Command> cmd(new MonoGetCommand(it->first, client, it->second.c_str(), it->second.size()));
-      *command = cmd;
+      // std::shared_ptr<Command> cmd();
+      command->reset(new MonoGetCommand(it->first, client, it->second.c_str(), it->second.size()));
     } else {
-      std::shared_ptr<Command> cmd(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
-      *command = cmd;
+      command->reset(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
     }
 #endif
     return cmd_line_bytes;
-  } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0 || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
+  } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0
+             || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
     std::string key;
     size_t body_bytes;
     ParseSetCommandLine(buf, cmd_line_bytes, &key, &body_bytes);
@@ -163,25 +167,23 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
   }
 }
 
-void Command::OnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  HookOnUpstreamReplyReceived(backend);
+void Command::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  HookOnBackendReplyReceived(backend);
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_WARN << "Command::OnUpstreamReplyReceived read error, backend=" << backend.get();
+    LOG_WARN << "Command::OnBackendReplyReceived read error, backend=" << backend.get();
     client_conn_->Abort();
     return;
   }
 
-  LOG_DEBUG << "OnUpstreamReplyReceived, backend=" << backend.get();
+  LOG_DEBUG << "OnBackendReplyReceived, backend=" << backend.get();
   bool valid = ParseReply(backend);
   if (!valid) {
-    LOG_WARN << "OnUpstreamReplyReceived ParseReply error, backend=" << backend.get();
+    LOG_WARN << "OnBackendReplyReceived ParseReply error, backend=" << backend.get();
     client_conn_->Abort();
     return;
   }
 
   if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-    LOG_DEBUG << __func__ << " no new data to process, backend=" << backend.get()
-                         << " replying_backend_=" << replying_backend_;
     // 新收的新数据，可能不需要转发，而且不止一遍！例如收到的刚好是"END\r\n"
     if (backend == replying_backend_) { // this check is necessary
       ++completed_backends_;
@@ -225,14 +227,7 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCo
   if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
     ++completed_backends_;
     RotateReplyingBackend();
-    LOG_DEBUG << "SetCommand::OnWriteReplyFinished backend no more reply, and all data written to client,"
-              << " backend=" << backend;
   } else {
-    LOG_DEBUG << "SetCommand::OnWriteReplyFinished has more reply to write, ready_to_transfer_bytes=" << backend->buffer()->unprocessed_bytes()
-              << " reply_complete=" << backend->reply_complete()
-              << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes()
-              << " parsed_unreceived_bytes=" << backend->buffer()->parsed_unreceived_bytes()
-              << " backend=" << backend;
     backend->TryReadMoreReply(); // 这里必须继续try
     TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }
@@ -270,13 +265,6 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
                                   WeakBind(&Command::OnWriteReplyFinished, backend));
     backend->buffer()->update_processed_bytes(unprocessed);
-    LOG_DEBUG << __func__ << " to_process_bytes=" << unprocessed
-              << " new_unprocessed=" << backend->buffer()->unprocessed_bytes()
-              << " client=" << this << " backend=" << backend;
-  } else {
-    LOG_DEBUG << __func__ << " do nothing, unprocessed_bytes=" << unprocessed
-              << " is_transfering_reply=" << is_transfering_reply_
-              << " client=" << this << " backend=" << backend;
   }
 }
 

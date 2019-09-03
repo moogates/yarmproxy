@@ -47,7 +47,7 @@ void ParallelGetCommand::WriteQuery(const char *, size_t) {
   DoWriteQuery(nullptr, 0);
 }
 
-void ParallelGetCommand::HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend) {
+void ParallelGetCommand::HookOnBackendReplyReceived(std::shared_ptr<BackendConn> backend) {
   if (received_reply_backends_.insert(backend).second) {
     // if (unreachable_backends_ + received_reply_backends_.size() == query_set_.size()) {
     if (received_reply_backends_.size() == query_set_.size()) {
@@ -64,9 +64,9 @@ void ParallelGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> back
 
   // pipeline的情况下，要排队写
   //
-  HookOnUpstreamReplyReceived(backend);
+  HookOnBackendReplyReceived(backend);
 
-  if (HasMoreBackend()) {
+  if (HasUnfinishedBanckends()) {
     backend->set_reply_complete();
     backend->set_no_recycle();
     if (backend == replying_backend_) {
@@ -170,16 +170,16 @@ void ParallelGetCommand::OnWriteReplyEnabled() {
   }
 }
 
-bool ParallelGetCommand::HasMoreBackend() const { // rename -> HasUnfinishedBanckends()
-  LOG_DEBUG << "ParallelGetCommand::HasMoreBackend "
+bool ParallelGetCommand::HasUnfinishedBanckends() const {
+  LOG_DEBUG << "ParallelGetCommand::HasUnfinishedBanckends"
             << " unreachable_backends_=" << unreachable_backends_
             << " completed_backends_=" << completed_backends_ 
             << " total_backends=" << query_set_.size();
-  return unreachable_backends_ + completed_backends_ < query_set_.size(); // NOTE: 注意这里要
+  return unreachable_backends_ + completed_backends_ < query_set_.size();
 }
 
 void ParallelGetCommand::RotateReplyingBackend() {
-  if (HasMoreBackend()) {
+  if (HasUnfinishedBanckends()) {
     LOG_DEBUG << "ParallelGetCommand::Rotate to next backend";
     OnWriteReplyEnabled();
   } else {
@@ -243,7 +243,7 @@ void ParallelGetCommand::DoWriteQuery(const char *, size_t) {
     if (!backend) {
       backend = context().backend_conn_pool()->Allocate(query->backend_addr_);
       backend->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend),
-                                 WeakBind(&Command::OnUpstreamReplyReceived, backend));
+                                 WeakBind(&Command::OnBackendReplyReceived, backend));
       query->backend_conn_ = backend;
       LOG_DEBUG << "ParallelGetCommand WriteQuery cmd=" << this << " allocated backend=" << backend << " query=("
                 << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";

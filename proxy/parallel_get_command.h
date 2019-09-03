@@ -25,19 +25,19 @@ public:
 private:
   void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
-  void HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend) override;
+  void HookOnBackendReplyReceived(std::shared_ptr<BackendConn> backend) override;
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
 
   void DoWriteQuery(const char *, size_t) override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
 
   void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend) override;
-  bool HasMoreBackend() const override;// rename -> HasUnfinishedBanckends()
+  bool HasUnfinishedBanckends() const;
   void RotateReplyingBackend() override;
 
-  size_t query_body_upcoming_bytes() const override {
-    return 0;
-  }
+//size_t query_body_upcoming_bytes() const override {
+//  return 0;
+//}
 
   struct BackendQuery {
     BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)

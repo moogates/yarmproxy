@@ -31,17 +31,14 @@ public:
   // backend_conn转发完毕WriteQuery()指定的数据后，调用OnWriteQueryFinished()
   virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
 
-  // backend_conn收到reply数据后, 调用OnUpstreamReplyReceived()
-  void OnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+  // backend_conn收到reply数据后, 调用OnBackendReplyReceived()
+  void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   virtual void OnWriteReplyEnabled() = 0;
 
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 private:
-  virtual void HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend){}
+  virtual void HookOnBackendReplyReceived(std::shared_ptr<BackendConn> backend){}
   virtual void RotateReplyingBackend();
-  virtual bool HasMoreBackend() const { // rename -> HasUnfinishedBanckends()
-    return false;
-  }
 protected:
   bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
 
@@ -53,7 +50,7 @@ public:
 private:
   virtual void DoWriteQuery(const char * data, size_t bytes) = 0;
   virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
-  virtual size_t query_body_upcoming_bytes() const = 0;
+  // virtual size_t query_body_upcoming_bytes() const = 0;
 protected:
   bool is_transfering_reply_;
   std::shared_ptr<BackendConn> replying_backend_;
