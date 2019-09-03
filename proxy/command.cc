@@ -96,13 +96,9 @@ std::atomic_int cmd_count;
 
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 Command::Command(std::shared_ptr<ClientConnection> client, const std::string& original_header)
-    : is_transfering_reply_(false)
-    , replying_backend_(nullptr)
-    , completed_backends_(0)
-    , unreachable_backends_(0)
-    , client_conn_(client)
-    , original_header_(original_header)
-    , loaded_(false) {
+    : client_conn_(client)
+    , is_transfering_reply_(false)
+    , original_header_(original_header) {
   LOG_DEBUG << "Command ctor " << ++cmd_count;
 };
 
@@ -110,8 +106,8 @@ Command::~Command() {
   LOG_DEBUG << "Command dtor " << --cmd_count;
 }
 
-WorkerContext& Command::context() {
-  return client_conn_->context();
+BackendConnPool* Command::backend_pool() {
+  return client_conn_->context().backend_conn_pool();
 }
 
 // 0 : ok, 数据不够解析
@@ -151,53 +147,6 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   }
 }
 
-void Command::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  HookOnBackendReplyReceived(backend);
-  if (ec != ErrorCode::E_SUCCESS) {
-    LOG_WARN << "Command::OnBackendReplyReceived read error, backend=" << backend.get();
-    client_conn_->Abort();
-    return;
-  }
-
-  LOG_DEBUG << "OnBackendReplyReceived, backend=" << backend.get();
-  bool valid = ParseReply(backend);
-  if (!valid) {
-    LOG_WARN << "OnBackendReplyReceived ParseReply error, backend=" << backend.get();
-    client_conn_->Abort();
-    return;
-  }
-
-  if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-    // 新收的新数据，可能不需要转发，而且不止一遍！例如收到的刚好是"END\r\n"
-    if (backend == replying_backend_) { // this check is necessary
-      ++completed_backends_;
-      RotateReplyingBackend();
-    } else {
-      PushWaitingReplyQueue(backend);
-    }
-    return;
-  }
-
-  // 判断是否最靠前的command, 是才可以转发
-  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
-    TryWriteReply(backend);
-  } else {
-    PushWaitingReplyQueue(backend);
-  }
-
-  backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
-}
-
-// return : is the backend successfully activated
-bool Command::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
-  if (replying_backend_ == nullptr) {
-    replying_backend_ = backend;
-    LOG_DEBUG << "TryActivateReplyingBackend ok, backend=" << backend << " replying_backend_=" << replying_backend_;
-    return true;
-  }
-  return backend == replying_backend_;
-}
-
 void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     LOG_WARN << "Command::OnWriteReplyFinished error, backend=" << backend;
@@ -209,35 +158,23 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCo
   backend->buffer()->dec_recycle_lock();
 
   if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-    ++completed_backends_;
-    RotateReplyingBackend();
+    RotateReplyingBackend(true);
   } else {
     backend->TryReadMoreReply(); // 这里必须继续try
     TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }
 }
 
-void Command::RotateReplyingBackend() {
-  client_conn_->RotateReplyingCommand();
-}
-
 void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
   LOG_DEBUG << "Command::OnBackendConnectError endpoint=" << backend->remote_endpoint()
            << " backend=" << backend;
-  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
-    static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码, refining error message protocol
-    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-    backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
-        backend->set_no_recycle();
+  static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码, refining error message protocol
+  backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+  backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
+  backend->set_no_recycle();
 
+  if (client_conn_->IsFirstCommand(shared_from_this())) {
     TryWriteReply(backend);
-  } else {
-    static const char BACKEND_ERROR[] = "wait_BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
-    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-    backend->set_reply_complete();
-        backend->set_no_recycle();
-
-    PushWaitingReplyQueue(backend);
   }
 }
 

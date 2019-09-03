@@ -9,7 +9,7 @@
 namespace yarmproxy {
 
 class BackendConn;
-class WorkerContext;
+class BackendConnPool;
 class ClientConnection;
 
 enum class ErrorCode;
@@ -25,45 +25,15 @@ public:
 
 public:
   virtual ~Command();
-
-  virtual void WriteQuery(const char * data, size_t bytes) = 0;
-
-  // backend_conn转发完毕WriteQuery()指定的数据后，调用OnWriteQueryFinished()
+  virtual void WriteQuery() = 0;
   virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
-
-  // backend_conn收到reply数据后, 调用OnBackendReplyReceived()
-  void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+  virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
   virtual void OnWriteReplyEnabled() = 0;
-
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
-private:
-  virtual void HookOnBackendReplyReceived(std::shared_ptr<BackendConn> backend){}
-  virtual void RotateReplyingBackend();
+
 protected:
-  bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
-
-public:
-  const std::string& original_header() const {
-    return original_header_;
-  }
-
-private:
-  virtual void DoWriteQuery(const char * data, size_t bytes) = 0;
-  virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
-  // virtual size_t query_body_upcoming_bytes() const = 0;
-protected:
-  bool is_transfering_reply_;
-  std::shared_ptr<BackendConn> replying_backend_;
-  size_t completed_backends_;
-  size_t unreachable_backends_;
-  std::shared_ptr<ClientConnection> client_conn_;
-
-  std::string original_header_;
-
-  WorkerContext& context();
-
+  BackendConnPool* backend_pool();
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
-  virtual void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend) {}
   virtual void OnBackendConnectError(std::shared_ptr<BackendConn> backend);
 
   typedef void(Command::*BackendCallbackFunc)(std::shared_ptr<BackendConn> backend, ErrorCode ec);
@@ -78,10 +48,21 @@ protected:
           }
         };
   }
-
 private:
-  timeval time_created_;
-  bool loaded_;
+  virtual void RotateReplyingBackend(bool success) = 0;
+  virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
+
+public:
+  const std::string& original_header() const {
+    return original_header_;
+  }
+
+protected:
+  std::shared_ptr<ClientConnection> client_conn_;
+private:
+  bool is_transfering_reply_;
+  std::string original_header_;
+
 };
 
 }

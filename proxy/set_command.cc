@@ -16,48 +16,55 @@ std::atomic_int write_cmd_count;
 SetCommand::SetCommand(const ip::tcp::endpoint & ep,
         std::shared_ptr<ClientConnection> client, const char * buf, size_t cmd_len, size_t body_bytes)
     : Command(client, std::string(buf, cmd_len))
-    , query_header_bytes_(cmd_len)
-    , query_written_bytes_(0)
-    , query_body_bytes_(body_bytes)
-    , query_writing_bytes_(0)
     , backend_endpoint_(ep)
-    , backend_conn_(nullptr)
 {
   LOG_DEBUG << "SetCommand ctor " << ++write_cmd_count;
 }
 
 SetCommand::~SetCommand() {
   if (backend_conn_) {
-    context().backend_conn_pool()->Release(backend_conn_);
+    backend_pool()->Release(backend_conn_);
   }
   LOG_DEBUG << "SetCommand dtor " << --write_cmd_count;
 }
 
-size_t SetCommand::query_body_upcoming_bytes() const {
-  return query_header_bytes_ + query_body_bytes_ - query_writing_bytes_ - query_written_bytes_;
-}
-
-void SetCommand::WriteQuery(const char * data, size_t bytes) {
+void SetCommand::WriteQuery() {
   if (!backend_conn_) {
-    backend_conn_ = context().backend_conn_pool()->Allocate(backend_endpoint_);
+    backend_conn_ = backend_pool()->Allocate(backend_endpoint_);
     backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend_conn_),
                                WeakBind(&Command::OnBackendReplyReceived, backend_conn_));
     LOG_DEBUG << "SetCommand::WriteQuery allocated backend=" << backend_conn_.get();
   }
 
-  DoWriteQuery(data, bytes);
+  client_conn_->buffer()->inc_recycle_lock();
+  backend_conn_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
+          client_conn_->buffer()->unprocessed_bytes(),
+          client_conn_->buffer()->parsed_unreceived_bytes() > 0);
 }
 
-void SetCommand::DoWriteQuery(const char * query_data, size_t client_buf_received_bytes) {
-  client_conn_->buffer()->inc_recycle_lock();
-  query_writing_bytes_ = std::min(client_buf_received_bytes, query_header_bytes_ + query_body_bytes_); // FIXME
-  backend_conn_->WriteQuery(query_data, query_writing_bytes_, query_body_upcoming_bytes() != 0);
+void SetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  if (ec != ErrorCode::E_SUCCESS
+      || ParseReply(backend) == false) {
+    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend.get();
+    client_conn_->Abort();
+    return;
+  }
+
+  // 判断是否最靠前的command, 是才可以转发
+  if (client_conn_->IsFirstCommand(shared_from_this())) {
+    TryWriteReply(backend);
+  }
+  backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
 }
 
 void SetCommand::OnWriteReplyEnabled() {
   LOG_DEBUG << "OnWriteReplyEnabled TryWriteReply backend_conn_=" << backend_conn_;
   // TODO : if connection refused, should report error & rotate
   TryWriteReply(backend_conn_);
+}
+
+void SetCommand::RotateReplyingBackend(bool) {
+  client_conn_->RotateReplyingCommand();
 }
 
 void SetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
@@ -74,13 +81,10 @@ void SetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, Erro
     return;
   }
   assert(backend == backend_conn_);
-  LOG_DEBUG << "SetCommand OnWriteQueryFinished ok, query_writing_bytes_=" << query_writing_bytes_;
   client_conn_->buffer()->dec_recycle_lock();
 
-  query_written_bytes_ += query_writing_bytes_;
-  query_writing_bytes_ = 0;
-
-  if (query_written_bytes_ < query_header_bytes_ + query_body_bytes_) {
+  // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
+  if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
     LOG_DEBUG << "SetCommand::OnWriteQueryFinished 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
     client_conn_->TryReadMoreQuery();
   } else {

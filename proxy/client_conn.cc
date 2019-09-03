@@ -120,15 +120,17 @@ bool ClientConnection::ProcessUnparsedQuery() {
       TryReadMoreQuery(); // read more data
       return true;
     } else {
+      read_buffer_->update_parsed_bytes(parsed_bytes);
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
-      command->WriteQuery(read_buffer_->unprocessed_data(), to_process_bytes);
+      assert(to_process_bytes == read_buffer_->unprocessed_bytes());
+
+      command->WriteQuery();
       active_cmd_queue_.emplace_back(std::move(command));
 
-      read_buffer_->update_parsed_bytes(parsed_bytes);
       read_buffer_->update_processed_bytes(to_process_bytes);
     }
   }
-  LOG_WARN << "ClientConnection::HandleRead active_cmd_queue_.size=" << active_cmd_queue_.size();
+  LOG_DEBUG << "ClientConnection::HandleRead active_cmd_queue_.size=" << active_cmd_queue_.size();
   // TryReadMoreQuery(); // TODO : read should continues here, so that the conn shared_ptr won't be released
   return true;
 }
@@ -146,7 +148,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
-    active_cmd_queue_.back()->WriteQuery(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
+    active_cmd_queue_.back()->WriteQuery();
     read_buffer_->update_processed_bytes(read_buffer_->unprocessed_bytes());
     if (read_buffer_->parsed_unreceived_bytes() > 0) {
       // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery的回调函数里面才继续read. 这并不是最佳方式

@@ -19,31 +19,27 @@ public:
 
   virtual ~ParallelGetCommand();
 
-  void WriteQuery(const char * data, size_t bytes) override;
+  void WriteQuery() override;
   void OnWriteReplyEnabled() override;
+  void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
 private:
   void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
-
-  void HookOnBackendReplyReceived(std::shared_ptr<BackendConn> backend) override;
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
-
-  void DoWriteQuery(const char *, size_t) override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
+  void RotateReplyingBackend(bool success) override;
 
-  void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend) override;
+private:
+  void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
+  void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend);
   bool HasUnfinishedBanckends() const;
-  void RotateReplyingBackend() override;
+  bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
 
-//size_t query_body_upcoming_bytes() const override {
-//  return 0;
-//}
-
+private:
   struct BackendQuery {
     BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
         : query_line_(query_line)
-        , backend_addr_(ep)
-        , backend_conn_(nullptr) {
+        , backend_addr_(ep) {
     }
     ~BackendQuery();
     std::string query_line_;
@@ -53,7 +49,12 @@ private:
 
   std::vector<std::unique_ptr<BackendQuery>> query_set_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
+
+  std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<BackendConn> last_backend_;
+
+  size_t completed_backends_;
+  size_t unreachable_backends_;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 };
 
