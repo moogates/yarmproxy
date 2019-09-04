@@ -44,20 +44,22 @@ public:
   ReadBuffer* buffer() {
     return read_buffer_;
   }
+
+  bool Completed() const;
   const ip::tcp::endpoint& remote_endpoint() const {
     return remote_endpoint_;
   }
-  void set_reply_complete() {
-    reply_complete_ = true;
+  void set_reply_recv_complete() {
+    reply_recv_complete_ = true;
   }
   void set_no_recycle() {
     no_recycle_ = true;
   }
-  bool reply_complete() const {
-    return reply_complete_;
-  }
+//bool reply_recv_complete() const {
+//  return reply_recv_complete_;
+//}
   bool recyclable() const {
-    return !no_recycle_ && reply_complete_;
+    return !no_recycle_ && Completed();
   }
 private:
   WorkerContext& context_;
@@ -69,7 +71,7 @@ private:
   BackendQuerySentCallback query_sent_callback_;
 
   bool is_reading_more_;
-  bool reply_complete_;  // if reveived end of reply from backend server. TODO : rename to "received_end_of_reply_"
+  bool reply_recv_complete_;  // if reveived end of reply from backend server. TODO : rename to "received_end_of_reply_"
   bool no_recycle_;
 };
 

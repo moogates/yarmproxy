@@ -14,7 +14,8 @@ const char * GetLineEnd(const char * buf, size_t len);
 
 std::atomic_int write_cmd_count;
 SetCommand::SetCommand(const ip::tcp::endpoint & ep,
-        std::shared_ptr<ClientConnection> client, const char * buf, size_t cmd_len, size_t body_bytes)
+        std::shared_ptr<ClientConnection> client,
+        const char * buf, size_t cmd_len, size_t body_bytes)
     : Command(client, std::string(buf, cmd_len))
     , backend_endpoint_(ep)
 {
@@ -30,10 +31,8 @@ SetCommand::~SetCommand() {
 
 void SetCommand::WriteQuery() {
   if (!backend_conn_) {
-    backend_conn_ = backend_pool()->Allocate(backend_endpoint_);
-    backend_conn_->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend_conn_),
-                               WeakBind(&Command::OnBackendReplyReceived, backend_conn_));
-    LOG_DEBUG << "SetCommand::WriteQuery allocated backend=" << backend_conn_.get();
+    backend_conn_ = AllocateBackend(backend_endpoint_);
+    LOG_DEBUG << "SetCommand::WriteQuery allocated backend=" << backend_conn_;
   }
 
   client_conn_->buffer()->inc_recycle_lock();
@@ -45,7 +44,7 @@ void SetCommand::WriteQuery() {
 void SetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS
       || ParseReply(backend) == false) {
-    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend.get();
+    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
     client_conn_->Abort();
     return;
   }
@@ -57,8 +56,8 @@ void SetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, Er
   backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
 }
 
-void SetCommand::OnWriteReplyEnabled() {
-  LOG_DEBUG << "OnWriteReplyEnabled TryWriteReply backend_conn_=" << backend_conn_;
+void SetCommand::StartWriteReply() {
+  LOG_DEBUG << "StartWriteReply TryWriteReply backend_conn_=" << backend_conn_;
   // TODO : if connection refused, should report error & rotate
   TryWriteReply(backend_conn_);
 }
@@ -72,7 +71,7 @@ void SetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, Erro
   if (ec != ErrorCode::E_SUCCESS) {
     if (ec == ErrorCode::E_CONNECT) {
       LOG_WARN << "SetCommand OnWriteQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
-               << " backend=" << backend.get();
+               << " backend=" << backend;
       OnBackendConnectError(backend);
     } else {
       client_conn_->Abort();
@@ -107,8 +106,8 @@ bool SetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
   LOG_DEBUG << "SetCommand ParseReply resp.size=" << p - entry + 1
             // << " contont=[" << std::string(entry, p - entry - 1) << "]"
-            << " set_reply_complete, backend=" << backend.get();
-  backend->set_reply_complete();
+            << " set_reply_recv_complete, backend=" << backend;
+  backend->set_reply_recv_complete();
   return true;
 }
 

@@ -6,6 +6,9 @@
 #include <string>
 #include <memory>
 
+#include <boost/asio.hpp>
+using namespace boost::asio; // TODO : minimize endpoint dependency
+
 namespace yarmproxy {
 
 class BackendConn;
@@ -21,18 +24,20 @@ public:
   static int CreateCommand(std::shared_ptr<ClientConnection> client,
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* cmd);
+protected: // TODO : best practice ?
   Command(std::shared_ptr<ClientConnection> client, const std::string& original_header);
-
 public:
   virtual ~Command();
   virtual void WriteQuery() = 0;
   virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
   virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
-  virtual void OnWriteReplyEnabled() = 0;
+  virtual void StartWriteReply() = 0;
+
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
 protected:
   BackendConnPool* backend_pool();
+  std::shared_ptr<BackendConn> AllocateBackend(const ip::tcp::endpoint& ep);
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
   virtual void OnBackendConnectError(std::shared_ptr<BackendConn> backend);
 
@@ -62,7 +67,6 @@ protected:
 private:
   bool is_transfering_reply_;
   std::string original_header_;
-
 };
 
 }

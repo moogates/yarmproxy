@@ -9,6 +9,7 @@
 #include "client_conn.h"
 #include "backend_locator.h"
 #include "backend_conn.h"
+#include "backend_pool.h"
 #include "read_buffer.h"
 
 #include "get_command.h"
@@ -142,9 +143,17 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     return cmd_line_bytes + body_bytes;
   } else {
     LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
-             << ") len=" << cmd_line_bytes << " client_conn=" << client.get();
+             << ") len=" << cmd_line_bytes << " client_conn=" << client;
     return -1;
   }
+}
+
+std::shared_ptr<BackendConn> Command::AllocateBackend(const ip::tcp::endpoint& ep) {
+  auto backend = backend_pool()->Allocate(ep);
+  backend->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend),
+                             WeakBind(&Command::OnBackendReplyReceived, backend));
+  LOG_DEBUG << "SetCommand::WriteQuery allocated backend=" << backend;
+  return backend;
 }
 
 void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
@@ -157,7 +166,7 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCo
   is_transfering_reply_ = false;
   backend->buffer()->dec_recycle_lock();
 
-  if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
+  if (backend->Completed()) {
     RotateReplyingBackend(true);
   } else {
     backend->TryReadMoreReply(); // 这里必须继续try
@@ -170,7 +179,7 @@ void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
            << " backend=" << backend;
   static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码, refining error message protocol
   backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-  backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
+  backend->set_reply_recv_complete(); // TODO : reply complete can't be the only standard to recycle
   backend->set_no_recycle();
 
   if (client_conn_->IsFirstCommand(shared_from_this())) {
@@ -185,6 +194,9 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
     backend->buffer()->inc_recycle_lock();
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
                                   WeakBind(&Command::OnWriteReplyFinished, backend));
+
+  //LOG_WARN << "Command::TryWriteReply backend=" << backend
+  //          << " data=(" << std::string(backend->buffer()->unprocessed_data(), unprocessed) << ")";
     backend->buffer()->update_processed_bytes(unprocessed);
   }
 }

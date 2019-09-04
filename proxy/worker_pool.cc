@@ -29,7 +29,7 @@ void WorkerPool::StartDispatching() {
     WorkerContext& woker = workers_[i];
     std::atomic_bool& stopped(stopped_);
     std::thread th([&woker, &stopped, i]() {
-        while(!stopped) { // TODO: use loop?
+        while(!stopped) {
           try {
             woker.io_service_.run();
           } catch (std::exception& e) {

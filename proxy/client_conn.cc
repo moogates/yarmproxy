@@ -4,7 +4,6 @@
 #include <memory>
 
 #include "allocator.h"
-#include "backend_conn.h"
 #include "command.h"
 #include "error_code.h"
 #include "logging.h"
@@ -71,7 +70,7 @@ void ClientConnection::AsyncRead() {
 void ClientConnection::RotateReplyingCommand() {
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
-    active_cmd_queue_.front()->OnWriteReplyEnabled();
+    active_cmd_queue_.front()->StartWriteReply();
     ProcessUnparsedQuery();
   }
 }
@@ -82,13 +81,12 @@ void ClientConnection::WriteReply(const char* data, size_t bytes, const WriteRep
   std::shared_ptr<ClientConnection> ptr(shared_from_this());
   // auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
   auto cb_wrap = [ptr, data, bytes, callback](const boost::system::error_code& error, size_t bytes_transferred) {
-    LOG_DEBUG << "ClientConnection::WriteReply callback begin, bytes_transferred=" << bytes_transferred;
     if (!error && bytes_transferred < bytes) {
       ptr->WriteReply(data + bytes_transferred, bytes - bytes_transferred, callback);
     } else {
+      // LOG_WARN << "Command::TryWriteReply callback, error=" << error
+      //       << " bytes_transferred=" << bytes_transferred;
       // 发完了，或出错了，才告知Command
-      LOG_DEBUG << "ClientConnection::WriteReply callback, bytes_transferred=" << bytes_transferred
-               << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
     }
   };

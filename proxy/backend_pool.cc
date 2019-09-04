@@ -15,10 +15,10 @@ std::shared_ptr<BackendConn> BackendConnPool::Allocate(const ip::tcp::endpoint &
   if ((it != conn_map_.end()) && (!it->second.empty())) {
     backend = it->second.front();
     it->second.pop();
-    LOG_DEBUG << "BackendConnPool::Allocate reuse, backend=" << backend.get() << " ep=" << ep << ", idles=" << it->second.size();
+    LOG_DEBUG << "BackendConnPool::Allocate reuse, backend=" << backend << " ep=" << ep << ", idles=" << it->second.size();
   } else {
     backend.reset(new BackendConn(context_, ep));
-    LOG_DEBUG << "BackendConnPool::Allocate create, backend=" << backend.get() << " ep=" << ep;
+    LOG_DEBUG << "BackendConnPool::Allocate create, backend=" << backend << " ep=" << ep;
   }
   auto res = active_conns_.insert(std::make_pair(backend, ep));
   assert(res.second);
@@ -40,12 +40,12 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
   }
 
   const ip::tcp::endpoint & ep = ep_it->second;
-  LOG_DEBUG << "BackendConnPool::Release backend=" << backend.get() << " ep=" << ep;
+  LOG_DEBUG << "BackendConnPool::Release backend=" << backend << " ep=" << ep;
   active_conns_.erase(ep_it);
 
   if (!backend->recyclable()) {
-    LOG_DEBUG << "BackendConnPool::Release unrecyclable backend=" << backend.get()
-             << " reply_complete=" << backend->reply_complete();
+    LOG_DEBUG << "BackendConnPool::Release unrecyclable backend=" << backend
+             << " Completed=" << backend->Completed();
     backend->Close();
     return;
   }
@@ -55,17 +55,17 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
     backend->Reset();
     // backend->buffer()->Reset();
     conn_map_[ep].push(backend);
-    LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend.get() << " ep=" << ep << " pool_size=1";
+    LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend << " ep=" << ep << " pool_size=1";
   } else {
     const static size_t kMaxConnPerEndpoint = 64;
     if (it->second.size() >= kMaxConnPerEndpoint){
-      LOG_WARN << "BackendConnPool::Release overflow, backend=" << backend.get() << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
+      LOG_WARN << "BackendConnPool::Release overflow, backend=" << backend << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
       backend->Close();
     } else {
       backend->Reset();
       // backend->buffer()->Reset();
       it->second.push(backend);
-      LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend.get() << " ep=" << ep << " pool_size=" << it->second.size();
+      LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend << " ep=" << ep << " pool_size=" << it->second.size();
     }
   }
 }

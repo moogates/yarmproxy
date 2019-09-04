@@ -20,7 +20,8 @@ public:
   virtual ~ParallelGetCommand();
 
   void WriteQuery() override;
-  void OnWriteReplyEnabled() override;
+
+  void StartWriteReply() override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
 private:
@@ -33,17 +34,18 @@ private:
   void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
   void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend);
   bool HasUnfinishedBanckends() const;
+  void NextBackendStartReply();
   bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
 
 private:
   struct BackendQuery {
     BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
         : query_line_(query_line)
-        , backend_addr_(ep) {
+        , backend_endpoint_(ep) {
     }
     ~BackendQuery();
     std::string query_line_;
-    ip::tcp::endpoint backend_addr_;
+    ip::tcp::endpoint backend_endpoint_;
     std::shared_ptr<BackendConn> backend_conn_;
   };
 

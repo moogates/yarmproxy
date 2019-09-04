@@ -60,20 +60,14 @@ ParallelGetCommand::~ParallelGetCommand() {
 }
 
 void ParallelGetCommand::WriteQuery() {
-  // DoWriteQuery(nullptr, 0);
   for(auto& query : query_set_) {
-    std::shared_ptr<BackendConn> backend = query->backend_conn_;
-    if (!backend) {
-      backend = backend_pool()->Allocate(query->backend_addr_);
-      backend->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend),
-                                 WeakBind(&Command::OnBackendReplyReceived, backend));
-      query->backend_conn_ = backend;
-      LOG_DEBUG << "ParallelGetCommand WriteQuery cmd=" << this << " allocated backend=" << backend << " query=("
-                << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
+    if (!query->backend_conn_) {
+      query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
     }
-    LOG_DEBUG << "ParallelGetCommand WriteQuery cmd=" << this << " backend=" << backend << ", query=("
+    LOG_DEBUG << "ParallelGetCommand WriteQuery cmd=" << this
+              << " backend=" << query->backend_conn_ << ", query=("
               << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
-    backend->WriteQuery(query->query_line_.data(), query->query_line_.size(), false);
+    query->backend_conn_->WriteQuery(query->query_line_.data(), query->query_line_.size(), false);
   }
 }
 
@@ -99,24 +93,17 @@ void ParallelGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> bac
   TryMarkLastBackend(backend);
   if (ec != ErrorCode::E_SUCCESS
       || ParseReply(backend) == false) {
-    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend.get();
+    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
     client_conn_->Abort();
     return;
   }
 
-  if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-    // 新收的新数据，可能不需要转发，而且不止一遍！例如收到的刚好是"END\r\n"
-    if (backend == replying_backend_) { // this check is necessary
+  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
+    if (backend->Completed()) { // 新收的新数据，可能不需要转发，例如收到的刚好是"END\r\n"
       RotateReplyingBackend(true);
     } else {
-      PushWaitingReplyQueue(backend);
+      TryWriteReply(backend);
     }
-    return;
-  }
-
-  // 判断是否最靠前的command, 是才可以转发
-  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
-    TryWriteReply(backend);
   } else {
     PushWaitingReplyQueue(backend);
   }
@@ -132,59 +119,33 @@ void ParallelGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> back
   // pipeline的情况下，要排队写
   TryMarkLastBackend(backend);
 
-  if (HasUnfinishedBanckends()) {
-    backend->set_reply_complete();
-    backend->set_no_recycle();
-    if (backend == replying_backend_) {
-      RotateReplyingBackend(false);
-    }
-    LOG_DEBUG << "ParallelGetCommand::OnBackendConnectError silence, endpoint="
-              << backend->remote_endpoint() << " backend=" << backend;
-    return;
+  if (backend == last_backend_) {
+    static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
+    backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
+    LOG_WARN << "ParallelGetCommand::OnBackendConnectError last, endpoint="
+            << backend->remote_endpoint() << " backend=" << backend;
+  } else {
+    LOG_WARN << "ParallelGetCommand::OnBackendConnectError not last, endpoint="
+            << backend->remote_endpoint() << " backend=" << backend;
   }
 
-  if (completed_backends_ > 0) {
-    if (backend == last_backend_) {
-      if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
-        static const char BACKEND_ERROR[] = "inst_END\r\n"; // TODO : 统一放置错误码
-        backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-        backend->set_reply_complete();
-        backend->set_no_recycle();
+  backend->set_reply_recv_complete();
+  backend->set_no_recycle();
 
-        TryWriteReply(backend);
-      } else {
-        static const char BACKEND_ERROR[] = "wait_END\r\n"; // TODO : 统一放置错误码
-        backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-        backend->set_reply_complete();
-        backend->set_no_recycle();
- 
-        PushWaitingReplyQueue(backend);
-      }
+  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
+    if (backend ->Completed()) {
+      RotateReplyingBackend(false);
     } else {
-        backend->set_reply_complete();
-        backend->set_no_recycle();
-        PushWaitingReplyQueue(backend);
+      TryWriteReply(backend);
     }
   } else {
-    if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
-      static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
-      backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-      backend->set_reply_complete();
-      backend->set_no_recycle();
-    
-      TryWriteReply(backend);
-    } else {
-      static const char BACKEND_ERROR[] = "wait_BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
-      backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-      backend->set_reply_complete();
-      backend->set_no_recycle();
-    
-      PushWaitingReplyQueue(backend);
-    }
+    PushWaitingReplyQueue(backend);
   }
+  return;
 }
 
 void ParallelGetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  // TODO : merge with sibling classes
   if (ec != ErrorCode::E_SUCCESS) {
     // client_conn_->Abort(); // TODO : 模拟Abort
     if (ec == ErrorCode::E_CONNECT) {
@@ -206,24 +167,29 @@ void ParallelGetCommand::PushWaitingReplyQueue(std::shared_ptr<BackendConn> back
   }
 }
 
-void ParallelGetCommand::OnWriteReplyEnabled() {
-  LOG_DEBUG << "ParallelGetCommand::OnWriteReplyEnabled cmd=" << this << " old replying_backend_=" << replying_backend_.get();
+void ParallelGetCommand::StartWriteReply() {
+  NextBackendStartReply();
+}
+
+void ParallelGetCommand::NextBackendStartReply() {
+  LOG_DEBUG << "ParallelGetCommand::OnWriteReplyEnabled cmd=" << this
+            << " last replying_backend_=" << replying_backend_;
   if (waiting_reply_queue_.size() > 0) {
-    // replying_backend_ = waiting_reply_queue_.front();
-    auto backend = waiting_reply_queue_.front();
+    auto next_backend = waiting_reply_queue_.front();
     waiting_reply_queue_.pop_front();
+
     LOG_DEBUG << "ParallelGetCommand::OnWriteReplyEnabled activate ready backend,"
-              << " backend=" << backend;
-    if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-      LOG_DEBUG << "OnWriteReplyEnabled backend=" << backend << " empty reply";
+              << " backend=" << next_backend;
+    if (next_backend->Completed()) {
+      LOG_DEBUG << "OnWriteReplyEnabled backend=" << next_backend << " empty reply";
       RotateReplyingBackend(true);
     } else {
-      TryWriteReply(backend);
-      replying_backend_ = backend;
+      TryWriteReply(next_backend);
+      replying_backend_ = next_backend;
     }
   } else {
     LOG_DEBUG << "ParallelGetCommand::OnWriteReplyEnabled no ready backend to activate,"
-              << " replying_backend_=" << replying_backend_;
+              << " last_replying_backend_=" << replying_backend_;
     replying_backend_ = nullptr;
   }
 }
@@ -241,7 +207,7 @@ void ParallelGetCommand::RotateReplyingBackend(bool success) {
   }
   if (HasUnfinishedBanckends()) {
     LOG_DEBUG << "ParallelGetCommand::Rotate to next backend";
-    OnWriteReplyEnabled();
+    NextBackendStartReply();
   } else {
     LOG_DEBUG << "ParallelGetCommand::Rotate to next COMMAND";
     client_conn_->RotateReplyingCommand();
@@ -271,12 +237,14 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
       // "END\r\n"
       if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0
           && backend->buffer()->unparsed_bytes() == (sizeof("END\r\n") - 1)) {
-        backend->set_reply_complete();
+        backend->set_reply_recv_complete();
         if (backend == last_backend_) {
-          LOG_DEBUG << "ParseReply END, is last, backend=" << backend;
           backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
+          LOG_WARN << "ParseReply END, is last, backend=" << backend << " backend.get=" << backend
+                   << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
+                   // << " unprocessed=(" << std::string(backend->buffer()->unprocessed_data(), 100) << ")";
         } else {
-          LOG_DEBUG << "ParseReply END, is not last, backend=" << backend;
+          LOG_WARN << "ParseReply END, is not last, backend=" << backend;
           // backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only
           backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
         }
