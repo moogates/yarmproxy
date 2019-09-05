@@ -20,7 +20,7 @@ BackendConn::BackendConn(WorkerContext& context,
   , remote_endpoint_(endpoint)
   , socket_(context.io_service_)
   , is_reading_more_(false)
-  , reply_complete_(false)
+  , reply_recv_complete_(false)
   , no_recycle_(false) {
   LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
 }
@@ -40,43 +40,38 @@ void BackendConn::Close() {
 
 void BackendConn::SetReplyData(const char* data, size_t bytes) {
   assert(is_reading_more_ == false);
-  // reply_complete_  = true;
+  // reply_recv_complete_  = true;
   buffer()->Reset();
   buffer()->push_reply_data(data, bytes);
 }
 
 void BackendConn::Reset() {
   is_reading_more_ = false;
-  reply_complete_  = false;
+  reply_recv_complete_  = false;
   buffer()->Reset();
 }
 
+bool BackendConn::Completed() const {
+  return reply_recv_complete_ && read_buffer_->unprocessed_bytes() == 0;
+}
+
 void BackendConn::ReadReply() {
-  // TryReadMoreReply();
-  // return;
   read_buffer_->inc_recycle_lock();
-  socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
-      std::bind(&BackendConn::HandleRead, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
+  socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(),
+                              read_buffer_->free_space_size()),
+                          std::bind(&BackendConn::HandleRead, shared_from_this(),
+                              std::placeholders::_1, std::placeholders::_2));
   LOG_DEBUG << "BackendConn ReadReply async_read_some, backend=" << this;
 }
 
 void BackendConn::TryReadMoreReply() {
-  if (reply_complete_) {
-    LOG_DEBUG << "TryReadMoreReply reply_complete_=true, do nothing, backend=" << this;
+  if (reply_recv_complete_) {
+    LOG_DEBUG << "TryReadMoreReply reply_recv_complete_=true, do nothing, backend=" << this;
     return;
   }
-  if (!is_reading_more_  // not reading more
-      && read_buffer_->has_much_free_space()) {
-    is_reading_more_ = true; // memmove cause read data offset drift
-    read_buffer_->inc_recycle_lock();
-
-    socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
-        std::bind(&BackendConn::HandleRead, shared_from_this(), std::placeholders::_1, std::placeholders::_2));
-    LOG_DEBUG << "BackendConn TryReadMoreReply async_read_some, backend=" << this;
-  } else {
-    LOG_DEBUG << "TryReadMoreReply do nothing, is_reading_more_=" << is_reading_more_
-             << " has_much_free_space=" << read_buffer_->has_much_free_space()
-             << " backend=" << this;;
+  if (!is_reading_more_  && read_buffer_->has_much_free_space()) {
+    is_reading_more_ = true; // not reading more. TODO : rename
+    ReadReply();
   }
 }
 
@@ -91,25 +86,20 @@ void BackendConn::WriteQuery(const char* data, size_t bytes, bool has_more_data)
   }
 
   LOG_DEBUG << "ParallelGetCommand BackendConn::WriteQuery write data, bytes=" << bytes
-            << " has_more_data=" << has_more_data
-            // << " req_ptr=" << (void*)data
-            // << " req_data=" << std::string(data, bytes - 2)
-            << " backend=" << this;
-  async_write(socket_, boost::asio::buffer(data, bytes),
+            << " has_more_data=" << has_more_data << " backend=" << this;
+  boost::asio::async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes, has_more_data,
           std::placeholders::_1, std::placeholders::_2));
 }
 
 
 void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_has_more_data,
-    const boost::system::error_code& error, size_t bytes_transferred)
-{
+    const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    // TODO : 如何通知给command?
     LOG_DEBUG << "BackendConn::HandleWrite error, backend=" << this << " ep="
              << remote_endpoint_ << " err=" << error.message();
     socket_.close();
-    query_sent_callback_(ErrorCode::E_WRITE_QUERY); // TODO : check error
+    query_sent_callback_(ErrorCode::E_WRITE_QUERY);
     return;
   }
 
@@ -133,8 +123,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
     LOG_DEBUG << "BackendConn::HandleRead read error, backend=" << this
              << " ep=" << remote_endpoint_ << " err=" << error.message();
     socket_.close();
-    // TODO : 如何通知给外界?
-    reply_received_callback_(ErrorCode::E_READ_REPLY); // TODO : error type
+    reply_received_callback_(ErrorCode::E_READ_REPLY);
   } else {
     LOG_DEBUG << "BackendConn::HandleRead read ok, bytes_transferred=" << bytes_transferred << " backend=" << this;
     is_reading_more_ = false;  // finish reading, you could memmove now
@@ -149,7 +138,6 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
 void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_more_data, const boost::system::error_code& connect_ec) {
   boost::system::error_code option_ec;
   if (!connect_ec) {
-    // TODO : socket option 定制
     ip::tcp::no_delay no_delay(true);
     socket_.set_option(no_delay, option_ec);
 
@@ -166,8 +154,8 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
 
   if (connect_ec || option_ec) {
     socket_.close();
-    LOG_WARN << "BackendConn::HandleConnect error, connect_ec=" << connect_ec.message()
-             << " option_ec=" << option_ec.message() << " , backend=" << this;
+  //LOG_WARN << "BackendConn::HandleConnect error, connect_ec=" << connect_ec.message()
+  //         << " option_ec=" << option_ec.message() << " , backend=" << this;
     query_sent_callback_(ErrorCode::E_CONNECT);
     return;
   }

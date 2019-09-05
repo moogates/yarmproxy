@@ -9,11 +9,12 @@
 #include "client_conn.h"
 #include "backend_locator.h"
 #include "backend_conn.h"
+#include "backend_pool.h"
 #include "read_buffer.h"
 
-#include "mono_get_command.h"
-#include "parallel_get_command.h"
+#include "get_command.h"
 #include "set_command.h"
+#include "redis_get_command.h"
 
 namespace yarmproxy {
 
@@ -34,9 +35,19 @@ const char * GetLineEnd(const char * buf, size_t len) {
   return p;
 }
 
-bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
+bool RedisGroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size,
+        std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
+  auto ep = ip::tcp::endpoint(ip::address::from_string("127.0.0.1"), 6379);
+  LOG_DEBUG << "RedisGroupKeysByEndpoint begin, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
+  endpoint_key_map->insert(std::make_pair(ep, std::string(cmd_line, cmd_line_size)));
+  return true;
+}
+
+bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size,
+        std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
   LOG_DEBUG << "GroupKeysByEndpoint begin, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
-  for(const char* p = cmd_line + 4/*strlen("get ")*/; p < cmd_line + cmd_line_size - 2/*strlen("\r\n")*/; ++p) {
+  for(const char* p = cmd_line + 4/*strlen("get ")*/
+      ; p < cmd_line + cmd_line_size - 2/*strlen("\r\n")*/; ++p) {
     const char* q = p;
     while(*q != ' ' && *q != '\r') {
       ++q;
@@ -49,7 +60,8 @@ bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size, std::map<ip
     }
 
     it->second.append(p - 1, 1 + q - p);
-    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first << " key=[" << std::string(p-1, 1+q-p) << "]"
+    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first
+              << " key=[" << std::string(p-1, 1+q-p) << "]"
               << " current=" << it->second;
 
     p = q;
@@ -94,13 +106,9 @@ std::atomic_int cmd_count;
 
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 Command::Command(std::shared_ptr<ClientConnection> client, const std::string& original_header)
-    : is_transfering_reply_(false)
-    , replying_backend_(nullptr)
-    , completed_backends_(0)
-    , unreachable_backends_(0)
-    , client_conn_(client)
-    , original_header_(original_header)
-    , loaded_(false) {
+    : client_conn_(client)
+    , is_transfering_reply_(false)
+    , original_header_(original_header) {
   LOG_DEBUG << "Command ctor " << ++cmd_count;
 };
 
@@ -108,15 +116,16 @@ Command::~Command() {
   LOG_DEBUG << "Command dtor " << --cmd_count;
 }
 
-WorkerContext& Command::context() {
-  return client_conn_->context();
+BackendConnPool* Command::backend_pool() {
+  return client_conn_->context().backend_conn_pool();
 }
 
 // 0 : ok, 数据不够解析
 // >0 : ok, 解析成功，返回已解析的字节数
 // <0 : error, 未知命令
-int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char* buf, size_t size,
-          std::shared_ptr<Command>* command) {
+int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
+                           const char* buf, size_t size,
+                           std::shared_ptr<Command>* command) {
   const char * p = GetLineEnd(buf, size);
   if (p == nullptr) {
     LOG_DEBUG << "CreateCommand no complete cmd line found";
@@ -124,29 +133,18 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
   }
 
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
-
-  if (strncmp(buf, "get ", 4) == 0) {
-#define MONO_GET_ONLY 0
-#if MONO_GET_ONLY
-    auto ep = BackendLoactor::Instance().GetEndpointByKey("1");
-    std::shared_ptr<Command> cmd(new MonoGetCommand(ep, client, buf, cmd_line_bytes));
-    // command->push_back(cmd);
-    *command = cmd;
-    LOG_DEBUG << "MONO_GET_ONLY ep=" << ep << " keys=" << std::string(buf, cmd_line_bytes - 2);
-#else
+  if (strncmp(buf, "*", 1) == 0) {
+    std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
+    RedisGroupKeysByEndpoint(buf, size, &endpoint_key_map);
+    command->reset(new RedisGetCommand(client, std::string(buf, size), std::move(endpoint_key_map)));
+    return size;
+  } else if (strncmp(buf, "get ", 4) == 0) {
     std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
-    if (endpoint_key_map.size() == 1) {
-      auto it = endpoint_key_map.begin();
-      std::shared_ptr<Command> cmd(new MonoGetCommand(it->first, client, it->second.c_str(), it->second.size()));
-      *command = cmd;
-    } else {
-      std::shared_ptr<Command> cmd(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
-      *command = cmd;
-    }
-#endif
+    command->reset(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
     return cmd_line_bytes;
-  } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0 || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
+  } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0
+             || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
     std::string key;
     size_t body_bytes;
     ParseSetCommandLine(buf, cmd_line_bytes, &key, &body_bytes);
@@ -158,58 +156,40 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client, const char*
     return cmd_line_bytes + body_bytes;
   } else {
     LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
-             << ") len=" << cmd_line_bytes << " client_conn=" << client.get();
+             << ") len=" << cmd_line_bytes << " client_conn=" << client;
     return -1;
   }
 }
 
-void Command::OnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  HookOnUpstreamReplyReceived(backend);
+std::shared_ptr<BackendConn> Command::AllocateBackend(const ip::tcp::endpoint& ep) {
+  auto backend = backend_pool()->Allocate(ep);
+  backend->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend),
+                             WeakBind(&Command::OnBackendReplyReceived, backend));
+  LOG_DEBUG << "SetCommand::WriteQuery allocated backend=" << backend;
+  return backend;
+}
+
+void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_WARN << "Command::OnUpstreamReplyReceived read error, backend=" << backend.get();
-    client_conn_->Abort();
-    return;
-  }
-
-  LOG_DEBUG << "OnUpstreamReplyReceived, backend=" << backend.get();
-  bool valid = ParseReply(backend);
-  if (!valid) {
-    LOG_WARN << "OnUpstreamReplyReceived ParseReply error, backend=" << backend.get();
-    client_conn_->Abort();
-    return;
-  }
-
-  if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-    LOG_DEBUG << __func__ << " no new data to process, backend=" << backend.get()
-                         << " replying_backend_=" << replying_backend_;
-    // 新收的新数据，可能不需要转发，而且不止一遍！例如收到的刚好是"END\r\n"
-    if (backend == replying_backend_) { // this check is necessary
-      ++completed_backends_;
-      RotateReplyingBackend();
+    if (ec == ErrorCode::E_CONNECT) {
+    //LOG_WARN << "OnWriteQueryFinished conn_refused, endpoint=" << backend->remote_endpoint()
+    //         << " backend=" << backend;
+      OnBackendConnectError(backend);
     } else {
-      PushWaitingReplyQueue(backend);
+      client_conn_->Abort();
+      LOG_WARN << "OnWriteQueryFinished error";
     }
     return;
   }
-
-  // 判断是否最靠前的command, 是才可以转发
-  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
-    TryWriteReply(backend);
-  } else {
-    PushWaitingReplyQueue(backend);
+  if (query_data_zero_copy()) {
+    client_conn_->buffer()->dec_recycle_lock();
+    // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
+    if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+      client_conn_->TryReadMoreQuery();
+      return;
+    }
   }
-
-  backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
-}
-
-// return : is the backend successfully activated
-bool Command::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
-  if (replying_backend_ == nullptr) {
-    replying_backend_ = backend;
-    LOG_DEBUG << "TryActivateReplyingBackend ok, backend=" << backend << " replying_backend_=" << replying_backend_;
-    return true;
-  }
-  return backend == replying_backend_;
+  backend->ReadReply();
 }
 
 void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
@@ -222,43 +202,24 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCo
   is_transfering_reply_ = false;
   backend->buffer()->dec_recycle_lock();
 
-  if (backend->reply_complete() && backend->buffer()->unprocessed_bytes() == 0) {
-    ++completed_backends_;
-    RotateReplyingBackend();
-    LOG_DEBUG << "SetCommand::OnWriteReplyFinished backend no more reply, and all data written to client,"
-              << " backend=" << backend;
+  if (backend->Completed()) {
+    RotateReplyingBackend(true);
   } else {
-    LOG_DEBUG << "SetCommand::OnWriteReplyFinished has more reply to write, ready_to_transfer_bytes=" << backend->buffer()->unprocessed_bytes()
-              << " reply_complete=" << backend->reply_complete()
-              << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes()
-              << " parsed_unreceived_bytes=" << backend->buffer()->parsed_unreceived_bytes()
-              << " backend=" << backend;
     backend->TryReadMoreReply(); // 这里必须继续try
     TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }
 }
 
-void Command::RotateReplyingBackend() {
-  client_conn_->RotateReplyingCommand();
-}
-
 void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
   LOG_DEBUG << "Command::OnBackendConnectError endpoint=" << backend->remote_endpoint()
            << " backend=" << backend;
-  if (client_conn_->IsFirstCommand(shared_from_this()) && TryActivateReplyingBackend(backend)) {
-    static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码, refining error message protocol
-    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-    backend->set_reply_complete(); // TODO : reply complete can't be the only standard to recycle
-        backend->set_no_recycle();
+  static const char BACKEND_ERROR[] = "BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
+  backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+  backend->set_reply_recv_complete();
+  backend->set_no_recycle();
 
+  if (client_conn_->IsFirstCommand(shared_from_this())) {
     TryWriteReply(backend);
-  } else {
-    static const char BACKEND_ERROR[] = "wait_BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码
-    backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-    backend->set_reply_complete();
-        backend->set_no_recycle();
-
-    PushWaitingReplyQueue(backend);
   }
 }
 
@@ -269,14 +230,10 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
     backend->buffer()->inc_recycle_lock();
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
                                   WeakBind(&Command::OnWriteReplyFinished, backend));
+
+  //LOG_WARN << "Command::TryWriteReply backend=" << backend
+  //          << " data=(" << std::string(backend->buffer()->unprocessed_data(), unprocessed) << ")";
     backend->buffer()->update_processed_bytes(unprocessed);
-    LOG_DEBUG << __func__ << " to_process_bytes=" << unprocessed
-              << " new_unprocessed=" << backend->buffer()->unprocessed_bytes()
-              << " client=" << this << " backend=" << backend;
-  } else {
-    LOG_DEBUG << __func__ << " do nothing, unprocessed_bytes=" << unprocessed
-              << " is_transfering_reply=" << is_transfering_reply_
-              << " client=" << this << " backend=" << backend;
   }
 }
 

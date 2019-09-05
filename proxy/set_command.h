@@ -10,15 +10,6 @@ namespace yarmproxy {
 using namespace boost::asio;
 
 class SetCommand : public Command {
-private:
-  size_t query_header_bytes_;
-
-  size_t query_written_bytes_;
-  size_t query_body_bytes_;
-  size_t query_writing_bytes_;
-
-  ip::tcp::endpoint backend_endpoint_;
-  std::shared_ptr<BackendConn> backend_conn_;
 public:
   SetCommand(const ip::tcp::endpoint & ep,
           std::shared_ptr<ClientConnection> client,
@@ -27,13 +18,20 @@ public:
   virtual ~SetCommand();
 
 private:
-  size_t query_body_upcoming_bytes() const override;
-  void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
-  void OnWriteReplyEnabled() override;
+  void StartWriteReply() override;
+  void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
-  void WriteQuery(const char * data, size_t bytes) override;
+  void WriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
-  void DoWriteQuery(const char * query_data, size_t received_bytes) override;
+  void RotateReplyingBackend(bool) override;
+
+  bool query_data_zero_copy() override {
+    return true;
+  }
+
+private:
+  ip::tcp::endpoint backend_endpoint_;
+  std::shared_ptr<BackendConn> backend_conn_;
 };
 
 }

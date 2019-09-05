@@ -59,8 +59,14 @@ void ProxyServer::Run() {
   }
 
   // SignalWatcher::Instance().RegisterHandler(SIGHUP, [this](int) { Stop(); });
-  SignalWatcher::Instance().RegisterHandler(SIGINT, [this](int) { Stop(); });
-  SignalWatcher::Instance().RegisterHandler(SIGTERM, [this](int) { Stop(); });
+  SignalWatcher::Instance().RegisterHandler(SIGINT, [this](int) {
+        LOG_ERROR << "SIGINT Received.";
+        Stop();
+      });
+  SignalWatcher::Instance().RegisterHandler(SIGTERM, [this](int) {
+        LOG_ERROR << "SIGTERM Received.";
+        Stop();
+      });
 
   worker_pool_->StartDispatching();
   StartAccept();
@@ -85,7 +91,7 @@ void ProxyServer::Stop() {
 void ProxyServer::StartAccept() {
   WorkerContext& worker = worker_pool_->NextWorker();
   std::shared_ptr<ClientConnection> client_conn(new ClientConnection(worker));
-  LOG_DEBUG << "ProxyServer create new conn, client=" << client_conn.get();
+  LOG_DEBUG << "ProxyServer create new conn, client=" << client_conn;
 
   acceptor_.async_accept(client_conn->socket(),
       std::bind(&ProxyServer::HandleAccept, this, client_conn,

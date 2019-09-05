@@ -19,41 +19,49 @@ public:
 
   virtual ~ParallelGetCommand();
 
-  void WriteQuery(const char * data, size_t bytes) override;
-  void OnWriteReplyEnabled() override;
+  void WriteQuery() override;
+
+  void StartWriteReply() override;
+  void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
 private:
-  void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
-
-  void HookOnUpstreamReplyReceived(std::shared_ptr<BackendConn> backend) override;
+  // void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
-
-  void DoWriteQuery(const char *, size_t) override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
+  void RotateReplyingBackend(bool success) override;
 
-  void PushWaitingReplyQueue(std::shared_ptr<BackendConn> backend) override;
-  bool HasMoreBackend() const override;// rename -> HasUnfinishedBanckends()
-  void RotateReplyingBackend() override;
+private:
+  void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
+  void BackendReadyToReply(std::shared_ptr<BackendConn> backend, bool success);
 
-  size_t query_body_upcoming_bytes() const override {
-    return 0;
+  bool HasUnfinishedBanckends() const;
+  void NextBackendStartReply();
+  bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
+
+  bool query_data_zero_copy() override {
+    return false;
   }
 
+private:
   struct BackendQuery {
     BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
         : query_line_(query_line)
-        , backend_addr_(ep)
-        , backend_conn_(nullptr) {
+        , backend_endpoint_(ep) {
     }
     ~BackendQuery();
     std::string query_line_;
-    ip::tcp::endpoint backend_addr_;
+    ip::tcp::endpoint backend_endpoint_;
     std::shared_ptr<BackendConn> backend_conn_;
   };
 
   std::vector<std::unique_ptr<BackendQuery>> query_set_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
+
+  std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<BackendConn> last_backend_;
+
+  size_t completed_backends_;
+  size_t unreachable_backends_;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 };
 

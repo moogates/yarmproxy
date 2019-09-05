@@ -4,7 +4,6 @@
 #include <memory>
 
 #include "allocator.h"
-#include "backend_conn.h"
 #include "command.h"
 #include "error_code.h"
 #include "logging.h"
@@ -71,24 +70,23 @@ void ClientConnection::AsyncRead() {
 void ClientConnection::RotateReplyingCommand() {
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
-    active_cmd_queue_.front()->OnWriteReplyEnabled();
+    active_cmd_queue_.front()->StartWriteReply();
     ProcessUnparsedQuery();
   }
 }
 
 void ClientConnection::WriteReply(const char* data, size_t bytes, const WriteReplyCallback& callback) {
   // TODO : 成员函数化
-  // std::weak_ptr<ClientConnection> wptr(shared_from_this());
   std::shared_ptr<ClientConnection> ptr(shared_from_this());
-  // auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
   auto cb_wrap = [ptr, data, bytes, callback](const boost::system::error_code& error, size_t bytes_transferred) {
-    LOG_DEBUG << "ClientConnection::WriteReply callback begin, bytes_transferred=" << bytes_transferred;
     if (!error && bytes_transferred < bytes) {
+      LOG_WARN << "Command::TryWriteReply callback, write more, bytes_to_transfer=" << bytes
+            << " bytes_transferred=" << bytes_transferred;
       ptr->WriteReply(data + bytes_transferred, bytes - bytes_transferred, callback);
     } else {
+      // LOG_WARN << "Command::TryWriteReply callback, error=" << error
+      //       << " bytes_transferred=" << bytes_transferred;
       // 发完了，或出错了，才告知Command
-      LOG_DEBUG << "ClientConnection::WriteReply callback, bytes_transferred=" << bytes_transferred
-               << " total_bytes=" << bytes << " error=" << error << "-" << error.message();
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
     }
   };
@@ -113,22 +111,23 @@ bool ClientConnection::ProcessUnparsedQuery() {
                &command);
 
     if (parsed_bytes < 0) {
-      // TODO : error handling
-      socket_.close();
+      Abort();
       return false;
     }  else if (parsed_bytes == 0) {
       TryReadMoreQuery(); // read more data
       return true;
     } else {
+      read_buffer_->update_parsed_bytes(parsed_bytes);
       size_t to_process_bytes = std::min((size_t)parsed_bytes, read_buffer_->received_bytes());
-      command->WriteQuery(read_buffer_->unprocessed_data(), to_process_bytes);
+      assert(to_process_bytes == read_buffer_->unprocessed_bytes());
+
+      command->WriteQuery();
       active_cmd_queue_.emplace_back(std::move(command));
 
-      read_buffer_->update_parsed_bytes(parsed_bytes);
       read_buffer_->update_processed_bytes(to_process_bytes);
     }
   }
-  LOG_WARN << "ClientConnection::HandleRead active_cmd_queue_.size=" << active_cmd_queue_.size();
+  LOG_DEBUG << "ClientConnection::HandleRead active_cmd_queue_.size=" << active_cmd_queue_.size();
   // TryReadMoreQuery(); // TODO : read should continues here, so that the conn shared_ptr won't be released
   return true;
 }
@@ -146,7 +145,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
-    active_cmd_queue_.back()->WriteQuery(read_buffer_->unprocessed_data(), read_buffer_->unprocessed_bytes());
+    active_cmd_queue_.back()->WriteQuery();
     read_buffer_->update_processed_bytes(read_buffer_->unprocessed_bytes());
     if (read_buffer_->parsed_unreceived_bytes() > 0) {
       // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery的回调函数里面才继续read. 这并不是最佳方式
