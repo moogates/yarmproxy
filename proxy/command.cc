@@ -14,6 +14,7 @@
 
 #include "get_command.h"
 #include "set_command.h"
+#include "redis_get_command.h"
 
 namespace yarmproxy {
 
@@ -32,6 +33,14 @@ const char * GetLineEnd(const char * buf, size_t len) {
   }
 
   return p;
+}
+
+bool RedisGroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size,
+        std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
+  auto ep = ip::tcp::endpoint(ip::address::from_string("127.0.0.1"), 6379);
+  LOG_DEBUG << "RedisGroupKeysByEndpoint begin, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
+  endpoint_key_map->insert(std::make_pair(ep, std::string(cmd_line, cmd_line_size)));
+  return true;
 }
 
 bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size,
@@ -124,8 +133,12 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   }
 
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
-
-  if (strncmp(buf, "get ", 4) == 0) {
+  if (strncmp(buf, "*", 1) == 0) {
+    std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
+    RedisGroupKeysByEndpoint(buf, size, &endpoint_key_map);
+    command->reset(new RedisGetCommand(client, std::string(buf, size), std::move(endpoint_key_map)));
+    return size;
+  } else if (strncmp(buf, "get ", 4) == 0) {
     std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
     command->reset(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));
@@ -156,6 +169,29 @@ std::shared_ptr<BackendConn> Command::AllocateBackend(const ip::tcp::endpoint& e
   return backend;
 }
 
+void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  if (ec != ErrorCode::E_SUCCESS) {
+    if (ec == ErrorCode::E_CONNECT) {
+    //LOG_WARN << "OnWriteQueryFinished conn_refused, endpoint=" << backend->remote_endpoint()
+    //         << " backend=" << backend;
+      OnBackendConnectError(backend);
+    } else {
+      client_conn_->Abort();
+      LOG_WARN << "OnWriteQueryFinished error";
+    }
+    return;
+  }
+  if (query_data_zero_copy()) {
+    client_conn_->buffer()->dec_recycle_lock();
+    // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
+    if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+      client_conn_->TryReadMoreQuery();
+      return;
+    }
+  }
+  backend->ReadReply();
+}
+
 void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     LOG_WARN << "Command::OnWriteReplyFinished error, backend=" << backend;
@@ -177,9 +213,9 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCo
 void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
   LOG_DEBUG << "Command::OnBackendConnectError endpoint=" << backend->remote_endpoint()
            << " backend=" << backend;
-  static const char BACKEND_ERROR[] = "BACKEND_CONNECTION_REFUSED\r\n"; // TODO : 统一放置错误码, refining error message protocol
+  static const char BACKEND_ERROR[] = "BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
   backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
-  backend->set_reply_recv_complete(); // TODO : reply complete can't be the only standard to recycle
+  backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
   if (client_conn_->IsFirstCommand(shared_from_this())) {

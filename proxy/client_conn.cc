@@ -77,11 +77,11 @@ void ClientConnection::RotateReplyingCommand() {
 
 void ClientConnection::WriteReply(const char* data, size_t bytes, const WriteReplyCallback& callback) {
   // TODO : 成员函数化
-  // std::weak_ptr<ClientConnection> wptr(shared_from_this());
   std::shared_ptr<ClientConnection> ptr(shared_from_this());
-  // auto cb_wrap = [wptr, data, bytes, cb](const boost::system::error_code& error, size_t bytes_transferred) {
   auto cb_wrap = [ptr, data, bytes, callback](const boost::system::error_code& error, size_t bytes_transferred) {
     if (!error && bytes_transferred < bytes) {
+      LOG_WARN << "Command::TryWriteReply callback, write more, bytes_to_transfer=" << bytes
+            << " bytes_transferred=" << bytes_transferred;
       ptr->WriteReply(data + bytes_transferred, bytes - bytes_transferred, callback);
     } else {
       // LOG_WARN << "Command::TryWriteReply callback, error=" << error
@@ -111,8 +111,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
                &command);
 
     if (parsed_bytes < 0) {
-      // TODO : error handling
-      socket_.close();
+      Abort();
       return false;
     }  else if (parsed_bytes == 0) {
       TryReadMoreQuery(); // read more data

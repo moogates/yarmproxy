@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_PARALLEL_GET_COMMAND_H_
-#define _YARMPROXY_PARALLEL_GET_COMMAND_H_
+#ifndef _YARMPROXY_REDIS_GET_COMMAND_H_
+#define _YARMPROXY_REDIS_GET_COMMAND_H_
 
 #include <map>
 #include <set>
@@ -12,12 +12,12 @@ namespace yarmproxy {
 
 using namespace boost::asio;
 
-class ParallelGetCommand : public Command {
+class RedisGetCommand : public Command {
 public:
-  ParallelGetCommand(std::shared_ptr<ClientConnection> client, const std::string& original_header, 
+  RedisGetCommand(std::shared_ptr<ClientConnection> client, const std::string& original_header, 
                      std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
 
-  virtual ~ParallelGetCommand();
+  virtual ~RedisGetCommand();
 
   void WriteQuery() override;
 
@@ -67,5 +67,5 @@ private:
 
 }
 
-#endif  // _YARMPROXY_PARALLEL_GET_COMMAND_H_
+#endif  // _YARMPROXY_REDIS_GET_COMMAND_H_
 

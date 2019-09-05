@@ -42,8 +42,7 @@ void SetCommand::WriteQuery() {
 }
 
 void SetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  if (ec != ErrorCode::E_SUCCESS
-      || ParseReply(backend) == false) {
+  if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
     LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
     client_conn_->Abort();
     return;
@@ -66,6 +65,7 @@ void SetCommand::RotateReplyingBackend(bool) {
   client_conn_->RotateReplyingCommand();
 }
 
+/*
 void SetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   assert(backend == backend_conn_);
   if (ec != ErrorCode::E_SUCCESS) {
@@ -84,13 +84,12 @@ void SetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, Erro
 
   // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
   if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
-    LOG_DEBUG << "SetCommand::OnWriteQueryFinished 转发了当前所有可转发数据, 但还要转发更多来自client的数据.";
     client_conn_->TryReadMoreQuery();
   } else {
-    LOG_DEBUG << "SetCommand::OnWriteQueryFinished 转发了当前命令的所有数据, 等待 backend 的响应.";
     backend_conn_->ReadReply();
   }
 }
+*/
 
 bool SetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(backend_conn_ == backend);

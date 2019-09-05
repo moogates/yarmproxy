@@ -29,10 +29,10 @@ protected: // TODO : best practice ?
 public:
   virtual ~Command();
   virtual void WriteQuery() = 0;
-  virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
   virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
   virtual void StartWriteReply() = 0;
 
+  void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
 protected:
@@ -54,6 +54,8 @@ protected:
         };
   }
 private:
+  virtual bool query_data_zero_copy() = 0;
+
   virtual void RotateReplyingBackend(bool success) = 0;
   virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
 

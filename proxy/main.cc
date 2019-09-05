@@ -12,11 +12,11 @@ int Daemonize();
 int MaximizeFdLimit();
 
 int main() {
-  // base::InitLogging("proxy.log", "TRACE");
+  base::InitLogging("proxy.log", "TRACE");
   // loguru::g_stderr_verbosity = 0;
   // loguru::g_stderr_verbosity = -8;
-  // loguru::g_stderr_verbosity = 8;
-  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+  loguru::g_stderr_verbosity = 8;
+  // loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
 
   // Daemonize();
   MaximizeFdLimit();

@@ -154,8 +154,8 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
 
   if (connect_ec || option_ec) {
     socket_.close();
-    LOG_WARN << "BackendConn::HandleConnect error, connect_ec=" << connect_ec.message()
-             << " option_ec=" << option_ec.message() << " , backend=" << this;
+  //LOG_WARN << "BackendConn::HandleConnect error, connect_ec=" << connect_ec.message()
+  //         << " option_ec=" << option_ec.message() << " , backend=" << this;
     query_sent_callback_(ErrorCode::E_CONNECT);
     return;
   }
