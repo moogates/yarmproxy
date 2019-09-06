@@ -69,6 +69,7 @@ void BackendConn::TryReadMoreReply() {
     LOG_DEBUG << "TryReadMoreReply reply_recv_complete_=true, do nothing, backend=" << this;
     return;
   }
+  LOG_DEBUG << "TryReadMoreReply reply_recv_complete_=false, read more, backend=" << this;
   if (!is_reading_more_  && read_buffer_->has_much_free_space()) {
     is_reading_more_ = true; // not reading more. TODO : rename
     ReadReply();

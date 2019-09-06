@@ -1,4 +1,5 @@
-
+memcached=/Users/muyuwei/third_party/memcached/memcached
+memcached=/home/muyuwei/third_party/memcached-1.5.16/memcached
 while true; do
   port=$(echo "11211+$RANDOM%5" | bc)
   echo $port
@@ -10,7 +11,6 @@ while true; do
 
   sleep 3.6
 
-  memcached=/Users/muyuwei/third_party/memcached/memcached
   $memcached -d -umuyuwei -t4 -p$port
 
   sleep 0.5

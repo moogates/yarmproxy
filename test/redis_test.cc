@@ -1,6 +1,7 @@
 #include "../proxy/redis_protocol.h"
 #include "../proxy/logging.h"
 
+#include <cassert>
 #include <iostream>
 
 void BulkArrayTest() {
@@ -18,13 +19,13 @@ void BulkArrayTest() {
   {
     char data[] = "*2\r\n$3\r\nget\r\n$4\r\nkey7\r\n"; // [get,key7]
     redis::BulkArray bulkv(data, sizeof(data) - 1);
-    std::cout << "======= total_size\t:" << bulkv.total_size() << std::endl;
-    return;
+    // std::cout << "======= total_size\t:" << bulkv.total_size() << std::endl;
+    // return;
 
     assert(bulkv.total_size() == 23);
     assert(bulkv.total_bulks() == 2);
     assert(bulkv.present_bulks() == 2);
-    // assert(bulkv.completed());
+    assert(bulkv.completed());
   }
 
   {
@@ -76,7 +77,7 @@ void BulkArrayTest() {
   {
     char data[] = "*12\r\n$3\r\n";
     redis::BulkArray bulkv(data, sizeof(data) - 1);
-    assert(bulkv.parsed_size() == 9);
+    assert(bulkv.parsed_size() == 14);
     assert(bulkv.total_bulks() == 12);
     assert(bulkv.present_bulks() == 1);
   }
@@ -84,10 +85,10 @@ void BulkArrayTest() {
   {
     char data[] = "*12\r\n$3\r\nf";
     redis::BulkArray bulkv(data, sizeof(data) - 1);
-    assert(bulkv.parsed_size() == 5);
+    assert(bulkv.parsed_size() == 14);
     assert(bulkv.total_bulks() == 12);
     assert(bulkv.present_bulks() == 1);
-    assert(bulkv.parsed_size() == 10);
+    assert(bulkv[0].absent_size() == 4);
   }
 
   {
@@ -96,20 +97,27 @@ void BulkArrayTest() {
     assert(bulkv.parsed_size() == 5);
     assert(bulkv.total_bulks() == 12);
     assert(bulkv.present_bulks() == 0);
-    assert(bulkv.parsed_size() == 5);
   }
 
   {
     char data[] = "*12\r\n$3\r\nfoo";
     redis::BulkArray bulkv(data, sizeof(data) - 1);
-    assert(bulkv.parsed_size() == 5);
+    assert(bulkv.parsed_size() == 14);
     assert(bulkv.total_bulks() == 12);
     assert(bulkv.present_bulks() == 1);
+    assert(bulkv[0].absent_size() == 2);
   }
 }
 
 void BulkTest() {
   using namespace yarmproxy;
+  {
+    char data[] = "$-1\r\n";
+    redis::Bulk bulk(data, sizeof(data) - 1);
+    assert(bulk.present_size() == 5);
+    assert(bulk.payload_size() == 0);
+    assert(bulk.completed());
+  }
 
   {
     char data[] = "+6\r";
@@ -120,7 +128,7 @@ void BulkTest() {
   {
     char data[] = "+16\r\nabcdefg1234";
     redis::Bulk bulk(data, sizeof(data) - 1);
-    assert(bulk.present_size() == -1);
+    assert(bulk.present_size() == redis::SIZE_PARSE_ERROR);
   }
 
   {
@@ -167,6 +175,7 @@ void BulkTest() {
 }
 
 int main() {
+  loguru::g_stderr_verbosity = 8;
   BulkTest();
 
   std::cout << "============\tBulkArrayTest\t============" << std::endl;

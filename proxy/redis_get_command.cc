@@ -119,7 +119,7 @@ void RedisGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend
   TryMarkLastBackend(backend);
 
   if (backend == last_backend_) {
-    static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
+    static const char END_RN[] = "-Backend Connect Failed\r\n"; // TODO : 统一放置错误码
     backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
     LOG_WARN << "RedisGetCommand::OnBackendConnectError last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
@@ -132,24 +132,6 @@ void RedisGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend
 
   BackendReadyToReply(backend, false);
 }
-
-/*
-void RedisGetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  // TODO : merge with sibling classes
-  if (ec != ErrorCode::E_SUCCESS) {
-    // client_conn_->Abort(); // TODO : 模拟Abort
-    if (ec == ErrorCode::E_CONNECT) {
-      OnBackendConnectError(backend);
-    } else {
-      client_conn_->Abort();
-      LOG_INFO << "WriteCommand OnWriteQueryFinished error";
-    }
-    return;
-  }
-  LOG_DEBUG << "RedisGetCommand::OnWriteQueryFinished 转发了当前命令, 等待backend的响应.";
-  backend->ReadReply();
-}
-*/
 
 void RedisGetCommand::StartWriteReply() {
   NextBackendStartReply();
@@ -199,9 +181,18 @@ void RedisGetCommand::RotateReplyingBackend(bool success) {
 }
 
 bool RedisGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
-  const char * entry = backend->buffer()->unparsed_data();
   size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
+  LOG_DEBUG << "RedisGetCommand::ParseReply unparsed_bytes=" << unparsed_bytes
+            << " parsed_unreceived=" << backend->buffer()->parsed_unreceived_bytes();
 
+  if (unparsed_bytes == 0) {
+    if (backend->buffer()->parsed_unreceived_bytes() == 0) {
+      backend->set_reply_recv_complete();
+    }
+    return true;
+  }
+
+  const char * entry = backend->buffer()->unparsed_data();
   redis::Bulk bulk(entry, unparsed_bytes);
   if (bulk.present_size() < 0) {
     return false;
@@ -212,8 +203,12 @@ bool RedisGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   LOG_DEBUG << "ParseReply data=(" << std::string(entry, bulk.present_size()) << ")";
 
   if (bulk.completed()) {
+    LOG_DEBUG << "ParseReply bulk completed";
     backend->set_reply_recv_complete();
+  } else {
+    LOG_DEBUG << "ParseReply bulk not completed";
   }
+  LOG_DEBUG << "ParseReply parsed_bytes=" << bulk.total_size();
   backend->buffer()->update_parsed_bytes(bulk.total_size());
   return true;
 }
