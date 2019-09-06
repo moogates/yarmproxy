@@ -14,7 +14,10 @@
 
 #include "get_command.h"
 #include "set_command.h"
+
+#include "redis_protocol.h"
 #include "redis_get_command.h"
+#include "redis_gets_command.h"
 
 namespace yarmproxy {
 
@@ -126,6 +129,44 @@ BackendConnPool* Command::backend_pool() {
 int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* command) {
+  if (strncmp(buf, "*", 1) == 0) {
+    redis::BulkArray ba(buf, size);
+    if (ba.total_bulks() == 0) {
+      LOG_DEBUG << "CreateCommand redis command empty bulk array";
+      return -1;
+    }
+    if (ba.present_bulks() == 0) {
+      LOG_DEBUG << "CreateCommand redis command bulk array need more data";
+      return 0;
+    }
+    if (ba[0].equals("get", sizeof("get") - 1)) {
+      if (!ba.completed()) {
+        LOG_DEBUG << "CreateCommand RedisGetCommand need more data";
+        return 0;
+      }
+      size_t cmd_line_bytes = ba.total_size();
+      std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
+      RedisGroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
+      command->reset(new RedisGetCommand(client, std::string(buf, cmd_line_bytes), ba, std::move(endpoint_key_map)));
+      LOG_DEBUG << "CreateCommand ok, redis_command=" << ba[0].to_string();
+      return cmd_line_bytes;
+    } else if (ba[0].equals("mget", sizeof("mget") - 1)) {
+      if (!ba.completed()) {
+        LOG_DEBUG << "CreateCommand RedisGetsCommand need more data";
+        return 0;
+      }
+      size_t cmd_line_bytes = ba.total_size();
+      std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
+      RedisGroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
+      command->reset(new RedisGetsCommand(client, std::string(buf, cmd_line_bytes), ba, std::move(endpoint_key_map)));
+      LOG_DEBUG << "CreateCommand ok, redis_command=" << ba[0].to_string();
+      return cmd_line_bytes;
+    } 
+
+    LOG_DEBUG << "CreateCommand unknown redis command=" << ba[0].to_string();
+    return -1;
+  }
+
   const char * p = GetLineEnd(buf, size);
   if (p == nullptr) {
     LOG_DEBUG << "CreateCommand no complete cmd line found";
@@ -133,12 +174,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   }
 
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
-  if (strncmp(buf, "*", 1) == 0) {
-    std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
-    RedisGroupKeysByEndpoint(buf, size, &endpoint_key_map);
-    command->reset(new RedisGetCommand(client, std::string(buf, size), std::move(endpoint_key_map)));
-    return size;
-  } else if (strncmp(buf, "get ", 4) == 0) {
+  if (strncmp(buf, "get ", 4) == 0) {
     std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
     GroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
     command->reset(new ParallelGetCommand(client, std::string(buf, cmd_line_bytes), std::move(endpoint_key_map)));

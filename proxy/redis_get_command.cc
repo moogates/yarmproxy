@@ -21,6 +21,7 @@ RedisGetCommand::BackendQuery::~BackendQuery() {
 
 RedisGetCommand::RedisGetCommand(std::shared_ptr<ClientConnection> client,
     const std::string& original_header,
+    const redis::BulkArray& query_bulks,
     std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map)
     : Command(client, original_header)
     , completed_backends_(0)
@@ -60,6 +61,9 @@ void RedisGetCommand::WriteQuery() {
 
 void RedisGetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
   if (received_reply_backends_.insert(backend).second) {
+    if (received_reply_backends_.size() == 1) {
+      first_reply_backend_ = backend;
+    }
     if (received_reply_backends_.size() == query_set_.size()) {
       last_backend_ = backend;
     }
@@ -195,55 +199,22 @@ void RedisGetCommand::RotateReplyingBackend(bool success) {
 }
 
 bool RedisGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
-  while(backend->buffer()->unparsed_bytes() > 0) {
-    const char * entry = backend->buffer()->unparsed_data();
-    size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
+  const char * entry = backend->buffer()->unparsed_data();
+  size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
 
-    backend->set_reply_recv_complete();
-    LOG_DEBUG << "ParseReply data=(" << std::string(entry, unparsed_bytes) << ")";
-    backend->buffer()->update_parsed_bytes(unparsed_bytes);
-    return true;
-
-    const char * p = GetLineEnd(entry, unparsed_bytes);
-    if (p == nullptr) {
-      LOG_DEBUG << "ParseReply no enough data for parsing, please read more"
-                << " bytes=" << backend->buffer()->unparsed_bytes();
-      return true;
-    }
-
-    if (entry[0] == 'V') {
-      // "VALUE <key> <flag> <bytes>\r\n"
-      size_t body_bytes = GetValueBytes(entry, p);
-      size_t entry_bytes = p - entry + 1 + body_bytes + 2;
-      LOG_DEBUG << "ParseReply VALUE data, backend=" << backend << " bytes=" << std::min(unparsed_bytes, entry_bytes)
-                << " data=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
-      backend->buffer()->update_parsed_bytes(entry_bytes);
-      // return true; // 这里如果return, 则每次转发一条，only for test
-    } else {
-      // "END\r\n"
-      if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0
-          && backend->buffer()->unparsed_bytes() == (sizeof("END\r\n") - 1)) {
-        backend->set_reply_recv_complete();
-        if (backend == last_backend_) {
-          backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
-          LOG_WARN << "ParseReply END, is last, backend=" << backend << " backend.get=" << backend
-                   << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
-                   // << " unprocessed=(" << std::string(backend->buffer()->unprocessed_data(), 100) << ")";
-        } else {
-          LOG_WARN << "ParseReply END, is not last, backend=" << backend;
-          // backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only
-          backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
-        }
-        return true;
-      } else {
-        LOG_WARN << "ParseReply ERROR, data=(" << std::string(entry, p - entry)
-                 << ") backend=" << backend;
-        // TODO : ERROR
-        return false;
-      }
-    }
+  redis::Bulk bulk(entry, unparsed_bytes);
+  if (bulk.present_size() < 0) {
+    return false;
   }
-  // all received data is parsed, no more no less
+  if (bulk.present_size() == 0) {
+    return true;
+  }
+  LOG_DEBUG << "ParseReply data=(" << std::string(entry, bulk.present_size()) << ")";
+
+  if (bulk.completed()) {
+    backend->set_reply_recv_complete();
+  }
+  backend->buffer()->update_parsed_bytes(bulk.total_size());
   return true;
 }
 
