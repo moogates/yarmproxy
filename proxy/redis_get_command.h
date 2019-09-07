@@ -16,9 +16,8 @@ using namespace boost::asio;
 class RedisGetCommand : public Command {
 public:
   RedisGetCommand(std::shared_ptr<ClientConnection> client,
-                  const std::string& original_header, 
-                  const redis::BulkArray& query_bulks,
-                  std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
+                  const char* buf, size_t bytes,
+                  ip::tcp::endpoint& ep);
 
   virtual ~RedisGetCommand();
 
@@ -35,7 +34,7 @@ private:
 
 private:
   void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
-  void BackendReadyToReply(std::shared_ptr<BackendConn> backend, bool success);
+  void BackendReadyToReply(std::shared_ptr<BackendConn> backend);
 
   bool HasUnfinishedBanckends() const;
   void NextBackendStartReply();

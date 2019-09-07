@@ -51,10 +51,6 @@ void BackendConn::Reset() {
   buffer()->Reset();
 }
 
-bool BackendConn::Completed() const {
-  return reply_recv_complete_ && read_buffer_->unprocessed_bytes() == 0;
-}
-
 void BackendConn::ReadReply() {
   read_buffer_->inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(),

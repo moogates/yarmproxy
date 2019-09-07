@@ -32,7 +32,7 @@ private:
 
 private:
   void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
-  void BackendReadyToReply(std::shared_ptr<BackendConn> backend, bool success);
+  void BackendReadyToReply(std::shared_ptr<BackendConn> backend);
 
   bool HasUnfinishedBanckends() const;
   void NextBackendStartReply();

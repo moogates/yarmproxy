@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 int IntegerLength(size_t value) {
@@ -23,12 +24,14 @@ int main(int argc, char* argv[]) {
     srand(time(NULL));
     size = 1 + random() % (128 * 1024);
   }
+  size_t key_len = strlen(key);
 
   printf("*3\r\n$3\r\nset\r\n$%d\r\n%s\r\n$%d\r\n",
-          strlen(key), key, size);
+          key_len, key, size);
 
   for(int i = 0; (i + 1) * 50 <= size; ++i) {
-    printf("%08d__10_%06d_20_abcdef_30_abcdef_40_abcde\r\n", i * 50, size);
+    printf("%08d__10_%06d_20_abcdef_30_(%c.*%c)40__abcde\r\n", i * 50, size, key[0], key[key_len - 1]);
+    // printf("%08d__10_%06d_20_abcdef_30_abcdef_40_abcde\r\n", i * 50, size);
   }
 
   char ending_line[] = "00_abcdef_10_abcdef_20_abcdef_30_abcdef_40_abcdef_";

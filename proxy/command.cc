@@ -38,11 +38,58 @@ const char * GetLineEnd(const char * buf, size_t len) {
   return p;
 }
 
-bool RedisGroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size,
-        std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
-  auto ep = ip::tcp::endpoint(ip::address::from_string("127.0.0.1"), 6379);
-  LOG_DEBUG << "RedisGroupKeysByEndpoint begin, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
-  endpoint_key_map->insert(std::make_pair(ep, std::string(cmd_line, cmd_line_size)));
+bool RedisGroupKeysByEndpoint(const redis::BulkArray& query_bulks,
+        std::list<std::pair<ip::tcp::endpoint, std::string>>* endpoint_keys_list) {
+
+  ip::tcp::endpoint last_endpoint;
+  const char* current_bulks_data = nullptr;
+  size_t current_bulks_count = 0;
+  size_t current_bulks_bytes = 0;
+
+  for(size_t i = 1; i < query_bulks.total_bulks(); ++i) {
+    const redis::Bulk& bulk = query_bulks[i];
+    ip::tcp::endpoint current_endpoint = BackendLoactor::Instance().GetEndpointByKey(bulk.payload_data(), bulk.payload_size(), "REDIS_bj");
+    // ip::tcp::endpoint current_endpoint = BackendLoactor::Instance().GetEndpointByKey(bulk.payload_data(), bulk.payload_size());
+
+    LOG_DEBUG << "RedisGroupKeysByEndpoint key=" << bulk.to_string() << " ep=" << current_endpoint
+              << " last_ep=" << last_endpoint;
+
+    if (current_endpoint == last_endpoint) {
+      ++current_bulks_count;
+      current_bulks_bytes += bulk.total_size();
+      LOG_DEBUG << "GroupKeysByEndpoint subquery====[" << std::string(bulk.raw_data(), bulk.total_size()) << "]";
+    } else {
+      if (current_bulks_data != nullptr) {
+        std::string subquery(redis::BulkArray::SerializePrefix(current_bulks_count + 1));
+        subquery.append("$4\r\nmget\r\n"); // (query_bulks[0].raw_data(), query_bulks[0].total_size())
+        subquery.append(current_bulks_data, current_bulks_bytes);
+
+        LOG_DEBUG << "GroupKeysByEndpoint create subquery ep=" << last_endpoint
+              << " bulks_count=" << current_bulks_count
+              << " query=(" << subquery
+              << ") current_key=" << bulk.to_string() << "(not included)";
+
+        endpoint_keys_list->emplace_back(last_endpoint, std::move(subquery));
+
+        current_bulks_data = nullptr;
+      }
+      last_endpoint = current_endpoint;
+      current_bulks_data = bulk.raw_data();
+      current_bulks_count = 1;
+      current_bulks_bytes = bulk.total_size();
+      LOG_DEBUG << "GroupKeysByEndpoint subquery=[" << std::string(bulk.raw_data(), bulk.total_size()) << "]";
+    }
+  }
+
+  if (current_bulks_data != nullptr) {
+    std::string subquery(redis::BulkArray::SerializePrefix(current_bulks_count + 1));
+    subquery.append("$4\r\nmget\r\n"); // (query_bulks[0].raw_data(), query_bulks[0].total_size())
+    subquery.append(current_bulks_data, current_bulks_bytes);
+    endpoint_keys_list->emplace_back(last_endpoint, std::move(subquery));
+
+    LOG_DEBUG << "GroupKeysByEndpoint create last subquery ep=" << last_endpoint
+              << " bulks_count=" << current_bulks_count;
+  }
   return true;
 }
 
@@ -145,10 +192,13 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
         return 0;
       }
       size_t cmd_line_bytes = ba.total_size();
-      std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
-      RedisGroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
-      command->reset(new RedisGetCommand(client, std::string(buf, cmd_line_bytes), ba, std::move(endpoint_key_map)));
-      LOG_DEBUG << "CreateCommand ok, redis_command=" << ba[0].to_string();
+
+      std::string key(ba[1].payload_data(), ba[1].payload_size());
+      ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
+      LOG_WARN << "CreateCommand RedisGetCommand key=" << key << " ep=" << ep;
+
+      // command->reset(new RedisGetCommand(client, buf, cmd_line_bytes, ba, std::move(endpoint_key_map)));
+      command->reset(new RedisGetCommand(client, buf, cmd_line_bytes, ep));
       return cmd_line_bytes;
     } else if (ba[0].equals("mget", sizeof("mget") - 1)) {
       if (!ba.completed()) {
@@ -156,10 +206,12 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
         return 0;
       }
       size_t cmd_line_bytes = ba.total_size();
-      std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
-      RedisGroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
-      command->reset(new RedisMgetCommand(client, std::string(buf, cmd_line_bytes), ba, std::move(endpoint_key_map)));
-      LOG_DEBUG << "CreateCommand ok, redis_command=" << ba[0].to_string();
+      std::list<std::pair<ip::tcp::endpoint, std::string>> endpoint_key_list;
+      LOG_DEBUG << "------------------------------------------------------------------------------------------";
+      RedisGroupKeysByEndpoint(ba, &endpoint_key_list);
+      LOG_DEBUG << "==========================================================================================";
+
+      command->reset(new RedisMgetCommand(client, std::string(buf, cmd_line_bytes), ba.total_bulks() - 1, std::move(endpoint_key_list)));
       return cmd_line_bytes;
     } 
 
@@ -239,8 +291,8 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCo
   is_transfering_reply_ = false;
   backend->buffer()->dec_recycle_lock();
 
-  if (backend->Completed()) {
-    RotateReplyingBackend(true);
+  if (backend->finished()) {
+    RotateReplyingBackend(backend->recyclable());
   } else {
     backend->TryReadMoreReply(); // 这里必须继续try
     TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多

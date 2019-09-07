@@ -7,6 +7,8 @@
 #include <boost/asio.hpp>
 using namespace boost::asio;
 
+#include "read_buffer.h"
+
 namespace yarmproxy {
 class WorkerContext;
 class ReadBuffer;
@@ -45,7 +47,10 @@ public:
     return read_buffer_;
   }
 
-  bool Completed() const;
+  bool finished() const {
+    return reply_recv_complete_ && read_buffer_->unprocessed_bytes() == 0;
+  }
+
   const ip::tcp::endpoint& remote_endpoint() const {
     return remote_endpoint_;
   }
@@ -59,7 +64,7 @@ public:
 //  return reply_recv_complete_;
 //}
   bool recyclable() const {
-    return !no_recycle_ && Completed();
+    return !no_recycle_ && finished();
   }
 private:
   WorkerContext& context_;

@@ -52,73 +52,38 @@ ip::tcp::endpoint Continuum::LocateCacheNode(const char * key, size_t len) const
 
 // TODO : test ParseNodesConfig
 bool Continuum::ParseNodesConfig(const std::string & config, CacheNodeMap * parsed) const {
-  {
-    size_t pos = 0, prev_pos = 0;
-    while(pos < config.size()) {
-      pos = config.find(':', prev_pos);
-      if (pos == std::string::npos) {
-        LOG_WARN << "ParseNodesConfig host error, config=" << config;
-        return false;
-      }
-      std::string host = config.substr(prev_pos, pos - prev_pos);
-      LOG_DEBUG << "ParseNodesConfig host=" << host << " ok, config=" << config;
-
-      prev_pos = pos + 1;
-      pos = config.find('=', prev_pos);
-      if (pos == std::string::npos) {
-        LOG_WARN << "ParseNodesConfig port error, config=" << config;
-        return false;
-      }
-      int port = std::stoi(config.substr(prev_pos, pos - prev_pos));
-
-      prev_pos = pos + 1;
-      pos = config.find(';', prev_pos);
-      int weight = 0;
-      if (pos == std::string::npos) {
-        weight = std::stoi(config.substr(prev_pos));
-      } else {
-        weight = std::stoi(config.substr(prev_pos, pos - prev_pos));
-        ++pos;
-        prev_pos = pos;
-      }
-      LOG_DEBUG << "ParseNodesConfig " << host << ":" << port << " weight=" << weight << config;
-      parsed->insert(std::make_pair(ip::tcp::endpoint(ip::address_v4::from_string(host), port), weight));
+  size_t pos = 0, prev_pos = 0;
+  while(pos < config.size()) {
+    pos = config.find(':', prev_pos);
+    if (pos == std::string::npos) {
+      LOG_WARN << "ParseNodesConfig host error, config=" << config;
+      return false;
     }
-    return true;
+    std::string host = config.substr(prev_pos, pos - prev_pos);
+    LOG_DEBUG << "ParseNodesConfig host=" << host << " ok, config=" << config;
+
+    prev_pos = pos + 1;
+    pos = config.find('=', prev_pos);
+    if (pos == std::string::npos) {
+      LOG_WARN << "ParseNodesConfig port error, config=" << config;
+      return false;
+    }
+    int port = std::stoi(config.substr(prev_pos, pos - prev_pos));
+
+    prev_pos = pos + 1;
+    pos = config.find(';', prev_pos);
+    int weight = 0;
+    if (pos == std::string::npos) {
+      weight = std::stoi(config.substr(prev_pos));
+    } else {
+      weight = std::stoi(config.substr(prev_pos, pos - prev_pos));
+      ++pos;
+      prev_pos = pos;
+    }
+    LOG_DEBUG << "ParseNodesConfig " << host << ":" << port << " weight=" << weight << config;
+    parsed->insert(std::make_pair(ip::tcp::endpoint(ip::address_v4::from_string(host), port), weight));
   }
-
-//std::vector<std::string> splited;
-//boost::split(splited, config, boost::is_any_of(",;: "));
-//if(splited.back().empty()) {
-//  splited.pop_back();
-//}
-
-//if(splited.empty() || splited.size() % 3 != 0)
-//{
-//  LOG_WARN << "incorrect cache nodes config: " << config;
-//  return false;
-//}
-
-//parsed->clear();
-
-//int port, size;
-//for(size_t i = 0; i < splited.size(); i += 3) {
-//  try {
-//    port = std::stoi(splited[i + 1]);
-//    size = std::stoi(splited[i + 2]);
-//  } catch(...) {
-//    LOG_WARN << "incorrect cache nodes config: " << config;
-//    return false;
-//  }
-
-//  if(port <= 0 || size <= 0)
-//  {
-//    LOG_WARN << "incorrect cache nodes config: " << config;
-//    return false;
-//  }
-//  parsed->insert(std::make_pair(ip::tcp::endpoint(ip::address_v4::from_string(splited[i]), port), size));
-//}
-//return true;
+  return true;
 }
 
 bool Continuum::SetCacheNodes(const std::string & cache_nodes) {

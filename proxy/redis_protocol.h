@@ -82,7 +82,6 @@ public:
 
     while(*p != '\r') {
       total = total * 10 + size_t(*p - '0');
-      std::cout << "total_size=" << total << " ch=[" << *p << "]" << std::endl;
       ++p;
     }
     return total + size_t(p - raw_data_) + 4;
@@ -158,6 +157,12 @@ public:
 //  return Bulk::Check(p + 1, data + bytes - p); // TODO check empty array
 //}
 
+  static std::string SerializePrefix(int i) {
+    std::ostringstream oss;
+    oss << '*' << i << "\r\n";
+    return oss.str();
+  }
+
   BulkArray(const char* data, size_t bytes) 
       : raw_data_(data) {
     if (bytes < 4) {
@@ -209,6 +214,9 @@ public:
   }
 
   Bulk& operator[](size_t pos) {
+    return items_[pos];
+  }
+  const Bulk& operator[](size_t pos) const {
     return items_[pos];
   }
 
@@ -264,6 +272,14 @@ private:
   std::vector<Bulk> items_; // TODO :  use std::array
 };
 
+class Integer {
+public:
+  static std::string SerializeInt(int i) {
+    std::ostringstream oss;
+    oss << ':' << i << "\r\n";
+    return oss.str();
+  }
+};
 
 //int ParseInteger(const char* data, size_t bytes) {
 //  // 1000 -> ":1000\r\n"

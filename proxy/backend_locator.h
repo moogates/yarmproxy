@@ -8,6 +8,8 @@ namespace yarmproxy {
 
 class Continuum;
 
+extern const char DEFAULT_GROUP[];
+
 class BackendLoactor {
 private:
   BackendLoactor() {}
@@ -17,8 +19,8 @@ public:
     return locator;
   }
   bool Initialize();
-  boost::asio::ip::tcp::endpoint GetEndpointByKey(const char * key, size_t len);
-  boost::asio::ip::tcp::endpoint GetEndpointByKey(const std::string& key);
+  boost::asio::ip::tcp::endpoint GetEndpointByKey(const char * key, size_t len, const char* group = DEFAULT_GROUP);
+  boost::asio::ip::tcp::endpoint GetEndpointByKey(const std::string& key, const char* group = DEFAULT_GROUP);
 private:
   std::map<std::string, Continuum *> clusters_continum_;
 };

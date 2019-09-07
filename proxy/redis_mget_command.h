@@ -17,8 +17,8 @@ class RedisMgetCommand : public Command {
 public:
   RedisMgetCommand(std::shared_ptr<ClientConnection> client,
                   const std::string& original_header, 
-                  const redis::BulkArray& query_bulks,
-                  std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
+                  size_t keys_count,
+                  std::list<std::pair<ip::tcp::endpoint, std::string>>&& endpoint_query_list);
 
   virtual ~RedisMgetCommand();
 
@@ -35,7 +35,7 @@ private:
 
 private:
   void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
-  void BackendReadyToReply(std::shared_ptr<BackendConn> backend, bool success);
+  void BackendReadyToReply(std::shared_ptr<BackendConn> backend);
 
   bool HasUnfinishedBanckends() const;
   void NextBackendStartReply();
