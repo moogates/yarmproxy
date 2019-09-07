@@ -1,4 +1,4 @@
-#include "redis_gets_command.h"
+#include "redis_mget_command.h"
 
 #include "error_code.h"
 #include "logging.h"
@@ -16,10 +16,10 @@ std::atomic_int redis_mget_cmd_count;
 const char * GetLineEnd(const char * buf, size_t len);
 size_t GetValueBytes(const char * data, const char * end);
 
-RedisGetsCommand::BackendQuery::~BackendQuery() {
+RedisMgetCommand::BackendQuery::~BackendQuery() {
 }
 
-RedisGetsCommand::RedisGetsCommand(std::shared_ptr<ClientConnection> client,
+RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
     const std::string& original_header,
     const redis::BulkArray& query_bulks,
     std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map)
@@ -29,38 +29,38 @@ RedisGetsCommand::RedisGetsCommand(std::shared_ptr<ClientConnection> client,
     , keys_count_(query_bulks.total_bulks() - 1)
 {
   for(auto& it : endpoint_query_map) {
-    LOG_DEBUG << "RedisGetsCommand ctor, create query ep=" << it.first << " query=" << it.second;
+    LOG_DEBUG << "RedisMgetCommand ctor, create query ep=" << it.first << " query=" << it.second;
     query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
   }
-  LOG_DEBUG << "RedisGetsCommand ctor, query_set_.size=" << query_set_.size()
+  LOG_DEBUG << "RedisMgetCommand ctor, query_set_.size=" << query_set_.size()
             << " count=" << ++redis_mget_cmd_count;
 }
 
-RedisGetsCommand::~RedisGetsCommand() {
+RedisMgetCommand::~RedisMgetCommand() {
   for(auto& query : query_set_) {
     if (!query->backend_conn_) {
-      LOG_DEBUG << "RedisGetsCommand dtor Release null backend";
+      LOG_DEBUG << "RedisMgetCommand dtor Release null backend";
     } else {
-      LOG_DEBUG << "RedisGetsCommand dtor Release backend";
+      LOG_DEBUG << "RedisMgetCommand dtor Release backend";
       backend_pool()->Release(query->backend_conn_);
     }
   }
-  LOG_DEBUG << "RedisGetsCommand dtor, cmd=" << this << " count=" << --redis_mget_cmd_count;
+  LOG_DEBUG << "RedisMgetCommand dtor, cmd=" << this << " count=" << --redis_mget_cmd_count;
 }
 
-void RedisGetsCommand::WriteQuery() {
+void RedisMgetCommand::WriteQuery() {
   for(auto& query : query_set_) {
     if (!query->backend_conn_) {
       query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
     }
-    LOG_DEBUG << "RedisGetsCommand WriteQuery cmd=" << this
+    LOG_DEBUG << "RedisMgetCommand WriteQuery cmd=" << this
               << " backend=" << query->backend_conn_ << ", query=("
               << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
     query->backend_conn_->WriteQuery(query->query_line_.data(), query->query_line_.size(), false);
   }
 }
 
-void RedisGetsCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
+void RedisMgetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
   if (received_reply_backends_.insert(backend).second) {
     if (received_reply_backends_.size() == 1) {
       first_reply_backend_ = backend;
@@ -72,7 +72,7 @@ void RedisGetsCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) 
 }
 
 // return : is the backend successfully activated
-bool RedisGetsCommand::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
+bool RedisMgetCommand::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
   if (replying_backend_ == nullptr) {
     replying_backend_ = backend;
     LOG_DEBUG << "TryActivateReplyingBackend ok, backend=" << backend << " replying_backend_=" << replying_backend_;
@@ -81,7 +81,7 @@ bool RedisGetsCommand::TryActivateReplyingBackend(std::shared_ptr<BackendConn> b
   return backend == replying_backend_;
 }
 
-void RedisGetsCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend,
+void RedisMgetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend,
                                              bool success) {
   if (client_conn_->IsFirstCommand(shared_from_this())
       && TryActivateReplyingBackend(backend)) {
@@ -99,7 +99,7 @@ void RedisGetsCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend,
   }
 }
 
-void RedisGetsCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+void RedisMgetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   TryMarkLastBackend(backend);
   if (ec != ErrorCode::E_SUCCESS
       || ParseReply(backend) == false) {
@@ -113,8 +113,8 @@ void RedisGetsCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
 }
 
 
-void RedisGetsCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
-  LOG_DEBUG << "RedisGetsCommand::OnBackendConnectError endpoint="
+void RedisMgetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+  LOG_DEBUG << "RedisMgetCommand::OnBackendConnectError endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   ++unreachable_backends_;
   TryMarkLastBackend(backend);
@@ -122,10 +122,10 @@ void RedisGetsCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backen
   if (backend == last_backend_) {
     static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
     backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
-    LOG_WARN << "RedisGetsCommand::OnBackendConnectError last, endpoint="
+    LOG_WARN << "RedisMgetCommand::OnBackendConnectError last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   } else {
-    LOG_WARN << "RedisGetsCommand::OnBackendConnectError not last, endpoint="
+    LOG_WARN << "RedisMgetCommand::OnBackendConnectError not last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   }
   backend->set_reply_recv_complete();
@@ -135,7 +135,7 @@ void RedisGetsCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backen
 }
 
 /*
-void RedisGetsCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+void RedisMgetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   // TODO : merge with sibling classes
   if (ec != ErrorCode::E_SUCCESS) {
     // client_conn_->Abort(); // TODO : 模拟Abort
@@ -147,23 +147,23 @@ void RedisGetsCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
     }
     return;
   }
-  LOG_DEBUG << "RedisGetsCommand::OnWriteQueryFinished 转发了当前命令, 等待backend的响应.";
+  LOG_DEBUG << "RedisMgetCommand::OnWriteQueryFinished 转发了当前命令, 等待backend的响应.";
   backend->ReadReply();
 }
 */
 
-void RedisGetsCommand::StartWriteReply() {
+void RedisMgetCommand::StartWriteReply() {
   NextBackendStartReply();
 }
 
-void RedisGetsCommand::NextBackendStartReply() {
-  LOG_DEBUG << "RedisGetsCommand::OnWriteReplyEnabled cmd=" << this
+void RedisMgetCommand::NextBackendStartReply() {
+  LOG_DEBUG << "RedisMgetCommand::OnWriteReplyEnabled cmd=" << this
             << " last replying_backend_=" << replying_backend_;
   if (waiting_reply_queue_.size() > 0) {
     auto next_backend = waiting_reply_queue_.front();
     waiting_reply_queue_.pop_front();
 
-    LOG_DEBUG << "RedisGetsCommand::OnWriteReplyEnabled activate ready backend,"
+    LOG_DEBUG << "RedisMgetCommand::OnWriteReplyEnabled activate ready backend,"
               << " backend=" << next_backend;
     if (next_backend->Completed()) {
       LOG_DEBUG << "OnWriteReplyEnabled backend=" << next_backend << " empty reply";
@@ -173,33 +173,43 @@ void RedisGetsCommand::NextBackendStartReply() {
       replying_backend_ = next_backend;
     }
   } else {
-    LOG_DEBUG << "RedisGetsCommand::OnWriteReplyEnabled no ready backend to activate,"
+    LOG_DEBUG << "RedisMgetCommand::OnWriteReplyEnabled no ready backend to activate,"
               << " last_replying_backend_=" << replying_backend_;
     replying_backend_ = nullptr;
   }
 }
 
-bool RedisGetsCommand::HasUnfinishedBanckends() const {
-  LOG_DEBUG << "RedisGetsCommand::HasUnfinishedBanckends"
+bool RedisMgetCommand::HasUnfinishedBanckends() const {
+  LOG_DEBUG << "RedisMgetCommand::HasUnfinishedBanckends"
             << " completed_backends_=" << completed_backends_ 
             << " total_backends=" << query_set_.size();
   return unreachable_backends_ + completed_backends_ < query_set_.size();
 }
 
-void RedisGetsCommand::RotateReplyingBackend(bool success) {
+void RedisMgetCommand::RotateReplyingBackend(bool success) {
   if (success) {
     ++completed_backends_;
   }
   if (HasUnfinishedBanckends()) {
-    LOG_DEBUG << "RedisGetsCommand::Rotate to next backend";
+    LOG_DEBUG << "RedisMgetCommand::Rotate to next backend";
     NextBackendStartReply();
   } else {
-    LOG_DEBUG << "RedisGetsCommand::Rotate to next COMMAND";
+    LOG_DEBUG << "RedisMgetCommand::Rotate to next COMMAND";
     client_conn_->RotateReplyingCommand();
   }
 }
 
-bool RedisGetsCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
+bool RedisMgetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
+  if (backend->buffer()->unparsed_bytes() == 0) {
+    if (backend->buffer()->parsed_unreceived_bytes() == 0
+        && absent_bulks_tracker_.find(backend) == absent_bulks_tracker_.end()) {
+      LOG_WARN << "RedisMgetCommand::ParseReply last item all data received";
+      backend->set_reply_recv_complete();
+    }
+    return true;
+  }
+
+
   while(backend->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend->buffer()->unparsed_data();
     size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
@@ -217,6 +227,8 @@ bool RedisGetsCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
       backend->buffer()->update_parsed_bytes(bulk_array.parsed_size());
 
       size_t absent_bulks = bulk_array.absent_bulks();
+      LOG_WARN << "RedisMgetCommand::ParseReply absent_bulks=" << absent_bulks
+                << ", backend=" << backend;
       if (absent_bulks > 0) {
         absent_bulks_tracker_[backend] = absent_bulks;
         return true;
@@ -225,8 +237,8 @@ bool RedisGetsCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
         backend->set_reply_recv_complete();  // TODO : buffer中，针对memcached协议判断complete的标准，在redis中不适用
       }
     } else {
-      const char * entry = backend->buffer()->unparsed_data();
-      size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
+    //const char * entry = backend->buffer()->unparsed_data();
+    //size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
 
       redis::Bulk bulk(entry, unparsed_bytes);
       if (bulk.present_size() < 0) {
@@ -244,49 +256,8 @@ bool RedisGetsCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
         }
       }
     }
-    continue;
-    
-
-
-    const char * p = GetLineEnd(entry, unparsed_bytes);
-    if (p == nullptr) {
-      LOG_DEBUG << "ParseReply no enough data for parsing, please read more"
-                << " bytes=" << backend->buffer()->unparsed_bytes();
-      return true;
-    }
-
-    if (entry[0] == 'V') {
-      // "VALUE <key> <flag> <bytes>\r\n"
-      size_t body_bytes = GetValueBytes(entry, p);
-      size_t entry_bytes = p - entry + 1 + body_bytes + 2;
-      LOG_DEBUG << "ParseReply VALUE data, backend=" << backend << " bytes=" << std::min(unparsed_bytes, entry_bytes)
-                << " data=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
-      backend->buffer()->update_parsed_bytes(entry_bytes);
-      // return true; // 这里如果return, 则每次转发一条，only for test
-    } else {
-      // "END\r\n"
-      if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0
-          && backend->buffer()->unparsed_bytes() == (sizeof("END\r\n") - 1)) {
-        backend->set_reply_recv_complete();
-        if (backend == last_backend_) {
-          backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
-          LOG_WARN << "ParseReply END, is last, backend=" << backend << " backend.get=" << backend
-                   << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
-                   // << " unprocessed=(" << std::string(backend->buffer()->unprocessed_data(), 100) << ")";
-        } else {
-          LOG_WARN << "ParseReply END, is not last, backend=" << backend;
-          // backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only
-          backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
-        }
-        return true;
-      } else {
-        LOG_WARN << "ParseReply ERROR, data=(" << std::string(entry, p - entry)
-                 << ") backend=" << backend;
-        // TODO : ERROR
-        return false;
-      }
-    }
   }
+
   return true;
 }
 

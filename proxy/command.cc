@@ -17,7 +17,7 @@
 
 #include "redis_protocol.h"
 #include "redis_get_command.h"
-#include "redis_gets_command.h"
+#include "redis_mget_command.h"
 
 namespace yarmproxy {
 
@@ -152,13 +152,13 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       return cmd_line_bytes;
     } else if (ba[0].equals("mget", sizeof("mget") - 1)) {
       if (!ba.completed()) {
-        LOG_DEBUG << "CreateCommand RedisGetsCommand need more data";
+        LOG_DEBUG << "CreateCommand RedisMgetCommand need more data";
         return 0;
       }
       size_t cmd_line_bytes = ba.total_size();
       std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
       RedisGroupKeysByEndpoint(buf, cmd_line_bytes, &endpoint_key_map);
-      command->reset(new RedisGetsCommand(client, std::string(buf, cmd_line_bytes), ba, std::move(endpoint_key_map)));
+      command->reset(new RedisMgetCommand(client, std::string(buf, cmd_line_bytes), ba, std::move(endpoint_key_map)));
       LOG_DEBUG << "CreateCommand ok, redis_command=" << ba[0].to_string();
       return cmd_line_bytes;
     } 
