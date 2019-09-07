@@ -7,6 +7,7 @@
 #include <boost/asio.hpp>
 
 #include "command.h"
+#include "redis_protocol.h"
 
 namespace yarmproxy {
 
@@ -14,8 +15,9 @@ using namespace boost::asio;
 
 class RedisGetCommand : public Command {
 public:
-  RedisGetCommand(std::shared_ptr<ClientConnection> client, const std::string& original_header, 
-                     std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
+  RedisGetCommand(std::shared_ptr<ClientConnection> client,
+                  const char* buf, size_t bytes,
+                  ip::tcp::endpoint& ep);
 
   virtual ~RedisGetCommand();
 
@@ -32,7 +34,7 @@ private:
 
 private:
   void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
-  void BackendReadyToReply(std::shared_ptr<BackendConn> backend, bool success);
+  void BackendReadyToReply(std::shared_ptr<BackendConn> backend);
 
   bool HasUnfinishedBanckends() const;
   void NextBackendStartReply();
@@ -63,6 +65,8 @@ private:
   size_t completed_backends_;
   size_t unreachable_backends_;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
+/////////////////////////
+  std::shared_ptr<BackendConn> first_reply_backend_;
 };
 
 }

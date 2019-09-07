@@ -25,7 +25,7 @@ public:
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* cmd);
 protected: // TODO : best practice ?
-  Command(std::shared_ptr<ClientConnection> client, const std::string& original_header);
+  Command(std::shared_ptr<ClientConnection> client, const std::string& original_header); // TODO : remove original_header, it's for debug only
 public:
   virtual ~Command();
   virtual void WriteQuery() = 0;
@@ -34,6 +34,11 @@ public:
 
   void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+
+  virtual bool QueryParsingComplete() {
+    return true;
+  }
+  virtual bool ParseIncompleteQuery() { return true; }
 
 protected:
   BackendConnPool* backend_pool();
@@ -60,7 +65,7 @@ private:
   virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
 
 public:
-  const std::string& original_header() const {
+  const std::string& original_header() const { // for debug only
     return original_header_;
   }
 

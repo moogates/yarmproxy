@@ -7,6 +7,7 @@
 // TODO : refining hash & katama
 // TODO : gracefully shutdown
 // TODO : kill -HUP reload
+// TODO : anti spam-request
 
 int Daemonize();
 int MaximizeFdLimit();

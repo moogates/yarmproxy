@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_PARALLEL_GET_COMMAND_H_
-#define _YARMPROXY_PARALLEL_GET_COMMAND_H_
+#ifndef _YARMPROXY_REDIS_MGET_COMMAND_H_
+#define _YARMPROXY_REDIS_MGET_COMMAND_H_
 
 #include <map>
 #include <set>
@@ -7,17 +7,20 @@
 #include <boost/asio.hpp>
 
 #include "command.h"
+#include "redis_protocol.h"
 
 namespace yarmproxy {
 
 using namespace boost::asio;
 
-class ParallelGetCommand : public Command {
+class RedisMgetCommand : public Command {
 public:
-  ParallelGetCommand(std::shared_ptr<ClientConnection> client, const std::string& original_header, 
-                     std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
+  RedisMgetCommand(std::shared_ptr<ClientConnection> client,
+                  const std::string& original_header, 
+                  size_t keys_count,
+                  std::list<std::pair<ip::tcp::endpoint, std::string>>&& endpoint_query_list);
 
-  virtual ~ParallelGetCommand();
+  virtual ~RedisMgetCommand();
 
   void WriteQuery() override;
 
@@ -63,9 +66,15 @@ private:
   size_t completed_backends_;
   size_t unreachable_backends_;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
+
+/////////////////////////
+  std::shared_ptr<BackendConn> first_reply_backend_;
+  size_t keys_count_;
+
+  std::map<std::shared_ptr<BackendConn>, size_t> absent_bulks_tracker_;
 };
 
 }
 
-#endif  // _YARMPROXY_PARALLEL_GET_COMMAND_H_
+#endif  // _YARMPROXY_REDIS_MGET_COMMAND_H_
 

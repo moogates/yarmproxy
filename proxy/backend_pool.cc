@@ -45,7 +45,7 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
 
   if (!backend->recyclable()) {
     LOG_DEBUG << "BackendConnPool::Release unrecyclable backend=" << backend
-             << " Completed=" << backend->Completed();
+             << " finished=" << backend->finished();
     backend->Close();
     return;
   }
