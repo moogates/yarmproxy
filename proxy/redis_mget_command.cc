@@ -256,9 +256,6 @@ bool RedisMgetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
         backend->set_reply_recv_complete();  // TODO : buffer中，针对memcached协议判断complete的标准，在redis中不适用
       }
     } else {
-    //const char * entry = backend->buffer()->unparsed_data();
-    //size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
-
       redis::Bulk bulk(entry, unparsed_bytes);
       if (bulk.present_size() < 0) {
         LOG_WARN << "Command::OnBackendReplyReceived ParseReply sub_bulk error, backend=" << backend;

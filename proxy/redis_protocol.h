@@ -59,10 +59,16 @@ public:
         return;
       }
     }
-    for(; *p != '\n' && p - data < bytes; ++p) {
-      ;
+    size_t total = 0;
+    while(*p != '\r' && p - data < bytes) {
+      total = total * 10 + size_t(*p - '0');
+      ++p;
     }
-    present_size_ = (*p == '\n' ? bytes : 0);
+    if (*p == '\r' && (p + 1 < data + bytes) && p[1] == '\n') {
+      present_size_ = std::min(bytes, (p - data) + total + 4);
+    } else {
+      present_size_ = 0;
+    }
   }
 
   const char* raw_data() const {
@@ -128,7 +134,7 @@ public:
   std::string to_string() const {
     LOG_DEBUG << "Bulk to_string() total_size="<< total_size()
               << " absent_size=" << absent_size();
-    return std::string(payload_data(), total_size() - absent_size());
+    return std::string(payload_data(), total_size() - (payload_data() - raw_data_) - absent_size() - 2);
   }
 private:
   const char* raw_data_;
@@ -201,16 +207,23 @@ public:
         items_.pop_back();
         return;
       }
+      LOG_DEBUG << "BulkArray ctor, back.present_size= "<< back.present_size()
+                << " data=[" << std::string(back.raw_data(), back.present_size()) << "]";
       parsed_size_ += back.total_size();
+      LOG_DEBUG << "BulkArray ctor, parsed_size_= "<< parsed_size_;
       p += back.total_size();
       LOG_DEBUG << "BulkArray ctor, p-data= "<< int(p - data)
               << " total_bulks=" << bulks
               << " item_[" << items_.size() - 1 << "].total_size=" << back.total_size()
               << " item_[" << items_.size() - 1 << "].present_size=" << back.present_size()
               << " item_[" << items_.size() - 1 << "].completed=" << back.completed()
-              << " item_[" << items_.size() - 1 << "].payload=" << back.to_string()
-              << " item_[" << items_.size() - 1 << "].payload_size=" << back.payload_size();
+              << " item_[" << items_.size() - 1 << "].payload=(" << back.to_string()
+              << ") item_[" << items_.size() - 1 << "].payload_size=" << back.payload_size();
     }
+  }
+
+  const char* raw_data() const {
+    return raw_data_;
   }
 
   Bulk& operator[](size_t pos) {

@@ -114,7 +114,12 @@ bool ClientConnection::ProcessUnparsedQuery() {
       Abort();
       return false;
     }  else if (parsed_bytes == 0) {
+      if (read_buffer_->unparsed_received_bytes() > 128) {
+        LOG_WARN << "ClientConnection::HandleRead too long unparsable command line";
+        return false;
+      }
       TryReadMoreQuery(); // read more data
+      LOG_WARN << "ClientConnection::HandleRead break for more data";
       return true;
     } else {
       read_buffer_->update_parsed_bytes(parsed_bytes);
@@ -143,6 +148,11 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
             << " data=(" << std::string(read_buffer_->unprocessed_data(), bytes_transferred)
             << ") conn=" << this;
 
+  // process the big bulk arrays in redis query
+  if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->QueryParsingComplete()) {
+    active_cmd_queue_.back()->ParseIncompleteQuery();
+  }
+
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
     active_cmd_queue_.back()->WriteQuery();
@@ -153,7 +163,9 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
     }
   }
 
-  ProcessUnparsedQuery();
+  if (active_cmd_queue_.empty() || active_cmd_queue_.back()->QueryParsingComplete()) { // 避免从bulk array中间开始解析新指令
+    ProcessUnparsedQuery();
+  }
   return;
 }
 

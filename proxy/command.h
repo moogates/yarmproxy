@@ -35,6 +35,11 @@ public:
   void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
+  virtual bool QueryParsingComplete() {
+    return true;
+  }
+  virtual bool ParseIncompleteQuery() { return true; }
+
 protected:
   BackendConnPool* backend_pool();
   std::shared_ptr<BackendConn> AllocateBackend(const ip::tcp::endpoint& ep);
