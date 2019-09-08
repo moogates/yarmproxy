@@ -72,7 +72,7 @@ void BackendConn::TryReadMoreReply() {
   }
 }
 
-void BackendConn::WriteQuery(const char* data, size_t bytes, bool has_more_data) {
+void BackendConn::WriteQuery(const char* data, size_t bytes, bool has_more_data) { // TODO : remove has_more_data param
   if (!socket_.is_open()) {
     LOG_DEBUG << "BackendConn::WriteQuery open socket, req="
               << std::string(data, bytes - 2) << " size=" << bytes

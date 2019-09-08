@@ -8,6 +8,7 @@
 // TODO : gracefully shutdown
 // TODO : kill -HUP reload
 // TODO : anti spam-request
+// TODO : better detail hiding
 
 int Daemonize();
 int MaximizeFdLimit();

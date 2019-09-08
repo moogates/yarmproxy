@@ -17,6 +17,7 @@
 
 #include "redis_protocol.h"
 #include "redis_set_command.h"
+#include "redis_mset_command.h"
 #include "redis_get_command.h"
 #include "redis_mget_command.h"
 
@@ -208,9 +209,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       }
       size_t cmd_line_bytes = ba.total_size();
       std::list<std::pair<ip::tcp::endpoint, std::string>> endpoint_key_list;
-      LOG_DEBUG << "------------------------------------------------------------------------------------------";
       RedisGroupKeysByEndpoint(ba, &endpoint_key_list);
-      LOG_DEBUG << "==========================================================================================";
 
       command->reset(new RedisMgetCommand(client, std::string(buf, cmd_line_bytes), ba.total_bulks() - 1, std::move(endpoint_key_list)));
       return cmd_line_bytes;
@@ -224,6 +223,14 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       std::string key(ba[1].payload_data(), ba[1].payload_size());
       ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
       command->reset(new RedisSetCommand(ep, client, ba));
+      return ba.parsed_size();
+    } else if (ba[0].equals("mset", sizeof("mset") - 1)) {
+      if (ba.present_bulks() < 2 || !ba[1].completed()) {
+        LOG_DEBUG << "CreateCommand RedisMsetCommand need more data, present_bulks=" << ba.present_bulks() 
+                  << "ba[1].completed=" << ba[1].completed();
+        return 0;
+      }
+      command->reset(new RedisMsetCommand(client, ba));
       return ba.parsed_size();
     } 
 

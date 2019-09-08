@@ -16,6 +16,8 @@ namespace redis {
 const int SIZE_PARSE_ERROR = -10001;
 const int SIZE_NIL_BULK    = -1;
 
+// very light-weighted redis RESP data wrapper and parser
+
 // Bulk:
 // "result" -> "$6\r\nresult\r\n"
 // ""  -> "$0\r\n\r\n"
