@@ -60,9 +60,9 @@ public:
   void set_no_recycle() {
     no_recycle_ = true;
   }
-//bool reply_recv_complete() const {
-//  return reply_recv_complete_;
-//}
+  bool reply_recv_complete() const {
+    return reply_recv_complete_;
+  }
   bool recyclable() const {
     return !no_recycle_ && finished();
   }

@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
   }
   printf("\r\n");
   if (expired > 0) {
-    printf("$2\r\nEX\r\n$5\r\n86400\r\n");
+    printf("$4\r\nkey2\r\n$5\r\n86400\r\n");
   }
 
   if (nx_flag > 0) {

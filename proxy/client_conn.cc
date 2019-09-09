@@ -148,11 +148,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
             << " data=(" << std::string(read_buffer_->unprocessed_data(), bytes_transferred)
             << ") conn=" << this;
 
-  // process the big bulk arrays in redis query
-  if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->QueryParsingComplete()) {
-    active_cmd_queue_.back()->ParseIncompleteQuery();
-  }
-
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
     active_cmd_queue_.back()->WriteQuery();
@@ -161,6 +156,11 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
       // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery的回调函数里面才继续read. 这并不是最佳方式
       return;
     }
+  }
+
+  // process the big bulk arrays in redis query
+  if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->QueryParsingComplete()) {
+    active_cmd_queue_.back()->ParseIncompleteQuery();
   }
 
   if (active_cmd_queue_.empty() || active_cmd_queue_.back()->QueryParsingComplete()) { // 避免从bulk array中间开始解析新指令

@@ -74,8 +74,8 @@ void BackendConn::TryReadMoreReply() {
 
 void BackendConn::WriteQuery(const char* data, size_t bytes, bool has_more_data) { // TODO : remove has_more_data param
   if (!socket_.is_open()) {
-    LOG_DEBUG << "BackendConn::WriteQuery open socket, req="
-              << std::string(data, bytes - 2) << " size=" << bytes
+    LOG_DEBUG << "BackendConn::WriteQuery open socket, req=["
+              << std::string(data, bytes - 2) << "] size=" << bytes
               << " has_more_data=" << has_more_data << " backend=" << this;
     socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, shared_from_this(),
         data, bytes, has_more_data, std::placeholders::_1));

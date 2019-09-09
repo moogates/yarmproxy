@@ -35,11 +35,10 @@ private:
   }
 
 private:
-  ip::tcp::endpoint backend_endpoint_;
-  std::shared_ptr<BackendConn> backend_conn_;
+//ip::tcp::endpoint backend_endpoint_;
+//std::shared_ptr<BackendConn> backend_conn_;
   /////////////////////// redis set only:
   size_t unparsed_bulks_;
-
 
   struct Subquery {
     Subquery(const ip::tcp::endpoint& ep, size_t bulks_count, const char* data, size_t present_bytes, size_t absent_bytes)
@@ -48,6 +47,7 @@ private:
         , data_(data)
         , present_bytes_(present_bytes)
         , absent_bytes_(absent_bytes)
+        , phase_(0)
     {
     }
 
@@ -56,7 +56,7 @@ private:
     size_t bulks_count_;
     const char* data_;
     size_t present_bytes_;
-    size_t absent_bytes_;
+    size_t absent_bytes_; // TODO : remove it
     size_t phase_;
 
     std::shared_ptr<BackendConn> backend_;
@@ -65,7 +65,12 @@ private:
   std::vector<Subquery> subqueries_;
   std::map<std::shared_ptr<BackendConn>, size_t> backend_index_;
 
-  std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
+  size_t completed_backends_;
+  size_t unreachable_backends_;
+
+  bool init_write_query_;
+
+  // std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 };
 
 }

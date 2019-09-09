@@ -56,6 +56,9 @@ public:
     parsed_offset_ += bytes;
   }
 
+  bool recycle_locked() {
+    return recycle_lock_count_ > 0;
+  }
   void inc_recycle_lock();
   void dec_recycle_lock();
 
