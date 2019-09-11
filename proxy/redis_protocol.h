@@ -27,19 +27,6 @@ public:
   // > 0  -> ok
   // == 0 -> no ready
   // < 0  -> error
-//static int Check(const char* data, size_t bytes) {
-//  if (bytes < 4) {
-//    return 0;
-//  }
-//  const char* p = data;
-//  if (*p != '$') {
-//    return -1;
-//  }
-//  for(++p; *p != '\n' && p - data < bytes; ++p) {
-//    ;
-//  }
-//  return *p == '\n' ? 1 : 0;
-//}
 
   // TODO : 先检查格式正确性
   Bulk(const char* data, size_t bytes)
@@ -58,6 +45,17 @@ public:
     if (*p == '-') { // nil bulk
       if (p[1] != '1') {
         present_size_ = SIZE_PARSE_ERROR;
+        return;
+      } else {
+        if (bytes < 5) {
+          present_size_ = 0;
+          return;
+        }
+        if (p[2] != '\r' || p[3] != '\n') {
+          present_size_ = SIZE_PARSE_ERROR;
+          return;
+        }
+        present_size_ = 5;
         return;
       }
     }
@@ -134,6 +132,9 @@ public:
     return present_size_ >= total ? 0 : (total - present_size_);
   }
   std::string to_string() const {
+    if (raw_data_[1] == '-') {
+      return "nil";
+    }
     LOG_DEBUG << "Bulk to_string() total_size="<< total_size()
               << " absent_size=" << absent_size();
     return std::string(payload_data(), total_size() - (payload_data() - raw_data_) - absent_size() - 2);
@@ -151,20 +152,6 @@ private:
 // [1, 2, "hello"]  ->  "*3\r\n:1\r\n:2\r\n+hello\r\n" (array with mixed types)
 class BulkArray {
 public:
-//static int Check(const char* data, size_t bytes) {
-//  const char* p = data;
-//  if (*p != '*') {
-//    return -1;
-//  }
-//  for(++p; *p != '\n' && p - data < bytes; ++p) {
-//    ;
-//  }
-//  if (*p != '\n') {
-//    return 0;
-//  }
-//  return Bulk::Check(p + 1, data + bytes - p); // TODO check empty array
-//}
-
   static std::string SerializePrefix(int i) {
     std::ostringstream oss;
     oss << '*' << i << "\r\n";
@@ -199,6 +186,7 @@ public:
     parsed_size_ = p - data;
     LOG_DEBUG << "BulkArray offset=" << int(p - data);
     while(p < data + bytes && items_.size() < bulks) {
+      LOG_DEBUG << "BulkArray emplace_back bulk, data_len=" << int(data + bytes - p);
       items_.emplace_back(p, data + bytes - p);
       Bulk& back = items_.back();
       if (back.present_size() < 0) {

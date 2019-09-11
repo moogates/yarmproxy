@@ -72,12 +72,12 @@ void ProxyServer::Run() {
   StartAccept();
 
   while(!stopped_) {
-    try {
+  // try { // TODO : don't try for test
       io_service_.run();
       LOG_WARN << "ProxyServer io_service stopped.";
-    } catch (std::exception& e) {
-      LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
-    }
+  //} catch (std::exception& e) {
+  //  LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
+  //}
   }
 }
 

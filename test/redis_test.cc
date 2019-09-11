@@ -6,6 +6,19 @@
 
 void BulkArrayTest() {
   using namespace yarmproxy;
+  {
+    char data[] = "*1\r\n$-1\r\n";
+    redis::BulkArray bulkv(data, sizeof(data) - 1);
+    std::cout << "parsed_size\t:" << bulkv.parsed_size() << std::endl;
+    return;
+
+    assert(bulkv.parsed_size() == sizeof(data) - 1);
+    assert(bulkv.total_size() == sizeof(data) - 1);
+
+    assert(bulkv.total_bulks() == 1);
+    assert(bulkv.present_bulks() == 1);
+  }
+  return;
 
   {
     char data[] = "*5\r\n$3\r\nset\r\n$4\r\nkey1\r\n$10\r\n00_abcdef_\r\n$2\r\nEX\r\n$5\r\n86400\r\n";
@@ -15,7 +28,6 @@ void BulkArrayTest() {
     assert(bulkv.total_bulks() == 5);
     assert(bulkv.present_bulks() == 5);
   }
-  return;
 
   {
     char data[] = "*0\r\n"; // [] -> "*0\r\n"
@@ -127,6 +139,7 @@ void BulkTest() {
     redis::Bulk bulk(data, sizeof(data) - 1);
     assert(bulk.present_size() == 5);
     assert(bulk.payload_size() == 0);
+    assert(bulk.total_size() == 5);
     assert(bulk.completed());
   }
 

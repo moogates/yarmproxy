@@ -11,11 +11,11 @@ include_directories(/usr/local/include)
 
 add_definitions(-DLOGURU_WITH_STREAMS=1) 
 
-#file(GLOB SOURCES "*.cc")
-set(SOURCES main.cc redis_conn.cc)
+file(GLOB SOURCES "*.cc")
+#set(SOURCES main.cc redis_conn.cc)
 link_directories(/usr/local/lib)
 
-add_executable(yarmproxy ${SOURCES})
+add_executable(yarmbench ${SOURCES})
 
-target_link_libraries(yarmproxy boost_system boost_thread pthread dl)
+target_link_libraries(yarmbench boost_system boost_thread pthread dl)
 

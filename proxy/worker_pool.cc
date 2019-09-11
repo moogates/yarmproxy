@@ -30,11 +30,11 @@ void WorkerPool::StartDispatching() {
     std::atomic_bool& stopped(stopped_);
     std::thread th([&woker, &stopped, i]() {
         while(!stopped) {
-          try {
+        //try {
             woker.io_service_.run();
-          } catch (std::exception& e) {
-            LOG_ERROR << "WorkerThread " << i << " io_service.run error:" << e.what();
-          }
+        //} catch (std::exception& e) {
+        //  LOG_ERROR << "WorkerThread " << i << " io_service.run error:" << e.what();
+        //}
         }
         LOG_WARN << "WorkerThread " << i << " stopped.";
       });

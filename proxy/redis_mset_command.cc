@@ -36,6 +36,9 @@ RedisMsetCommand::RedisMsetCommand(/*const ip::tcp::endpoint & ep, */std::shared
 }
 
 RedisMsetCommand::~RedisMsetCommand() {
+  for(auto& query : subqueries_) {
+    backend_pool()->Release(query.backend_);
+  }
   // TODO : release all backends
 //if (backend_conn_) {
 //  backend_pool()->Release(backend_conn_);
@@ -64,13 +67,15 @@ void RedisMsetCommand::WriteQuery() {
     }
 
     client_conn_->buffer()->inc_recycle_lock();
+    static const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
     LOG_WARN << "RedisMsetCommand WriteQuery init, cmd=" << this
               << " backend=" << query.backend_ << ", key=("
               << redis::Bulk(query.data_, query.present_bytes_).to_string() << ")"
-              << " k_v_present_bytes_=" << query.present_bytes_;
+              << " k_v_present_bytes_=" << query.present_bytes_
+              << " prefix=[" << MSET_PREFIX << "]"
+              << " data=[" << std::string(query.data_, query.present_bytes_) << "]";
 
     // TODO : merge adjcent shared-endpoint queries
-    const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
     query.backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1, true);
   }
 }
@@ -95,6 +100,7 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
     TryWriteReply(backend);
     LOG_WARN << "OnBackendReplyReceived idx=" << backend_index_[backend] << " write reply, backend=" << backend;
   } else {
+    backend->buffer()->update_processed_bytes(backend->buffer()->unprocessed_bytes());
     LOG_WARN << "OnBackendReplyReceived idx=" << backend_index_[backend] << " no reply, backend=" << backend;
   }
 }
@@ -231,7 +237,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
               << redis::Bulk(query.data_, query.present_bytes_).to_string() << ")";
 
     // TODO : merge adjcent shared-endpoint queries
-    const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
+    static const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n"; // must be static
     query.backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1, true);
   }
   
