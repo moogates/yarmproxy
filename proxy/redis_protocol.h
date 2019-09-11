@@ -42,7 +42,7 @@ public:
 //}
 
   // TODO : 先检查格式正确性
-  Bulk(const char* data, size_t bytes) 
+  Bulk(const char* data, size_t bytes)
       : raw_data_(data) {
     if (bytes < 4) {
       present_size_ = 0;
@@ -171,7 +171,7 @@ public:
     return oss.str();
   }
 
-  BulkArray(const char* data, size_t bytes) 
+  BulkArray(const char* data, size_t bytes)
       : raw_data_(data) {
     if (bytes < 4) {
       parsed_size_ = 0;

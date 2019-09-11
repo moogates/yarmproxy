@@ -54,23 +54,10 @@ void RedisMsetCommand::WriteQuery() {
         client_conn_->buffer()->parsed_unreceived_bytes() > 0);
     return;
   }
+
   init_write_query_ = false;
   for(size_t i = 0; i < subqueries_.size(); ++i) {
     auto& query = subqueries_[i];
-  //if (query.phase_ > 0) {
-  //  if (i == subqueries_.size() - 1) {
-  //    LOG_WARN << "RedisMsetCommand WriteQuery has more data, phase=" << query.phase_;
-
-  //    assert(query.phase_ == 2 || query.phase_ == 3);
-  //    query.phase_ = 3;
-  //    query.backend_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
-  //        client_conn_->buffer()->unprocessed_bytes(),
-  //        client_conn_->buffer()->parsed_unreceived_bytes() > 0);
-  //  } else {
-  //    // assert(query.phase_ == 2);
-  //  }
-  //  continue;
-  //}
     if (!query.backend_) {
       query.backend_ = AllocateBackend(query.backend_endpoint_);
       backend_index_[query.backend_] = i;
@@ -173,7 +160,8 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
 
   // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
   if (!client_conn_->buffer()->recycle_locked() // 全部完成write query 才能释放recycle_lock
-      && client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+      && (client_conn_->buffer()->parsed_unreceived_bytes() > 0
+          || !QueryParsingComplete())) {
     LOG_WARN << "OnWriteQueryFinished idx=" << idx << " phase 3, read more query";
     client_conn_->TryReadMoreQuery();
   }
@@ -231,7 +219,6 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
     to_process_bytes += new_bulks[i].present_size();
     to_process_bytes += new_bulks[i + 1].present_size();
 
-    // command->reset(new RedisMsetCommand(ep, client, ba));
     subqueries_.emplace_back(ep, 2, new_bulks[i].raw_data(), new_bulks[i].present_size() + new_bulks[i+1].present_size(), new_bulks[i+1].absent_size());
     auto& query = subqueries_.back();
 

@@ -135,9 +135,14 @@ bool ClientConnection::ProcessUnparsedQuery() {
       assert(to_process_bytes == read_buffer_->unprocessed_bytes());
 
       command->WriteQuery();
-      active_cmd_queue_.emplace_back(std::move(command));
-
+      // jactive_cmd_queue_.emplace_back(std::move(command));
+      active_cmd_queue_.push_back(command);
       read_buffer_->update_processed_bytes(to_process_bytes);
+
+      if (!command->QueryParsingComplete()) {
+        LOG_WARN << "ClientConnection::HandleRead QueryParsingComplete false";
+        break;
+      }
     }
   }
   LOG_DEBUG << "ClientConnection::HandleRead active_cmd_queue_.size=" << active_cmd_queue_.size();

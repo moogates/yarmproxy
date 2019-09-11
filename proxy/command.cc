@@ -231,7 +231,11 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
         return 0;
       }
       command->reset(new RedisMsetCommand(client, ba));
-      return ba.parsed_size();
+      if (ba.present_bulks() % 2 == 0) {
+        return ba.parsed_size() - ba.back().total_size();    // TODO : 测试有k没v的情况, 是否会解析错误?
+      } else {
+        return ba.parsed_size();
+      }
     } 
 
     LOG_DEBUG << "CreateCommand unknown redis command=" << ba[0].to_string();
