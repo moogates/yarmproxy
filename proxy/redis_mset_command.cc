@@ -221,12 +221,16 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
   }
   LOG_WARN << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size() << " unparsed_bulks_=" << unparsed_bulks_;
 
+  size_t to_process_bytes = 0;
   for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) { 
     // TODO : limit max pending subqueries
     size_t idx = subqueries_.size();
     ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(new_bulks[i].payload_data(), new_bulks[i].payload_size(), "REDIS_bj");
-    LOG_DEBUG << "RedisMsetCommand ParseIncompleteQuery, key[" << idx << "/" << ((unparsed_bulks_ - i) / 2 + idx)
-              << "]=" << new_bulks[i].to_string() << " v=[" << new_bulks[i + 1].to_string() << "] ep=" << ep;
+    LOG_WARN << "RedisMsetCommand ParseIncompleteQuery, key[" << idx << "/" << ((unparsed_bulks_ - i) / 2 + idx)
+              << "]=" << new_bulks[i].to_string() << " v.present_size=[" << new_bulks[i + 1].present_size() << "] ep=" << ep;
+    to_process_bytes += new_bulks[i].present_size();
+    to_process_bytes += new_bulks[i + 1].present_size();
+
     // command->reset(new RedisMsetCommand(ep, client, ba));
     subqueries_.emplace_back(ep, 2, new_bulks[i].raw_data(), new_bulks[i].present_size() + new_bulks[i+1].present_size(), new_bulks[i+1].absent_size());
     auto& query = subqueries_.back();
@@ -234,7 +238,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
     query.backend_ = AllocateBackend(query.backend_endpoint_);
     backend_index_[query.backend_] = idx;
 
-    client_conn_->buffer()->inc_recycle_lock();
+    buffer->inc_recycle_lock();
     LOG_DEBUG << "RedisMsetCommand ParseIncompleteQuery WriteQuery cmd=" << this
               << " backend=" << query.backend_ << ", key=("
               << redis::Bulk(query.data_, query.present_bytes_).to_string() << ")";
@@ -244,6 +248,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
     query.backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1, true);
   }
   
+  buffer->update_processed_bytes(to_process_bytes);
   buffer->update_parsed_bytes(total_parsed);
   unparsed_bulks_ -= new_bulks.size();
   return true;
