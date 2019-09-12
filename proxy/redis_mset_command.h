@@ -65,7 +65,7 @@ private:
   };
 
   size_t subquery_index_;
-  std::list<std::shared_ptr<Subquery>> subqueries_;
+  std::list<std::shared_ptr<Subquery>> waiting_subqueries_;
   // std::map<std::shared_ptr<BackendConn>, size_t> backend_index_;
   std::shared_ptr<Subquery> tail_query_;
 

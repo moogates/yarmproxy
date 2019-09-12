@@ -127,16 +127,16 @@ public:
 
   size_t absent_size() const {
     size_t total = total_size();
-    LOG_DEBUG << "Bulk absent_size() present_size_="<< present_size_
-              << " total=" << total;
+  //LOG_DEBUG << "Bulk absent_size() present_size_="<< present_size_
+  //          << " total=" << total;
     return present_size_ >= total ? 0 : (total - present_size_);
   }
   std::string to_string() const {
     if (raw_data_[1] == '-') {
       return "nil";
     }
-    LOG_DEBUG << "Bulk to_string() total_size="<< total_size()
-              << " absent_size=" << absent_size();
+  //LOG_DEBUG << "Bulk to_string() total_size="<< total_size()
+  //          << " absent_size=" << absent_size();
     return std::string(payload_data(), total_size() - (payload_data() - raw_data_) - absent_size() - 2);
   }
 private:
