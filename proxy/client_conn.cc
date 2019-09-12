@@ -22,6 +22,7 @@ ClientConnection::ClientConnection(WorkerContext& context)
   : socket_(context.io_service_)
   , read_buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , context_(context)
+  , is_reading_more_(false)
 {
   LOG_DEBUG << "ClientConnection created." << ++g_cc_count;
 }
@@ -61,6 +62,13 @@ void ClientConnection::TryReadMoreQuery() {
 }
 
 void ClientConnection::AsyncRead() {
+  if (is_reading_more_) {
+    LOG_WARN << "ClientConnection::AsyncRead do nothing";
+    return;
+  }
+  LOG_WARN << "ClientConnection::AsyncRead begin";
+  is_reading_more_ = true;
+  read_buffer_->inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
       std::bind(&ClientConnection::HandleRead, shared_from_this(),
           std::placeholders::_1, // 占位符
@@ -127,9 +135,14 @@ bool ClientConnection::ProcessUnparsedQuery() {
       assert(to_process_bytes == read_buffer_->unprocessed_bytes());
 
       command->WriteQuery();
-      active_cmd_queue_.emplace_back(std::move(command));
-
+      // jactive_cmd_queue_.emplace_back(std::move(command));
+      active_cmd_queue_.push_back(command);
       read_buffer_->update_processed_bytes(to_process_bytes);
+
+      if (!command->QueryParsingComplete()) {
+        LOG_WARN << "ClientConnection::HandleRead QueryParsingComplete false";
+        break;
+      }
     }
   }
   LOG_DEBUG << "ClientConnection::HandleRead active_cmd_queue_.size=" << active_cmd_queue_.size();
@@ -138,29 +151,39 @@ bool ClientConnection::ProcessUnparsedQuery() {
 }
 
 void ClientConnection::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
+  is_reading_more_ = false;
+  read_buffer_->dec_recycle_lock();
+  if (bytes_transferred == 0) {
+    abort();
+    // exit(0);
+  }
+
+  LOG_WARN << "ClientConnection::AsyncRead done";
   if (error) {
     LOG_DEBUG << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
     return;
   }
 
   read_buffer_->update_received_bytes(bytes_transferred);
-  LOG_DEBUG << "ClientConnection::HandleRead bytes_transferred=" << bytes_transferred
-            << " data=(" << std::string(read_buffer_->unprocessed_data(), bytes_transferred)
-            << ") conn=" << this;
-
-  // process the big bulk arrays in redis query
-  if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->QueryParsingComplete()) {
-    active_cmd_queue_.back()->ParseIncompleteQuery();
-  }
+  LOG_WARN << "ClientConnection::HandleRead bytes_transferred=" << bytes_transferred
+            << " parsed_unprocessed_bytes=" << read_buffer_->parsed_unprocessed_bytes();
 
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
+    assert(!active_cmd_queue_.empty());
+
     active_cmd_queue_.back()->WriteQuery();
     read_buffer_->update_processed_bytes(read_buffer_->unprocessed_bytes());
     if (read_buffer_->parsed_unreceived_bytes() > 0) {
       // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery的回调函数里面才继续read. 这并不是最佳方式
       return;
     }
+  }
+
+  // process the big bulk arrays in redis query
+  if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->QueryParsingComplete()) {
+    LOG_WARN << "ClientConnection::HandleRead ParseIncompleteQuery";
+    active_cmd_queue_.back()->ParseIncompleteQuery();
   }
 
   if (active_cmd_queue_.empty() || active_cmd_queue_.back()->QueryParsingComplete()) { // 避免从bulk array中间开始解析新指令

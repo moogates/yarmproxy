@@ -27,7 +27,8 @@ static const char * backend_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;1
 
 bool BackendLoactor::Initialize() {
   {
-    static const char redis_backend_nodes[] = "127.0.0.1:6379=2000;127.0.0.1:6380=2000";
+    //static const char redis_backend_nodes[] = "127.0.0.1:6379=2000;127.0.0.1:6380=2000";
+    static const char redis_backend_nodes[] = "127.0.0.1:6379=2000";
 
     char group[] = "REDIS_bj";
     Continuum * continuum = new Continuum;

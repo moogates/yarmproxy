@@ -34,8 +34,8 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
 
   const auto ep_it = active_conns_.find(backend);
   if (ep_it == active_conns_.end()) {
-    assert(false);
-    backend->Close();
+    // assert(false);
+    // backend->Close(); // might be released more than once
     return;
   }
 
@@ -45,7 +45,8 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
 
   if (!backend->recyclable()) {
     LOG_DEBUG << "BackendConnPool::Release unrecyclable backend=" << backend
-             << " finished=" << backend->finished();
+             << " finished=" << backend->finished()
+             << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
     backend->Close();
     return;
   }

@@ -230,6 +230,9 @@ bool RedisMgetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
 
     auto absent_it = absent_bulks_tracker_.find(backend);
     if (absent_it == absent_bulks_tracker_.end()) {
+      LOG_WARN << "Command::OnBackendReplyReceived unparsed_bytes=" << unparsed_bytes
+               << " data=[" << std::string(entry, unparsed_bytes)
+               << "] backend=" << backend;
       redis::BulkArray bulk_array(entry, unparsed_bytes);
       if (bulk_array.parsed_size() < 0) {
         LOG_WARN << "Command::OnBackendReplyReceived ParseReply error, backend=" << backend

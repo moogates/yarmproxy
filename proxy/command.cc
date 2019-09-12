@@ -17,6 +17,7 @@
 
 #include "redis_protocol.h"
 #include "redis_set_command.h"
+#include "redis_mset_command.h"
 #include "redis_get_command.h"
 #include "redis_mget_command.h"
 
@@ -208,9 +209,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       }
       size_t cmd_line_bytes = ba.total_size();
       std::list<std::pair<ip::tcp::endpoint, std::string>> endpoint_key_list;
-      LOG_DEBUG << "------------------------------------------------------------------------------------------";
       RedisGroupKeysByEndpoint(ba, &endpoint_key_list);
-      LOG_DEBUG << "==========================================================================================";
 
       command->reset(new RedisMgetCommand(client, std::string(buf, cmd_line_bytes), ba.total_bulks() - 1, std::move(endpoint_key_list)));
       return cmd_line_bytes;
@@ -225,6 +224,18 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
       command->reset(new RedisSetCommand(ep, client, ba));
       return ba.parsed_size();
+    } else if (ba[0].equals("mset", sizeof("mset") - 1)) {
+      if (ba.present_bulks() < 2 || !ba[1].completed()) {
+        LOG_DEBUG << "CreateCommand RedisMsetCommand need more data, present_bulks=" << ba.present_bulks() 
+                  << "ba[1].completed=" << ba[1].completed();
+        return 0;
+      }
+      command->reset(new RedisMsetCommand(client, ba));
+      if (ba.present_bulks() % 2 == 0) {
+        return ba.parsed_size() - ba.back().total_size();    // TODO : 测试有k没v的情况, 是否会解析错误?
+      } else {
+        return ba.parsed_size();
+      }
     } 
 
     LOG_DEBUG << "CreateCommand unknown redis command=" << ba[0].to_string();
@@ -332,7 +343,7 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
                                   WeakBind(&Command::OnWriteReplyFinished, backend));
 
-    LOG_DEBUG << "Command::TryWriteReply backend=" << backend
+    LOG_WARN << "Command::TryWriteReply backend=" << backend
               << " data=(" << std::string(backend->buffer()->unprocessed_data(), unprocessed) << ")";
     backend->buffer()->update_processed_bytes(unprocessed);
   }

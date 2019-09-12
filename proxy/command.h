@@ -32,7 +32,7 @@ public:
   virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
   virtual void StartWriteReply() = 0;
 
-  void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+  virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
   virtual bool QueryParsingComplete() {

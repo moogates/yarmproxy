@@ -1,5 +1,6 @@
 memcached=/Users/muyuwei/third_party/memcached/memcached
 memcached=/home/muyuwei/third_party/memcached-1.5.16/memcached
+memcached=/opt/memcached-1.5.16/bin/memcached
 while true; do
   port=$(echo "11211+$RANDOM%5" | bc)
   echo $port
