@@ -77,6 +77,8 @@ private:
   bool init_write_query_;
 
   // std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
+private:
+  void ActivateWaitingSubquery();
 };
 
 }

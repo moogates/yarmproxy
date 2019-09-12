@@ -1,5 +1,6 @@
 cat ./mset5.data | nc 127.0.0.1 11311
 echo
+exit
 
 #for key in key8 key7 key1 key2; do
 for key in key1; do

@@ -1,5 +1,6 @@
 cat ./mset6.data | nc 127.0.0.1 11311
 #echo
+exit
 
 for key in key7 key2019 key8; do
   key_len=${#key}

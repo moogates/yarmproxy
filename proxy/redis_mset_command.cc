@@ -66,29 +66,30 @@ void RedisMsetCommand::WriteQuery() {
   init_write_query_ = false;
   static const size_t MAX_ACTIVE_SUBQUERIES = 32;
 
-  while(!subqueries_.empty() && pending_subqueries_.size() < MAX_ACTIVE_SUBQUERIES) {
-    auto query = subqueries_.front();
-    subqueries_.pop_front();
-    assert(query->backend_ == nullptr);
-    if (!query->backend_) {
-      query->backend_ = AllocateBackend(query->backend_endpoint_);
-      // backend_index_[query->backend_] = i;
-      pending_subqueries_[query->backend_] = query;
-    }
+  ActivateWaitingSubquery();
+//while(!subqueries_.empty() && pending_subqueries_.size() < MAX_ACTIVE_SUBQUERIES) {
+//  auto query = subqueries_.front();
+//  subqueries_.pop_front();
+//  assert(query->backend_ == nullptr);
+//  if (!query->backend_) {
+//    query->backend_ = AllocateBackend(query->backend_endpoint_);
+//    // backend_index_[query->backend_] = i;
+//    pending_subqueries_[query->backend_] = query;
+//  }
 
-    client_conn_->buffer()->inc_recycle_lock();
-    static const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
+//  client_conn_->buffer()->inc_recycle_lock();
+//  static const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
 
-    LOG_DEBUG << "RedisMsetCommand WriteQuery init, cmd=" << this
-              << " backend=" << query->backend_ << ", key=("
-              << redis::Bulk(query->data_, query->present_bytes_).to_string() << ")"
-              << " k_v_present_bytes_=" << query->present_bytes_
-              << " prefix=[" << MSET_PREFIX << "]"
-              << " data=[" << std::string(query->data_, query->present_bytes_) << "]";
+//  LOG_DEBUG << "RedisMsetCommand WriteQuery init, cmd=" << this
+//            << " backend=" << query->backend_ << ", key=("
+//            << redis::Bulk(query->data_, query->present_bytes_).to_string() << ")"
+//            << " k_v_present_bytes_=" << query->present_bytes_
+//            << " prefix=[" << MSET_PREFIX << "]"
+//            << " data=[" << std::string(query->data_, query->present_bytes_) << "]";
 
-    // TODO : merge adjcent shared-endpoint queries
-    query->backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1, true);
-  }
+//  // TODO : merge adjcent shared-endpoint queries
+//  query->backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1, true);
+//}
 }
 
 void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
@@ -122,32 +123,33 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
     // assert(backend_index_.erase(backend) > 0);
     assert(pending_subqueries_.erase(backend) > 0);
     backend_pool()->Release(backend);  // 这里release
+    ActivateWaitingSubquery();
 
-  if (!subqueries_.empty()) {
-    auto query = subqueries_.front();
-    subqueries_.pop_front();
-    assert(query->backend_ == nullptr);
+//if (!subqueries_.empty()) {
+//  auto query = subqueries_.front();
+//  subqueries_.pop_front();
+//  assert(query->backend_ == nullptr);
 
-    if (query->backend_ == nullptr) {
-      LOG_WARN << "Command::OnBackendReplyReceived ok, backend=" << backend
-             << " activate next subquery query=" << query 
-             << " subqueries_.size=" << subqueries_.size();
-        assert(query->phase_ == 0);
-        if (!query->backend_) {
-          query->backend_ = AllocateBackend(query->backend_endpoint_);
-          pending_subqueries_[query->backend_] = query;
-        }
+//  if (query->backend_ == nullptr) {
+//    LOG_WARN << "Command::OnBackendReplyReceived ok, backend=" << backend
+//           << " activate next subquery query=" << query 
+//           << " subqueries_.size=" << subqueries_.size();
+//      assert(query->phase_ == 0);
+//      if (!query->backend_) {
+//        query->backend_ = AllocateBackend(query->backend_endpoint_);
+//        pending_subqueries_[query->backend_] = query;
+//      }
 
-        client_conn_->buffer()->inc_recycle_lock();
-        static const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
-        query->backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1, true);
-    } else {
-      LOG_WARN << "Command::OnBackendReplyReceived ok, backend=" << backend
-             << " activate next subquery not needed. query=" << query
-             << " subqueries_.size=" << subqueries_.size();
-      assert(false);
-    }
-  }
+//      client_conn_->buffer()->inc_recycle_lock();
+//      static const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
+//      query->backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1, true);
+//  } else {
+//    LOG_WARN << "Command::OnBackendReplyReceived ok, backend=" << backend
+//           << " activate next subquery not needed. query=" << query
+//           << " subqueries_.size=" << subqueries_.size();
+//    assert(false);
+//  }
+//}
 
   }
 }
@@ -261,6 +263,33 @@ bool RedisMsetCommand::QueryParsingComplete() {
   return unparsed_bulks_ == 0;
 }
 
+void RedisMsetCommand::ActivateWaitingSubquery() {
+  static const size_t MAX_ACTIVE_SUBQUERIES = 32;
+  while(!subqueries_.empty() && pending_subqueries_.size() < MAX_ACTIVE_SUBQUERIES) {
+    auto query = subqueries_.front();
+    subqueries_.pop_front();
+    assert(query->backend_ == nullptr);
+    if (!query->backend_) {
+      query->backend_ = AllocateBackend(query->backend_endpoint_);
+      // backend_index_[query->backend_] = i;
+      pending_subqueries_[query->backend_] = query;
+    }
+
+    client_conn_->buffer()->inc_recycle_lock();
+    static const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
+
+    LOG_DEBUG << "RedisMsetCommand WriteQuery init, cmd=" << this
+              << " backend=" << query->backend_ << ", key=("
+              << redis::Bulk(query->data_, query->present_bytes_).to_string() << ")"
+              << " k_v_present_bytes_=" << query->present_bytes_
+              << " prefix=[" << MSET_PREFIX << "]"
+              << " data=[" << std::string(query->data_, query->present_bytes_) << "]";
+
+    // TODO : merge adjcent shared-endpoint queries
+    query->backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1, true);
+  }
+}
+
 bool RedisMsetCommand::ParseIncompleteQuery() {
   LOG_WARN << "RedisMsetCommand::QueryParsingComplete unparsed_bulks_=" << unparsed_bulks_;
   ReadBuffer* buffer = client_conn_->buffer();
@@ -293,8 +322,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
   LOG_WARN << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size() << " unparsed_bulks_=" << unparsed_bulks_;
 
   size_t to_process_bytes = 0;
-  static const size_t MAX_ACTIVE_SUBQUERIES = 32;
-  for(size_t i = 0; i + 1 < new_bulks.size() && i < MAX_ACTIVE_SUBQUERIES; i += 2) { 
+  for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) { 
     // TODO : limit max pending subqueries
     ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(new_bulks[i].payload_data(), new_bulks[i].payload_size(), "REDIS_bj");
     LOG_WARN << "RedisMsetCommand ParseIncompleteQuery, key=" << new_bulks[i].to_string()
@@ -305,6 +333,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
     subqueries_.emplace_back(new Subquery(ep, 2, new_bulks[i].raw_data(), new_bulks[i].present_size() + new_bulks[i+1].present_size(), new_bulks[i+1].absent_size(), ++subquery_index_));
     // TODO : 这里可能需要activate new subqueris
   }
+
   // tail_query_ = subqueries_.back();
   if (!subqueries_.empty()) {
     tail_query_ = subqueries_.back();
@@ -313,6 +342,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
   buffer->update_processed_bytes(to_process_bytes);
   buffer->update_parsed_bytes(total_parsed);
   unparsed_bulks_ -= new_bulks.size();
+  ActivateWaitingSubquery();
   return true;
 }
 
