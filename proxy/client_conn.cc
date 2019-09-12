@@ -170,6 +170,8 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
     // 上次解析后，本次才接受到的数据
+    assert(!active_cmd_queue_.empty());
+
     active_cmd_queue_.back()->WriteQuery();
     read_buffer_->update_processed_bytes(read_buffer_->unprocessed_bytes());
     if (read_buffer_->parsed_unreceived_bytes() > 0) {
