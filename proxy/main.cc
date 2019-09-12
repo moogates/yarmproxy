@@ -9,6 +9,7 @@
 // TODO : kill -HUP reload
 // TODO : anti spam-request
 // TODO : better detail hiding
+// TODO : limit max data size
 
 int Daemonize();
 int MaximizeFdLimit();
