@@ -343,7 +343,7 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
                                   WeakBind(&Command::OnWriteReplyFinished, backend));
 
-    LOG_WARN << "Command::TryWriteReply backend=" << backend
+    LOG_DEBUG << "Command::TryWriteReply backend=" << backend
               << " data=(" << std::string(backend->buffer()->unprocessed_data(), unprocessed) << ")";
     backend->buffer()->update_processed_bytes(unprocessed);
   }

@@ -154,6 +154,7 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
     } else if (query->phase_ == 3) {
       if (query == tail_query_ && client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
         LOG_DEBUG << "OnWriteQueryFinished query=" << query->index_ << " phase 3, TryReadMoreQuery";
+        assert(!client_conn_->buffer()->recycle_locked());
         client_conn_->TryReadMoreQuery();
       } else {
         LOG_DEBUG << "OnWriteQueryFinished query=" << query->index_ << " phase 3 completed";
@@ -163,7 +164,7 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
       return;  // TODO : should return here? 
     } else {
       LOG_ERROR << "OnWriteQueryFinished query=" << query->index_ << " phase=" << query->phase_;
-      // assert(false);
+      assert(false);
     }
   }
 
@@ -187,7 +188,7 @@ bool RedisMsetCommand::QueryParsingComplete() {
 }
 
 void RedisMsetCommand::ActivateWaitingSubquery() {
-  LOG_WARN << "RedisMsetCommand ActivateWaitingSubquery begin, cmd=" << this;
+  LOG_DEBUG << "RedisMsetCommand ActivateWaitingSubquery begin, cmd=" << this;
   static const size_t MAX_ACTIVE_SUBQUERIES = 32;
   while(!waiting_subqueries_.empty() && pending_subqueries_.size() < MAX_ACTIVE_SUBQUERIES) {
     auto query = waiting_subqueries_.front();
@@ -199,7 +200,7 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
 
     static const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
 
-    LOG_WARN << "RedisMsetCommand WriteQuery ActivateWaitingSubquery, cmd=" << this
+    LOG_DEBUG << "RedisMsetCommand WriteQuery ActivateWaitingSubquery, cmd=" << this
               << " query=" << query->index_
               << " backend=" << query->backend_ << ", key=("
               << redis::Bulk(query->data_, query->present_bytes_).to_string() << ")"
@@ -288,7 +289,7 @@ bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   }
 
   backend->buffer()->update_parsed_bytes(p - entry + 1);
-  LOG_WARN << "RedisMsetCommand ParseReply resp.size=" << p - entry + 1
+  LOG_DEBUG << "RedisMsetCommand ParseReply resp.size=" << p - entry + 1
             << " contont=[" << std::string(entry, p - entry - 1) << "]"
             << " set_reply_recv_complete, backend=" << backend
             << " query=" << pending_subqueries_[backend]->index_;

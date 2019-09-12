@@ -63,10 +63,10 @@ void ClientConnection::TryReadMoreQuery() {
 
 void ClientConnection::AsyncRead() {
   if (is_reading_more_) {
-    LOG_WARN << "ClientConnection::AsyncRead do nothing";
+    LOG_DEBUG << "ClientConnection::AsyncRead do nothing";
     return;
   }
-  LOG_WARN << "ClientConnection::AsyncRead begin";
+  LOG_DEBUG << "ClientConnection::AsyncRead begin";
   is_reading_more_ = true;
   read_buffer_->inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(), read_buffer_->free_space_size()),
@@ -88,7 +88,7 @@ void ClientConnection::WriteReply(const char* data, size_t bytes, const WriteRep
   std::shared_ptr<ClientConnection> ptr(shared_from_this());
   auto cb_wrap = [ptr, data, bytes, callback](const boost::system::error_code& error, size_t bytes_transferred) {
     if (!error && bytes_transferred < bytes) {
-      LOG_WARN << "Command::TryWriteReply callback, write more, bytes_to_transfer=" << bytes
+      LOG_DEBUG << "Command::TryWriteReply callback, write more, bytes_to_transfer=" << bytes
             << " bytes_transferred=" << bytes_transferred;
       ptr->WriteReply(data + bytes_transferred, bytes - bytes_transferred, callback);
     } else {
@@ -123,11 +123,11 @@ bool ClientConnection::ProcessUnparsedQuery() {
       return false;
     }  else if (parsed_bytes == 0) {
       if (read_buffer_->unparsed_received_bytes() > 128) {
-        LOG_WARN << "ClientConnection::HandleRead too long unparsable command line";
+        LOG_WARN << "ClientConnection::ProcessUnparsedQuery too long unparsable command line";
         return false;
       }
       TryReadMoreQuery(); // read more data
-      LOG_WARN << "ClientConnection::HandleRead break for more data";
+      LOG_WARN << "ClientConnection::ProcessUnparsedQuery break for more data";
       return true;
     } else {
       read_buffer_->update_parsed_bytes(parsed_bytes);
@@ -140,12 +140,12 @@ bool ClientConnection::ProcessUnparsedQuery() {
       read_buffer_->update_processed_bytes(to_process_bytes);
 
       if (!command->QueryParsingComplete()) {
-        LOG_WARN << "ClientConnection::HandleRead QueryParsingComplete false";
+        LOG_DEBUG << "ClientConnection::ProcessUnparsedQuery QueryParsingComplete false";
         break;
       }
     }
   }
-  LOG_DEBUG << "ClientConnection::HandleRead active_cmd_queue_.size=" << active_cmd_queue_.size();
+  LOG_DEBUG << "ClientConnection::ProcessUnparsedQuery active_cmd_queue_.size=" << active_cmd_queue_.size();
   // TryReadMoreQuery(); // TODO : read should continues here, so that the conn shared_ptr won't be released
   return true;
 }
@@ -153,19 +153,14 @@ bool ClientConnection::ProcessUnparsedQuery() {
 void ClientConnection::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   is_reading_more_ = false;
   read_buffer_->dec_recycle_lock();
-  if (bytes_transferred == 0) {
-    abort();
-    // exit(0);
-  }
-
-  LOG_WARN << "ClientConnection::AsyncRead done";
   if (error) {
-    LOG_DEBUG << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
+    LOG_WARN << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
+    Close();
     return;
   }
 
   read_buffer_->update_received_bytes(bytes_transferred);
-  LOG_WARN << "ClientConnection::HandleRead bytes_transferred=" << bytes_transferred
+  LOG_DEBUG << "ClientConnection::HandleRead bytes_transferred=" << bytes_transferred
             << " parsed_unprocessed_bytes=" << read_buffer_->parsed_unprocessed_bytes();
 
   if (read_buffer_->parsed_unprocessed_bytes() > 0) {
@@ -182,7 +177,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 
   // process the big bulk arrays in redis query
   if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->QueryParsingComplete()) {
-    LOG_WARN << "ClientConnection::HandleRead ParseIncompleteQuery";
+    LOG_DEBUG << "ClientConnection::HandleRead ParseIncompleteQuery";
     active_cmd_queue_.back()->ParseIncompleteQuery();
   }
 
