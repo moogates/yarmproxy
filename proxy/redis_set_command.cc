@@ -2,6 +2,7 @@
 
 #include "logging.h"
 #include "backend_conn.h"
+#include "backend_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "error_code.h"
@@ -16,12 +17,13 @@ const char * GetLineEnd(const char * buf, size_t len);
 
 std::atomic_int redis_set_cmd_count;
 
-RedisSetCommand::RedisSetCommand(const ip::tcp::endpoint & ep, std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba)
-    : Command(client, std::string(ba.raw_data(), ba.parsed_size()))
-    , backend_endpoint_(ep)
+RedisSetCommand::RedisSetCommand(std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba)
+    : Command(client)
     , unparsed_bulks_(ba.absent_bulks())
 {
-  LOG_DEBUG << "RedisSetCommand ctor " << ++redis_set_cmd_count;
+  backend_endpoint_ = BackendLoactor::Instance().GetEndpointByKey(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
+  LOG_WARN << "RedisSetCommand key=" << ba[1].to_string() << " ep=" << backend_endpoint_
+            << " ctor " << ++redis_set_cmd_count;
 }
 
 RedisSetCommand::~RedisSetCommand() {
@@ -39,8 +41,7 @@ void RedisSetCommand::WriteQuery() {
 
   client_conn_->buffer()->inc_recycle_lock();
   backend_conn_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
-          client_conn_->buffer()->unprocessed_bytes(),
-          client_conn_->buffer()->parsed_unreceived_bytes() > 0);
+          client_conn_->buffer()->unprocessed_bytes());
 }
 
 void RedisSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
@@ -95,7 +96,6 @@ void RedisSetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
 
 bool RedisSetCommand::QueryParsingComplete() {
   LOG_WARN << "RedisSetCommand::QueryParsingComplete unparsed_bulks_=" << unparsed_bulks_;
-  // assert(unparsed_bulks_ == 0);
   return unparsed_bulks_ == 0;
 }
 

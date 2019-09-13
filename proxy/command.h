@@ -25,7 +25,7 @@ public:
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* cmd);
 protected: // TODO : best practice ?
-  Command(std::shared_ptr<ClientConnection> client, const std::string& original_header); // TODO : remove original_header, it's for debug only
+  Command(std::shared_ptr<ClientConnection> client);
 public:
   virtual ~Command();
   virtual void WriteQuery() = 0;
@@ -44,10 +44,11 @@ protected:
   BackendConnPool* backend_pool();
   std::shared_ptr<BackendConn> AllocateBackend(const ip::tcp::endpoint& ep);
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
+
   virtual void OnBackendConnectError(std::shared_ptr<BackendConn> backend);
 
-  typedef void(Command::*BackendCallbackFunc)(std::shared_ptr<BackendConn> backend, ErrorCode ec);
-  WriteReplyCallback WeakBind(BackendCallbackFunc mem_func, std::shared_ptr<BackendConn> backend) {
+  typedef void(Command::*BackendCallback)(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+  WriteReplyCallback WeakBind(BackendCallback mem_func, std::shared_ptr<BackendConn> backend) {
     std::weak_ptr<Command> cmd_wptr(shared_from_this());
     std::weak_ptr<BackendConn> backend_wptr(backend);
     return [cmd_wptr, mem_func, backend_wptr](ErrorCode ec) {
@@ -64,16 +65,10 @@ private:
   virtual void RotateReplyingBackend(bool success) = 0;
   virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
 
-public:
-  const std::string& original_header() const { // for debug only
-    return original_header_;
-  }
-
 protected:
   std::shared_ptr<ClientConnection> client_conn_;
 private:
   bool is_transfering_reply_;
-  std::string original_header_;
 };
 
 }

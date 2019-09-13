@@ -16,8 +16,7 @@ using namespace boost::asio;
 class RedisGetCommand : public Command {
 public:
   RedisGetCommand(std::shared_ptr<ClientConnection> client,
-                  const char* buf, size_t bytes,
-                  ip::tcp::endpoint& ep);
+                  const redis::BulkArray& ba);
 
   virtual ~RedisGetCommand();
 

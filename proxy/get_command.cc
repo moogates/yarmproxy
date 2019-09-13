@@ -4,6 +4,7 @@
 #include "logging.h"
 
 #include "backend_conn.h"
+#include "backend_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "read_buffer.h"
@@ -29,18 +30,62 @@ size_t GetValueBytes(const char * data, const char * end) {
   return 0;
 }
 
-ParallelGetCommand::BackendQuery::~BackendQuery() {
+bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size,
+        std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
+  LOG_DEBUG << "GroupKeysByEndpoint begin, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
+  for(const char* p = cmd_line + 4/*strlen("get ")*/
+      ; p < cmd_line + cmd_line_size - 2/*strlen("\r\n")*/; ++p) {
+    const char* q = p;
+    while(*q != ' ' && *q != '\r') {
+      ++q;
+    }
+    ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(p, q - p);
+
+    auto it = endpoint_key_map->find(ep);
+    if (it == endpoint_key_map->end()) {
+      it = endpoint_key_map->insert(std::make_pair(ep, std::string("get"))).first;
+    }
+
+    it->second.append(p - 1, 1 + q - p);
+    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it->first
+              << " key=[" << std::string(p-1, 1+q-p) << "]"
+              << " current=" << it->second;
+
+    p = q;
+  }
+  for(auto& it : *endpoint_key_map) {
+    LOG_DEBUG << "GroupKeysByEndpoint ep=" << it.first << " keys=" << it.second;
+    it.second.append("\r\n");
+  }
+  LOG_DEBUG << "GroupKeysByEndpoint end, endpoint_key_map.size=" << endpoint_key_map->size();
+  return true;
+}
+
+
+ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> client,
+                     const char* cmd_data, size_t cmd_size)
+    : Command(client)
+    , completed_backends_(0)
+    , unreachable_backends_(0)
+{
+  std::map<ip::tcp::endpoint, std::string> endpoint_key_map;
+  GroupKeysByEndpoint(cmd_data, cmd_size, &endpoint_key_map);
+  for(auto& it : endpoint_key_map) {
+    LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first
+              << " query=" << it.second;
+    query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
+  }
 }
 
 ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> client,
-    const std::string& original_header,
     std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map)
-    : Command(client, original_header)
+    : Command(client)
     , completed_backends_(0)
     , unreachable_backends_(0)
 {
   for(auto& it : endpoint_query_map) {
-    LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first << " query=" << it.second;
+    LOG_DEBUG << "ParallelGetCommand ctor, create query ep=" << it.first
+              << " query=" << it.second;
     query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
   }
   LOG_DEBUG << "ParallelGetCommand ctor, query_set_.size=" << query_set_.size()
@@ -56,7 +101,8 @@ ParallelGetCommand::~ParallelGetCommand() {
       backend_pool()->Release(query->backend_conn_);
     }
   }
-  LOG_DEBUG << "ParallelGetCommand dtor, cmd=" << this << " count=" << --parallel_get_cmd_count;
+  LOG_DEBUG << "ParallelGetCommand dtor, cmd=" << this
+            << " count=" << --parallel_get_cmd_count;
 }
 
 void ParallelGetCommand::WriteQuery() {
@@ -67,7 +113,7 @@ void ParallelGetCommand::WriteQuery() {
     LOG_DEBUG << "ParallelGetCommand WriteQuery cmd=" << this
               << " backend=" << query->backend_conn_ << ", query=("
               << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
-    query->backend_conn_->WriteQuery(query->query_line_.data(), query->query_line_.size(), false);
+    query->backend_conn_->WriteQuery(query->query_line_.data(), query->query_line_.size());
   }
 }
 
@@ -83,7 +129,8 @@ void ParallelGetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend
 bool ParallelGetCommand::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
   if (replying_backend_ == nullptr) {
     replying_backend_ = backend;
-    LOG_DEBUG << "TryActivateReplyingBackend ok, backend=" << backend << " replying_backend_=" << replying_backend_;
+    LOG_DEBUG << "TryActivateReplyingBackend ok, backend=" << backend
+              << " replying_backend_=" << replying_backend_;
     return true;
   }
   return backend == replying_backend_;
@@ -141,24 +188,6 @@ void ParallelGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> back
   BackendReadyToReply(backend);
 }
 
-/*
-void ParallelGetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  // TODO : merge with sibling classes
-  if (ec != ErrorCode::E_SUCCESS) {
-    // client_conn_->Abort(); // TODO : 模拟Abort
-    if (ec == ErrorCode::E_CONNECT) {
-      OnBackendConnectError(backend);
-    } else {
-      client_conn_->Abort();
-      LOG_INFO << "WriteCommand OnWriteQueryFinished error";
-    }
-    return;
-  }
-  LOG_DEBUG << "ParallelGetCommand::OnWriteQueryFinished 转发了当前命令, 等待backend的响应.";
-  backend->ReadReply();
-}
-*/
-
 void ParallelGetCommand::StartWriteReply() {
   NextBackendStartReply();
 }
@@ -212,8 +241,8 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
     size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
     const char * p = GetLineEnd(entry, unparsed_bytes);
     if (p == nullptr) {
-      LOG_DEBUG << "ParseReply no enough data for parsing, please read more"
-                << " bytes=" << backend->buffer()->unparsed_bytes();
+      LOG_DEBUG << "ParseReply no enough data for parsing, please read more,"
+                << " unparsed_bytes=" << backend->buffer()->unparsed_bytes();
       return true;
     }
 
@@ -221,7 +250,8 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
       // "VALUE <key> <flag> <bytes>\r\n"
       size_t body_bytes = GetValueBytes(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
-      LOG_DEBUG << "ParseReply VALUE data, backend=" << backend << " bytes=" << std::min(unparsed_bytes, entry_bytes)
+      LOG_DEBUG << "ParseReply VALUE data, backend=" << backend
+                << " bytes=" << std::min(unparsed_bytes, entry_bytes)
                 << " data=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
       backend->buffer()->update_parsed_bytes(entry_bytes);
       // return true; // 这里如果return, 则每次转发一条，only for test
@@ -232,9 +262,8 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
         backend->set_reply_recv_complete();
         if (backend == last_backend_) {
           backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
-          LOG_WARN << "ParseReply END, is last, backend=" << backend << " backend.get=" << backend
+          LOG_WARN << "ParseReply END, is last, backend=" << backend
                    << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
-                   // << " unprocessed=(" << std::string(backend->buffer()->unprocessed_data(), 100) << ")";
         } else {
           LOG_WARN << "ParseReply END, is not last, backend=" << backend;
           // backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only

@@ -40,7 +40,6 @@ void BackendConn::Close() {
 
 void BackendConn::SetReplyData(const char* data, size_t bytes) {
   assert(is_reading_more_ == false);
-  // reply_recv_complete_  = true;
   buffer()->Reset();
   buffer()->push_reply_data(data, bytes);
 }
@@ -72,25 +71,25 @@ void BackendConn::TryReadMoreReply() {
   }
 }
 
-void BackendConn::WriteQuery(const char* data, size_t bytes, bool has_more_data) { // TODO : remove has_more_data param
+void BackendConn::WriteQuery(const char* data, size_t bytes) { // TODO : remove has_more_data param
   if (!socket_.is_open()) {
     LOG_DEBUG << "BackendConn::WriteQuery open socket, req=["
               << std::string(data, bytes - 2) << "] size=" << bytes
-              << " has_more_data=" << has_more_data << " backend=" << this;
+              << " backend=" << this;
     socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, shared_from_this(),
-        data, bytes, has_more_data, std::placeholders::_1));
+        data, bytes, std::placeholders::_1));
     return;
   }
 
   LOG_DEBUG << "ParallelGetCommand BackendConn::WriteQuery write data, bytes=" << bytes
-            << " has_more_data=" << has_more_data << " backend=" << this;
+            << " backend=" << this;
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes),
-      std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes, has_more_data,
+      std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
           std::placeholders::_1, std::placeholders::_2));
 }
 
 
-void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_has_more_data,
+void BackendConn::HandleWrite(const char * data, const size_t bytes,
     const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
     LOG_WARN << "BackendConn::HandleWrite error, backend=" << this << " ep="
@@ -107,7 +106,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes, bool query_
     LOG_DEBUG << "HandleWrite 向 backend 没写完, 继续写. backend=" << this;
     boost::asio::async_write(socket_,
         boost::asio::buffer(data + bytes_transferred, bytes - bytes_transferred),
-        std::bind(&BackendConn::HandleWrite, shared_from_this(), data + bytes_transferred, query_has_more_data,
+        std::bind(&BackendConn::HandleWrite, shared_from_this(), data + bytes_transferred,
                   bytes - bytes_transferred, std::placeholders::_1, std::placeholders::_2));
   } else {
     LOG_DEBUG << "HandleWrite 向 backend 写完, 触发回调. backend=" << this;
@@ -123,7 +122,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
     reply_received_callback_(ErrorCode::E_READ_REPLY);
   } else {
     LOG_DEBUG << "BackendConn::HandleRead read ok, bytes_transferred=" << bytes_transferred << " backend=" << this;
-    is_reading_more_ = false;  // finish reading, you could memmove now
+    is_reading_more_ = false;
 
     read_buffer_->update_received_bytes(bytes_transferred);
     read_buffer_->dec_recycle_lock();
@@ -132,7 +131,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error, size_t byte
   }
 }
 
-void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_more_data, const boost::system::error_code& connect_ec) {
+void BackendConn::HandleConnect(const char * data, size_t bytes, const boost::system::error_code& connect_ec) {
   boost::system::error_code option_ec;
   if (!connect_ec) {
     ip::tcp::no_delay no_delay(true);
@@ -152,7 +151,8 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
   if (connect_ec || option_ec) {
     socket_.close();
     LOG_WARN << "BackendConn::HandleConnect error, connect_ec=" << connect_ec.message()
-             << " option_ec=" << option_ec.message() << " , backend=" << this;
+             << " option_ec=" << option_ec.message() << " endpoint=" << remote_endpoint_
+             << " backend=" << this;
     query_sent_callback_(ErrorCode::E_CONNECT);
     return;
   }
@@ -160,7 +160,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes, bool query_has_
   LOG_DEBUG << "BackendConn::HandleConnect ok, to_write_bytes=" << bytes << " write_data=["
            <<  std::string(data, bytes) << "] , backend=" << this;
   async_write(socket_, boost::asio::buffer(data, bytes),
-      std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes, query_has_more_data,
+      std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
           std::placeholders::_1, std::placeholders::_2));
 }
 

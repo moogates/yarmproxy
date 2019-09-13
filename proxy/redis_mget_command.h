@@ -16,9 +16,11 @@ using namespace boost::asio;
 class RedisMgetCommand : public Command {
 public:
   RedisMgetCommand(std::shared_ptr<ClientConnection> client,
-                  const std::string& original_header, 
                   size_t keys_count,
                   std::list<std::pair<ip::tcp::endpoint, std::string>>&& endpoint_query_list);
+
+  RedisMgetCommand(std::shared_ptr<ClientConnection> client,
+                  const redis::BulkArray& ba);
 
   virtual ~RedisMgetCommand();
 
@@ -28,7 +30,6 @@ public:
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
 private:
-  // void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool success) override;
@@ -69,7 +70,6 @@ private:
 
 /////////////////////////
   std::shared_ptr<BackendConn> first_reply_backend_;
-  size_t keys_count_;
 
   std::map<std::shared_ptr<BackendConn>, size_t> absent_bulks_tracker_;
 };

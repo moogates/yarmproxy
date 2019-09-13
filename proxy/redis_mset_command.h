@@ -35,18 +35,14 @@ private:
   }
 
 private:
-//ip::tcp::endpoint backend_endpoint_;
-//std::shared_ptr<BackendConn> backend_conn_;
-  /////////////////////// redis set only:
   size_t unparsed_bulks_;
 
   struct Subquery {
-    Subquery(const ip::tcp::endpoint& ep, size_t bulks_count, const char* data, size_t present_bytes, size_t absent_bytes, size_t index)
+    Subquery(const ip::tcp::endpoint& ep, size_t bulks_count, const char* data, size_t present_bytes, size_t index)
         : backend_endpoint_(ep)
         , bulks_count_(bulks_count)
         , data_(data)
         , present_bytes_(present_bytes)
-        , absent_bytes_(absent_bytes)
         , phase_(0)
         , index_(index)
     {
@@ -57,7 +53,6 @@ private:
     size_t bulks_count_;
     const char* data_;
     size_t present_bytes_;
-    size_t absent_bytes_; // TODO : remove it
     size_t phase_;
     size_t index_;
 
