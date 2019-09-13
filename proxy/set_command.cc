@@ -1,6 +1,7 @@
 #include "set_command.h"
 
-#include "logging.h"
+#include "base/logging.h"
+
 #include "backend_conn.h"
 #include "backend_locator.h"
 #include "backend_pool.h"
@@ -10,8 +11,6 @@
 #include "worker_pool.h"
 
 namespace yarmproxy {
-
-const char * GetLineEnd(const char * buf, size_t len);
 
 std::atomic_int write_cmd_count;
 
@@ -123,7 +122,8 @@ void SetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, Erro
 bool SetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(backend_conn_ == backend);
   const char * entry = backend_conn_->buffer()->unparsed_data();
-  const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
+  const char * p = static_cast<const char *>(memchr(entry, '\n',
+                       backend_conn_->buffer()->unparsed_bytes()));
   if (p == nullptr) {
     LOG_DEBUG << "SetCommand ParseReply no enough data for parsing, please read more"
               // << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
@@ -133,7 +133,6 @@ bool SetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
 
   backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
   LOG_DEBUG << "SetCommand ParseReply resp.size=" << p - entry + 1
-            // << " contont=[" << std::string(entry, p - entry - 1) << "]"
             << " set_reply_recv_complete, backend=" << backend;
   backend->set_reply_recv_complete();
   return true;

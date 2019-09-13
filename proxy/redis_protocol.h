@@ -8,7 +8,7 @@
 #include <cassert>
 #include <iostream>
 
-#include "logging.h"
+#include "base/logging.h"
 
 namespace yarmproxy {
 namespace redis {

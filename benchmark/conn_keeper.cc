@@ -3,7 +3,7 @@
 #include <boost/bind.hpp>
 // #include <boost/algorithm/string.hpp>
 
-#include "logging.h"
+#include "base/logging.h"
 
 #include "redis_conn.h"
 

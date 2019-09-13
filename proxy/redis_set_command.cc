@@ -1,6 +1,7 @@
 #include "redis_set_command.h"
 
-#include "logging.h"
+#include "base/logging.h"
+
 #include "backend_conn.h"
 #include "backend_locator.h"
 #include "backend_pool.h"
@@ -12,8 +13,6 @@
 #include "redis_protocol.h"
 
 namespace yarmproxy {
-
-const char * GetLineEnd(const char * buf, size_t len);
 
 std::atomic_int redis_set_cmd_count;
 
@@ -131,7 +130,7 @@ bool RedisSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
     return false;
   }
 
-  const char * p = GetLineEnd(entry, unparsed);
+  const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed));
   if (p == nullptr) {
     LOG_DEBUG << "RedisSetCommand ParseReply no enough data for parsing, please read more"
               // << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())

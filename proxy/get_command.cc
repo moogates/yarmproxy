@@ -1,7 +1,8 @@
 #include "get_command.h"
 
+#include "base/logging.h"
+
 #include "error_code.h"
-#include "logging.h"
 
 #include "backend_conn.h"
 #include "backend_locator.h"
@@ -14,7 +15,6 @@ namespace yarmproxy {
 
 std::atomic_int parallel_get_cmd_count;
 
-const char * GetLineEnd(const char * buf, size_t len);
 size_t GetValueBytes(const char * data, const char * end) {
   // "VALUE <key> <flag> <bytes>\r\n"
   const char * p = data + sizeof("VALUE ");
@@ -239,7 +239,7 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   while(backend->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend->buffer()->unparsed_data();
     size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
-    const char * p = GetLineEnd(entry, unparsed_bytes);
+    const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed_bytes));
     if (p == nullptr) {
       LOG_DEBUG << "ParseReply no enough data for parsing, please read more,"
                 << " unparsed_bytes=" << backend->buffer()->unparsed_bytes();

@@ -1,5 +1,6 @@
 #include "proxy_server.h"
-#include "logging.h"
+
+#include "base/logging.h"
 
 // TODO : config argv
 // TODO : timeout handling

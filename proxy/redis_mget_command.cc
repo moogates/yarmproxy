@@ -1,8 +1,8 @@
 #include "redis_mget_command.h"
 
-#include "error_code.h"
-#include "logging.h"
+#include "base/logging.h"
 
+#include "error_code.h"
 #include "backend_conn.h"
 #include "backend_locator.h"
 #include "backend_pool.h"
@@ -13,9 +13,6 @@
 namespace yarmproxy {
 
 std::atomic_int redis_mget_cmd_count;
-
-const char * GetLineEnd(const char * buf, size_t len);
-size_t GetValueBytes(const char * data, const char * end);
 
 RedisMgetCommand::BackendQuery::~BackendQuery() {
 }

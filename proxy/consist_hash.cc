@@ -1,7 +1,8 @@
 #include "consist_hash.h"
 
+#include "base/logging.h"
+
 #include "doobs_hash.h"
-#include "logging.h"
 
 namespace yarmproxy {
 

@@ -5,7 +5,7 @@
 #include <unistd.h>
 #endif // _WINDOWS
 
-#include "logging.h"
+#include "base/logging.h"
 
 int Daemonize() {
 #ifndef _WINDOWS  // TODO : 更标准的做法是怎样的?

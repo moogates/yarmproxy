@@ -3,7 +3,9 @@
 #include <iomanip>
 #include <boost/bind.hpp>
 
-#include "logging.h"
+#include <sys/socket.h>
+
+#include "base/logging.h"
 #include "../proxy/redis_protocol.h"
 
 namespace yarmproxy {
@@ -49,6 +51,8 @@ void RedisConnection::SetSocketOptions() {
   boost::asio::socket_base::keep_alive keep_alive(true);
   socket_.set_option(keep_alive);
 
+  // TODO : mac 下无法编译
+#ifdef LINUX
   int fd = socket_.native_handle();
   int optval = 5;
   setsockopt(fd, SOL_TCP, TCP_KEEPCNT, &optval, sizeof(optval));
@@ -56,6 +60,7 @@ void RedisConnection::SetSocketOptions() {
   setsockopt(fd, SOL_TCP, TCP_KEEPIDLE, &optval, sizeof(optval));
   optval = 5;
   setsockopt(fd, SOL_TCP, TCP_KEEPINTVL, &optval, sizeof(optval));
+#endif
 }
 
 void RedisConnection::Init() {

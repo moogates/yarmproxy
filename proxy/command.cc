@@ -3,7 +3,8 @@
 #include <vector>
 #include <functional>
 
-#include "logging.h"
+#include "base/logging.h"
+
 #include "error_code.h"
 #include "worker_pool.h"
 #include "client_conn.h"
@@ -22,23 +23,6 @@
 #include "redis_mget_command.h"
 
 namespace yarmproxy {
-
-// 指向行尾的'\n'字符
-const char * GetLineEnd(const char * buf, size_t len) {
-  const char * p = buf + 1; // 首字符肯定不是'\n'
-  for(;;) {
-    p = (const char *)memchr(p, '\n', len - (p - buf));
-    if (p == nullptr) {
-      break;
-    }
-    if(*(p - 1) == '\r') {
-      break;
-    }
-    ++ p; // p 指向 '\n' 的下一个字符
-  }
-
-  return p;
-}
 
 std::atomic_int cmd_count;
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
@@ -112,7 +96,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     // TODO : memcached binary
   }
 
-  const char * p = GetLineEnd(buf, size);
+  const char * p = static_cast<const char *>(memchr(buf, '\n', size));
   if (p == nullptr) {
     LOG_DEBUG << "CreateCommand need more data";
     return 0;
