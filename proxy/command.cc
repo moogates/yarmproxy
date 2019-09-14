@@ -24,16 +24,16 @@
 
 namespace yarmproxy {
 
-std::atomic_int cmd_count;
+std::atomic_int x_cmd_count;
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 Command::Command(std::shared_ptr<ClientConnection> client)
     : client_conn_(client)
     , is_transfering_reply_(false) {
-  LOG_DEBUG << "Command ctor " << ++cmd_count;
+  LOG_WARN << "Command ctor " << ++x_cmd_count;
 };
 
 Command::~Command() {
-  LOG_DEBUG << "Command dtor " << --cmd_count;
+  LOG_WARN << "Command dtor " << --x_cmd_count;
 }
 
 BackendConnPool* Command::backend_pool() {
@@ -156,13 +156,17 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCo
     return;
   }
 
-  LOG_DEBUG << "Command::OnWriteReplyFinished ok, backend=" << backend;
   is_transfering_reply_ = false;
   backend->buffer()->dec_recycle_lock();
 
   if (backend->finished()) {
+    assert(!backend->buffer()->recycle_locked());
+    LOG_DEBUG << "OnWriteReplyFinished backend->finished ok, backend=" << backend
+           << " query=" << backend->query();
     RotateReplyingBackend(backend->recyclable());
   } else {
+    LOG_DEBUG << "OnWriteReplyFinished backend unfinished, backend=" << backend
+           << " query=" << backend->query();
     backend->TryReadMoreReply(); // 这里必须继续try
     TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }
@@ -186,11 +190,19 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
   if (!is_transfering_reply_ && unprocessed > 0) {
     is_transfering_reply_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
     backend->buffer()->inc_recycle_lock();
+  //client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
+  //                              WeakBind(&Command::OnWriteReplyFinished, backend));
+    std::shared_ptr<Command> cmd_ptr = shared_from_this();
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
-                                  WeakBind(&Command::OnWriteReplyFinished, backend));
+                                  [cmd_ptr, backend](ErrorCode ec) {
+                                    cmd_ptr->OnWriteReplyFinished(backend, ec);
+                                  });
+                                  // std::bind(&Command::OnWriteReplyFinished, shared_from_this(), backend));
 
     LOG_DEBUG << "Command::TryWriteReply backend=" << backend
-              << " data=(" << std::string(backend->buffer()->unprocessed_data(), unprocessed) << ")";
+              << " query=[" << backend->query()
+              << "] unprocessed=" << unprocessed;
+             // << " data=(" << std::string(backend->buffer()->unprocessed_data(), unprocessed) << ")";
     backend->buffer()->update_processed_bytes(unprocessed);
   }
 }

@@ -180,16 +180,16 @@ void ParallelGetCommand::StartWriteReply() {
 }
 
 void ParallelGetCommand::NextBackendStartReply() {
-  LOG_DEBUG << "ParallelGetCommand::OnWriteReplyEnabled cmd=" << this
+  LOG_DEBUG << "NextBackendStartReply cmd=" << this
             << " last replying_backend_=" << replying_backend_;
   if (waiting_reply_queue_.size() > 0) {
     auto next_backend = waiting_reply_queue_.front();
     waiting_reply_queue_.pop_front();
 
-    LOG_DEBUG << "ParallelGetCommand::OnWriteReplyEnabled activate ready backend,"
+    LOG_DEBUG << "NextBackendStartReply activate ready backend,"
               << " backend=" << next_backend;
     if (next_backend->finished()) {
-      LOG_DEBUG << "OnWriteReplyEnabled backend=" << next_backend << " empty reply";
+      LOG_WARN << "NextBackendStartReply backend=" << next_backend << " empty reply";
       RotateReplyingBackend(next_backend->recyclable());
     } else {
       TryWriteReply(next_backend);
@@ -222,6 +222,21 @@ void ParallelGetCommand::RotateReplyingBackend(bool success) {
   }
 }
 
+size_t ParallelGetCommand::ReplyBodyBytes(const char * data, const char * end) {
+  // "VALUE <key> <flag> <bytes>\r\n"
+  const char * p = data + sizeof("VALUE ");
+  int count = 0;
+  while(p != end) {
+    if (*p == ' ') {
+      if (++count == 2) {
+        return std::stoi(p + 1);
+      }
+    }
+    ++p;
+  }
+  return 0;
+}
+
 bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   while(backend->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend->buffer()->unparsed_data();
@@ -252,9 +267,10 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
           LOG_WARN << "ParseReply END, is last, backend=" << backend
                    << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
         } else {
-          LOG_WARN << "ParseReply END, is not last, backend=" << backend;
           // backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only
           backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
+          LOG_DEBUG << "ParseReply END, is not last, backend=" << backend
+                   << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
         }
         return true;
       } else {
@@ -267,22 +283,6 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   // all received data is parsed, no more no less
   return true;
 }
-
-size_t ParallelGetCommand::ReplyBodyBytes(const char * data, const char * end) {
-  // "VALUE <key> <flag> <bytes>\r\n"
-  const char * p = data + sizeof("VALUE ");
-  int count = 0;
-  while(p != end) {
-    if (*p == ' ') {
-      if (++count == 2) {
-        return std::stoi(p + 1);
-      }
-    }
-    ++p;
-  }
-  return 0;
-}
-
 
 }
 

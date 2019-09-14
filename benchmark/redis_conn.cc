@@ -11,14 +11,13 @@
 namespace yarmproxy {
 
 int PING_INTERVAL    = 60;
-const static int MIN_HEADER_BYTES = 2;
 
-RedisConnectionPtr RedisConnection::Create(boost::asio::io_service& io_service,
+std::shared_ptr<RedisConnection> RedisConnection::Create(boost::asio::io_service& io_service,
                                   const std::string& host,
                                   short port) {
-  RedisConnectionPtr conn(new RedisConnection(io_service, host, port));
-  conn->Init();
-  return conn;
+  std::shared_ptr<RedisConnection> conn(new RedisConnection(io_service, host, port));
+  conn->Initialize();
+  return conn;;
 }
 
 RedisConnection::RedisConnection(boost::asio::io_service& io_service,
@@ -63,22 +62,24 @@ void RedisConnection::SetSocketOptions() {
 #endif
 }
 
-void RedisConnection::Init() {
+void RedisConnection::Initialize() {
   socket_.async_connect(upstream_endpoint_,
         std::bind(&RedisConnection::OnConnected,
           shared_from_this(),
           std::placeholders::_1));
 
   timer_.expires_from_now(boost::posix_time::seconds(PING_INTERVAL));
-  timer_.async_wait(std::bind(&RedisConnection::OnKeepaliveTimer, shared_from_this(),
-                     std::placeholders::_1));
+  timer_.async_wait(std::bind(&RedisConnection::OnKeepaliveTimer,
+                    shared_from_this(),
+                    std::placeholders::_1));
 
-  LOG_DEBUG << "RedisConnection Init, conn=" << this << " started, upstream=" << upstream_endpoint_;
+  LOG_DEBUG << "RedisConnection Initialized ok, conn=" << this
+            << " upstream=" << upstream_endpoint_;
 }
 
 void RedisConnection::OnConnected(const boost::system::error_code& error) {
   if (error) {
-    LOG_WARN << "RedisConnection::OnConnected connect error=" << boost::system::system_error(error).what()
+    LOG_WARN << "RedisConnection OnConnected error=" << error.message()
              << " upstream=" << upstream_endpoint_;
     socket_.close();
     status_ = ST_CLOSED;
@@ -89,13 +90,8 @@ void RedisConnection::OnConnected(const boost::system::error_code& error) {
 
   //////////
 
-  const uint8_t MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
-  // const uint8_t MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n$4\r\nkey1\r\n$6\r\nvalue1\r\n";
-  // phase_ = 1;
-
-  // const uint8_t MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n$4\r\nkey1\r\n$6\r\nvalue1\r\n";
-  // phase_ = 1;
-
+  // const uint8_t MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
+  const uint8_t MSET_PREFIX[] = "get key1 key2 key3 key4 key5 key6 key7 key88\r\nget key1 key2 key3 key4 key5 key6 key7 key98\r\nget key1 key2 key3 key4 key5 key6 key7 key97\r\nget key1 key2 key3 key4 key5 key6 key7 key92\r\nget key1 key2 key3 key4 key5 key6 key7 key58\r\nget key1 key2 key3 key4 key5 key6 key7 key48\r\nget key1 key2 key3 key4 key5 key6 key7 key68\r\nget key1 key2 key3 key4 key5 key6 key7 key78\r\nget key1 key2 key3 key4 key5 key6 key7 key77\r\nget key1 key2 key3 key4 key5 key6 key7 key66\r\nget key1 key2 key3 key4 key5 key6 key7 key49\r\nget key1 key2 key3 key4 key5 key6 key7 key61\r\nget key1 key2 key3 key4 key5 key6 key7 key31\r\nget key1 key2 key3 key4 key5 key6 key7 key25\r\nget key1 key2 key3 key4 key5 key6 key7 key18\r\nget key1 key2 key3 key4 key5 key6 key7 key91\r\nget key1 key2 key3 key4 key5 key6 key7 key108\r\nget key1 key2 key3 key4 key5 key6 key7 key69\r\nget key1 key2 key3 key4 key5 key6 key7 key93\r\nget key1 key2 key3 key4 key5 key6 key7 key128\r\n";
   LOG_INFO << "RedisConnection::OnConnected conn=" << this << " upstream=" << upstream_endpoint_
            << ", write MSET_PREFIX=[" << MSET_PREFIX << "] size=" << sizeof(MSET_PREFIX) - 1;
 
@@ -164,10 +160,10 @@ void RedisConnection::AsyncWrite() {
   }
 }
 
-void RedisConnection::Write(const uint8_t* data, size_t len) {
+void RedisConnection::Write(const uint8_t* data, size_t bytes) {
   // TODO : 过载保护细化, 例如丢弃老行情数据，用新行情替换之
-  if (len > 1024 * 32) {
-    LOG_WARN << "Write too big packet size " << len << ", packet dropped";
+  if (bytes > 1024 * 32) {
+    LOG_WARN << "Write too big packet size " << bytes << ", packet dropped";
     return;
   }
   if (extended_write_buf_.size() > 1024 * 512) {
@@ -175,12 +171,12 @@ void RedisConnection::Write(const uint8_t* data, size_t len) {
     return;
   }
 
-  size_t memcpy_len = std::min(kWriteBufLength - write_buf_end_, len);
+  size_t memcpy_len = std::min(kWriteBufLength - write_buf_end_, bytes);
   if (memcpy_len) {
     memcpy(write_buf_ + write_buf_end_, data, memcpy_len);
   }
-  if (memcpy_len < len) {
-    extended_write_buf_.append((const char*)(data + memcpy_len), len - memcpy_len);
+  if (memcpy_len < bytes) {
+    extended_write_buf_.append((const char*)(data + memcpy_len), bytes - memcpy_len);
   }
 
   write_buf_end_ += memcpy_len;
@@ -204,12 +200,12 @@ void RedisConnection::HandleWrite(const boost::system::error_code& error,
     Close();
     return;
   }
-  if (phase_ == 0) {
+  if (false && phase_ == 0) {
     phase_ = 1;
     const uint8_t MSET_BODY[] = "$4\r\nkey1\r\n$6\r\nvalue1\r\n";
     LOG_DEBUG << "HandleWrite ok, to write MSET_BODY, conn=" << this << " written_bytes=" << bytes_transferred;
     Write(MSET_BODY, sizeof(MSET_BODY) - 1);
-  } else if (phase_ == 1) {
+  } else if (true || phase_ == 1) {
     phase_ = 2;
     AsyncRead();
     LOG_DEBUG << "HandleWrite ok, to read reply, conn=" << this << " written_bytes=" << bytes_transferred;
@@ -362,6 +358,9 @@ void RedisConnection::HandleRead(const boost::system::error_code& error, size_t 
   }
   LOG_DEBUG << "HandleRead ok, conn=" << this << " bytes=" << bytes_transferred
             << " data=[" << std::string((char*)read_buf_ + read_buf_end_, bytes_transferred) << "]";
+
+  read_buf_begin_ = read_buf_end_ = 0;
+  AsyncRead();
   return;
 
   read_buf_end_ += bytes_transferred;
@@ -395,19 +394,6 @@ void RedisConnection::HandleRead(const boost::system::error_code& error, size_t 
   }
 
   AsyncRead(); // 即使数据读完，也要继续读, 以检测网络错误
-}
-
-void RedisConnection::OnAuthSuccess() {
-  // LOG_INFO("RedisConnection OnAuthSuccess conn=" << this << " topic=" << fmt_topics_ << " upstream=" << upstream_endpoint_);
-  status_ = ST_SUBSCRIBING;
-
-  // 发送订阅请求
-//SubscribeOutPacket subscribe_out_packet(topics_);
-//Write((uint8_t*)subscribe_out_packet.data(), subscribe_out_packet.size());
-}
-
-void RedisConnection::OnSubscribeAck() {
-  status_ = ST_SUBSCRIBE_OK;
 }
 
 }

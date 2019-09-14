@@ -1,6 +1,7 @@
 #include "client_conn.h"
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 
 #include "base/logging.h"
@@ -24,13 +25,14 @@ ClientConnection::ClientConnection(WorkerContext& context)
   , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , context_(context)
   , is_reading_more_(false)
+  , timer_(context.io_service_)
 {
   LOG_DEBUG << "ClientConnection created." << ++g_cc_count;
 }
 
 ClientConnection::~ClientConnection() {
   if (socket_.is_open()) {
-    LOG_DEBUG << "ClientConnection destroyed close socket.";
+    LOG_WARN << "ClientConnection destroyed close socket.";
     socket_.close();
   } else {
     LOG_DEBUG << "ClientConnection destroyed need not close socket.";
@@ -40,14 +42,31 @@ ClientConnection::~ClientConnection() {
   LOG_DEBUG << "ClientConnection destroyed." << --g_cc_count << " client=" << this;
 }
 
+void ClientConnection::IdleTimeout(const boost::system::error_code& ec) {
+  if (ec == boost::asio::error::operation_aborted) {
+    LOG_WARN << "ClientConnection IdleTimeout canceled.";
+  } else {
+    LOG_WARN << "ClientConnection IdleTimeout.";
+    // Timer was not cancelled, take necessary action.
+  }
+}
+
+void ClientConnection::UpdateTimer() {
+  // TODO : config timeout
+//timer_.expires_after(std::chrono::milliseconds(100));
+//timer_.async_wait(std::bind(&ClientConnection::IdleTimeout, shared_from_this(), std::placeholders::_1));
+}
+
 void ClientConnection::StartRead() {
   boost::system::error_code ec;
   ip::tcp::no_delay nodelay(true);
   socket_.set_option(nodelay, ec);
 
+  UpdateTimer();
+
   if (!ec) {
-    boost::asio::socket_base::linger linger(true, 0);
-    socket_.set_option(linger, ec);
+  //boost::asio::socket_base::linger linger(true, 0);
+  //socket_.set_option(linger, ec); // TODO : linger的作用
   }
 
   if (ec) {
@@ -77,6 +96,11 @@ void ClientConnection::AsyncRead() {
 }
 
 void ClientConnection::RotateReplyingCommand() {
+  if (active_cmd_queue_.size() == 1) {
+    LOG_WARN << "ClientConnection::AsyncRead when all commands processed";
+    AsyncRead();
+  }
+
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
     active_cmd_queue_.front()->StartWriteReply();
@@ -99,12 +123,6 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
   };
 
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
-}
-
-void ClientConnection::Close() {
-  // TODO : 对象是如何被销毁的?
-  // active_cmd_queue_.clear();
-  socket_.close();
 }
 
 bool ClientConnection::ProcessUnparsedQuery() {
@@ -151,10 +169,17 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   is_reading_more_ = false;
   buffer_->dec_recycle_lock();
   if (error) {
-    LOG_WARN << "ClientConnection::HandleRead error=" << error.message() << " conn=" << this;
-    Close();
+    if (error == boost::asio::error::eof) {
+      // TODO : gracefully shutdown
+      LOG_WARN << "ClientConnection::HandleRead eof error, conn=" << this;
+    } else {
+      LOG_WARN << "ClientConnection::HandleRead error=" << error << "/" << error.message() << " conn=" << this;
+      Abort();
+    }
     return;
   }
+
+  UpdateTimer();
 
   buffer_->update_received_bytes(bytes_transferred);
   LOG_DEBUG << "ClientConnection::HandleRead bytes_transferred=" << bytes_transferred
@@ -184,7 +209,8 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
 }
 
 void ClientConnection::Abort() {
-  LOG_DEBUG << "ClientConnection::Abort client=" << this;
+  LOG_WARN << "ClientConnection::Abort client=" << this;
+  timer_.cancel();
   active_cmd_queue_.clear(); // TODO : 是否足够? command dtor之后，内部backend的回调指针是否有效?
   socket_.close();
 }

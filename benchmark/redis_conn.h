@@ -1,5 +1,5 @@
-#ifndef _YARMCLIENT_REDID_CONN_
-#define _YARMCLIENT_REDID_CONN_
+#ifndef _YARMCLIENT_REDIS_CONNECTION_
+#define _YARMCLIENT_REDIS_CONNECTION_
 
 #include <set>
 #include <string>
@@ -12,25 +12,20 @@
 namespace yarmproxy {
 
 class RedisConnection;
-typedef std::shared_ptr<RedisConnection> RedisConnectionPtr;
 
 class RedisConnection : public std::enable_shared_from_this<RedisConnection> {
 public:
-  static RedisConnectionPtr Create(boost::asio::io_service& io_service,
-                                  const std::string& host,
-                                  short port);
+  static std::shared_ptr<RedisConnection> Create(boost::asio::io_service& io_service,
+                                   const std::string& host,
+                                   short port);
   virtual ~RedisConnection();
 
   boost::asio::ip::tcp::socket& socket() {
     return socket_;
   }
   
-  void Init();
+  void Initialize();
   void OnConnected(const boost::system::error_code& error);
-
-  void OnAuthSuccess();
-
-  void OnSubscribeAck();
 
   void AsyncRead();
   void AsyncWrite();
@@ -98,4 +93,4 @@ private:
 
 }
 
-#endif // _YARMCLIENT_REDID_CONN_
+#endif // _YARMCLIENT_REDIS_CONNECTION_

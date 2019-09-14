@@ -32,7 +32,8 @@ int main(int argc, char **argv) {
   boost::asio::io_service io_service;
 
   std::string host = "127.0.0.1";
-  int port = 6379;
+  // int port = 6379;
+  int port = 11311;
   size_t concurrency = 1;
   LOG_INFO << "connect endpoint " << host<< ":" << port;
 

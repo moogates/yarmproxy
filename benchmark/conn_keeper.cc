@@ -37,10 +37,10 @@ void ConnectionKeeper::OnCheckTimer(const boost::system::error_code& error) {
 }
 
 void ConnectionKeeper::CheckNextConnection() {
-  RedisConnectionPtr conn = topic_conn_[next_check_];
+  std::shared_ptr<RedisConnection> conn = topic_conn_[next_check_];
 
   if (!conn || conn->IsClosed()) {
-    RedisConnectionPtr new_conn = RedisConnection::Create(io_service_, host_, port_);
+    std::shared_ptr<RedisConnection> new_conn = RedisConnection::Create(io_service_, host_, port_);
     topic_conn_[next_check_] = new_conn;
     // TODO : 处理 conn 为null的情况
     LOG_WARN << "CheckNextConnection reconnect, index=" << next_check_ << " old_conn=" << conn.get()

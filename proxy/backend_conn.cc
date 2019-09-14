@@ -49,6 +49,7 @@ void BackendConn::Reset() {
 }
 
 void BackendConn::ReadReply() {
+  is_reading_more_ = true;
   buffer_->inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(buffer_->free_space_begin(),
           buffer_->free_space_size()),
@@ -58,17 +59,17 @@ void BackendConn::ReadReply() {
 }
 
 void BackendConn::TryReadMoreReply() {
-  if (reply_recv_complete_) {
+  if (reply_recv_complete_
+      || is_reading_more_
+      || !buffer_->has_much_free_space()) {
     return;
   }
-  LOG_DEBUG << "TryReadMoreReply reply_recv_complete_=false, read more, backend=" << this;
-  if (!is_reading_more_  && buffer_->has_much_free_space()) {
-    is_reading_more_ = true; // not reading more. TODO : rename
-    ReadReply();
-  }
+  LOG_DEBUG << "TryReadMoreReply read more, backend=" << this;
+  ReadReply();
 }
 
 void BackendConn::WriteQuery(const char* data, size_t bytes) { // TODO : remove has_more_data param
+  query_ = std::string(data, bytes - 2); // TODO : for debug only
   if (!socket_.is_open()) {
     LOG_DEBUG << "BackendConn::WriteQuery open socket, req=["
               << std::string(data, bytes - 2) << "] size=" << bytes
