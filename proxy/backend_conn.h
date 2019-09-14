@@ -44,11 +44,11 @@ public:
   void Close();
   void Reset();
   ReadBuffer* buffer() {
-    return read_buffer_;
+    return buffer_;
   }
 
   bool finished() const {
-    return reply_recv_complete_ && read_buffer_->unprocessed_bytes() == 0;
+    return reply_recv_complete_ && buffer_->unprocessed_bytes() == 0;
   }
 
   const ip::tcp::endpoint& remote_endpoint() const {
@@ -68,7 +68,7 @@ public:
   }
 private:
   WorkerContext& context_;
-  ReadBuffer* read_buffer_;
+  ReadBuffer* buffer_;
   ip::tcp::endpoint remote_endpoint_;
   ip::tcp::socket socket_;
 

@@ -17,7 +17,7 @@ public:
   RedisMsetCommand(std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba);
   virtual ~RedisMsetCommand();
 
-  virtual bool QueryParsingComplete() override;
+  virtual bool query_parsing_complete() override;
   void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
 private:

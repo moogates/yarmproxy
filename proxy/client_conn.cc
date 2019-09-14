@@ -137,8 +137,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       active_cmd_queue_.push_back(command);
       buffer_->update_processed_bytes(to_process_bytes);
 
-      if (!command->QueryParsingComplete()) {
-        LOG_DEBUG << "ClientConnection::ProcessUnparsedQuery QueryParsingComplete false";
+      if (!command->query_parsing_complete()) {
         break;
       }
     }
@@ -173,12 +172,12 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   }
 
   // process the big bulk arrays in redis query
-  if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->QueryParsingComplete()) {
+  if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->query_parsing_complete()) {
     LOG_DEBUG << "ClientConnection::HandleRead ParseIncompleteQuery";
     active_cmd_queue_.back()->ParseIncompleteQuery();
   }
 
-  if (active_cmd_queue_.empty() || active_cmd_queue_.back()->QueryParsingComplete()) { // 避免从bulk array中间开始解析新指令
+  if (active_cmd_queue_.empty() || active_cmd_queue_.back()->query_parsing_complete()) { // 避免从bulk array中间开始解析新指令
     ProcessUnparsedQuery();
   }
   return;

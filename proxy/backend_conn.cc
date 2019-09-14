@@ -16,21 +16,19 @@ std::atomic_int backend_conn_count;
 BackendConn::BackendConn(WorkerContext& context,
     const ip::tcp::endpoint& endpoint)
   : context_(context)
-  , read_buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
+  , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , remote_endpoint_(endpoint)
   , socket_(context.io_service_)
   , is_reading_more_(false)
   , reply_recv_complete_(false)
   , no_recycle_(false) {
-  LOG_DEBUG << "BackendConn ctor, backend_conn_count=" << ++backend_conn_count;
 }
 
 BackendConn::~BackendConn() {
-  LOG_DEBUG << "BackendConn dtor, backend_conn_count=" << --backend_conn_count;
   socket_.close();
 
-  context_.allocator_->Release(read_buffer_->data());
-  delete read_buffer_;
+  context_.allocator_->Release(buffer_->data());
+  delete buffer_;
 }
 
 void BackendConn::Close() {
@@ -51,21 +49,20 @@ void BackendConn::Reset() {
 }
 
 void BackendConn::ReadReply() {
-  read_buffer_->inc_recycle_lock();
-  socket_.async_read_some(boost::asio::buffer(read_buffer_->free_space_begin(),
-                              read_buffer_->free_space_size()),
-                          std::bind(&BackendConn::HandleRead, shared_from_this(),
-                              std::placeholders::_1, std::placeholders::_2));
+  buffer_->inc_recycle_lock();
+  socket_.async_read_some(boost::asio::buffer(buffer_->free_space_begin(),
+          buffer_->free_space_size()),
+      std::bind(&BackendConn::HandleRead, shared_from_this(),
+          std::placeholders::_1, std::placeholders::_2));
   LOG_DEBUG << "BackendConn ReadReply async_read_some, backend=" << this;
 }
 
 void BackendConn::TryReadMoreReply() {
   if (reply_recv_complete_) {
-    LOG_DEBUG << "TryReadMoreReply reply_recv_complete_=true, do nothing, backend=" << this;
     return;
   }
   LOG_DEBUG << "TryReadMoreReply reply_recv_complete_=false, read more, backend=" << this;
-  if (!is_reading_more_  && read_buffer_->has_much_free_space()) {
+  if (!is_reading_more_  && buffer_->has_much_free_space()) {
     is_reading_more_ = true; // not reading more. TODO : rename
     ReadReply();
   }
@@ -76,16 +73,16 @@ void BackendConn::WriteQuery(const char* data, size_t bytes) { // TODO : remove 
     LOG_DEBUG << "BackendConn::WriteQuery open socket, req=["
               << std::string(data, bytes - 2) << "] size=" << bytes
               << " backend=" << this;
-    socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect, shared_from_this(),
-        data, bytes, std::placeholders::_1));
+    socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect,
+          shared_from_this(), data, bytes, std::placeholders::_1));
     return;
   }
 
   LOG_DEBUG << "ParallelGetCommand BackendConn::WriteQuery write data, bytes=" << bytes
             << " backend=" << this;
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes),
-      std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
-          std::placeholders::_1, std::placeholders::_2));
+          std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
+              std::placeholders::_1, std::placeholders::_2));
 }
 
 
@@ -99,8 +96,9 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes,
     return;
   }
 
-  LOG_DEBUG << "BackendConn::HandleWrite ok, backend=" << this << " ep=" << remote_endpoint_
-            << " " << bytes_transferred << "/" << bytes << " bytes transfered to backend";
+  LOG_DEBUG << "BackendConn::HandleWrite ok, backend=" << this
+            << " ep=" << remote_endpoint_
+            << " bytes_transfered=" << bytes_transferred << "/" << bytes;
 
   if (bytes_transferred < bytes) {
     LOG_DEBUG << "HandleWrite 向 backend 没写完, 继续写. backend=" << this;
@@ -116,22 +114,24 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes,
 
 void BackendConn::HandleRead(const boost::system::error_code& error, size_t bytes_transferred) {
   if (error) {
-    LOG_DEBUG << "BackendConn::HandleRead read error, backend=" << this
+    LOG_WARN << "BackendConn::HandleRead read error, backend=" << this
              << " ep=" << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     reply_received_callback_(ErrorCode::E_READ_REPLY);
   } else {
-    LOG_DEBUG << "BackendConn::HandleRead read ok, bytes_transferred=" << bytes_transferred << " backend=" << this;
+    LOG_DEBUG << "BackendConn::HandleRead read ok, bytes_transferred=" << bytes_transferred
+              << " backend=" << this;
     is_reading_more_ = false;
 
-    read_buffer_->update_received_bytes(bytes_transferred);
-    read_buffer_->dec_recycle_lock();
+    buffer_->update_received_bytes(bytes_transferred);
+    buffer_->dec_recycle_lock();
 
     reply_received_callback_(ErrorCode::E_SUCCESS);
   }
 }
 
-void BackendConn::HandleConnect(const char * data, size_t bytes, const boost::system::error_code& connect_ec) {
+void BackendConn::HandleConnect(const char * data, size_t bytes,
+                                const boost::system::error_code& connect_ec) {
   boost::system::error_code option_ec;
   if (!connect_ec) {
     ip::tcp::no_delay no_delay(true);

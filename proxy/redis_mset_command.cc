@@ -26,7 +26,7 @@ RedisMsetCommand::RedisMsetCommand(/*const ip::tcp::endpoint & ep, */std::shared
 {
   unparsed_bulks_ += unparsed_bulks_ % 2;  // don't parse the 'key' now if 'value' not present
   for(size_t i = 1; (i + 1) < ba.present_bulks(); i += 2) { // only 'key' is inadequate, 'value' field must be present
-    ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(ba[i].payload_data(), ba[i].payload_size(), "REDIS_bj");
+    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(ba[i].payload_data(), ba[i].payload_size(), "REDIS_bj");
     LOG_DEBUG << "RedisMsetCommand ctor, waiting for ActivateWaitingSubquery, key[" << (i - 1) / 2 << "/" << (ba.present_bulks() - 1) / 2
               << "]=" << ba[i].to_string() << " ep=" << ep;
     client_conn_->buffer()->inc_recycle_lock();
@@ -163,7 +163,7 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
   // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
   if (!client_conn_->buffer()->recycle_locked() // 全部完成write query 才能释放recycle_lock
       && (client_conn_->buffer()->parsed_unreceived_bytes() > 0
-          || !QueryParsingComplete())) {
+          || !query_parsing_complete())) {
     LOG_DEBUG << "OnWriteQueryFinished query=" << query->index_ << " phase 3, read more query";
     client_conn_->TryReadMoreQuery();
   }
@@ -174,7 +174,7 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
   }
 }
 
-bool RedisMsetCommand::QueryParsingComplete() {
+bool RedisMsetCommand::query_parsing_complete() {
   // assert(unparsed_bulks_ == 0);
   return unparsed_bulks_ == 0;
 }
@@ -206,7 +206,7 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
 }
 
 bool RedisMsetCommand::ParseIncompleteQuery() {
-  LOG_DEBUG << "RedisMsetCommand::QueryParsingComplete unparsed_bulks_=" << unparsed_bulks_;
+  LOG_DEBUG << "RedisMsetCommand::ParseIncompleteQuery unparsed_bulks_=" << unparsed_bulks_;
   ReadBuffer* buffer = client_conn_->buffer();
   std::vector<redis::Bulk> new_bulks;
   size_t total_parsed = 0;
@@ -239,7 +239,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
   size_t to_process_bytes = 0;
   for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) { 
     // TODO : limit max pending subqueries
-    ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(new_bulks[i].payload_data(), new_bulks[i].payload_size(), "REDIS_bj");
+    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(new_bulks[i].payload_data(), new_bulks[i].payload_size(), "REDIS_bj");
     LOG_DEBUG << "RedisMsetCommand ParseIncompleteQuery, key=" << new_bulks[i].to_string()
              << " v.present_size=[" << new_bulks[i + 1].present_size() << "] ep=" << ep;
     to_process_bytes += new_bulks[i].present_size();

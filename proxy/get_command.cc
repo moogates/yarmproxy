@@ -26,7 +26,7 @@ void ParallelGetCommand::GroupKeysByEndpoint(const char* cmd_data,
     while(*q != ' ' && *q != '\r') {
       ++q;
     }
-    ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(p, q - p);
+    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(p, q - p);
 
     auto it = endpoint_key_map->find(ep);
     if (it == endpoint_key_map->end()) {

@@ -19,7 +19,7 @@ SetCommand::SetCommand(std::shared_ptr<ClientConnection> client,
     : Command(client) {
   std::string key;
   ParseCommandLine(buf, cmd_len, &key, body_bytes);
-  backend_endpoint_ = BackendLoactor::Instance().GetEndpointByKey(key);
+  backend_endpoint_ = BackendLoactor::Instance().Locate(key);
   LOG_WARN << "SetCommand key=" << key << " body_bytes=" << *body_bytes
             << " ctor " << ++write_cmd_count;
 }

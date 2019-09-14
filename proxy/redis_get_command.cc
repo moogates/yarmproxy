@@ -19,7 +19,7 @@ RedisGetCommand::BackendQuery::~BackendQuery() {
 RedisGetCommand::RedisGetCommand(std::shared_ptr<ClientConnection> client,
                                  const redis::BulkArray& ba)
     : Command(client) {
-  ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
+  ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
   LOG_WARN << "CreateCommand RedisGetCommand key=" << ba[1].to_string()
            << " ep=" << ep;
   query_set_.emplace_back(new BackendQuery(ep, std::string(ba.raw_data(), ba.total_size()))); // TODO : don't copy the query

@@ -65,11 +65,11 @@ bool BackendLoactor::Initialize() {
   return true;
 }
 
-ip::tcp::endpoint BackendLoactor::GetEndpointByKey(const std::string& key, const char* group) {
-  return GetEndpointByKey(key.c_str(), key.size(), group);
+ip::tcp::endpoint BackendLoactor::Locate(const std::string& key, const char* group) {
+  return Locate(key.c_str(), key.size(), group);
 }
 
-ip::tcp::endpoint BackendLoactor::GetEndpointByKey(const char * key, size_t len, const char* group) {
+ip::tcp::endpoint BackendLoactor::Locate(const char * key, size_t len, const char* group) {
   Continuum * continuum = nullptr;
 
   auto it = clusters_continum_.find(group);
@@ -80,7 +80,7 @@ ip::tcp::endpoint BackendLoactor::GetEndpointByKey(const char * key, size_t len,
   }
   
   ip::tcp::endpoint ep = continuum->LocateCacheNode(key, len);
-  LOG_DEBUG << "BackendLoactor::GetEndpointByKey key=" << std::string(key, len) << " cache_node=" << ep;
+  LOG_DEBUG << "BackendLoactor::Locate key=" << std::string(key, len) << " cache_node=" << ep;
 
   return ep;
 }

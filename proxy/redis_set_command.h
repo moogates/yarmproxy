@@ -18,7 +18,7 @@ public:
   RedisSetCommand(std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba);
   virtual ~RedisSetCommand();
 
-  virtual bool QueryParsingComplete() override;
+  virtual bool query_parsing_complete() override;
 
 private:
   void StartWriteReply() override;

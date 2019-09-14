@@ -8,7 +8,7 @@
 #include "error_code.h"
 #include "worker_pool.h"
 #include "client_conn.h"
-#include "backend_locator.h"
+// #include "backend_locator.h"
 #include "backend_conn.h"
 #include "backend_pool.h"
 #include "read_buffer.h"

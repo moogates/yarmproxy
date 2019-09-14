@@ -20,7 +20,7 @@ RedisSetCommand::RedisSetCommand(std::shared_ptr<ClientConnection> client, const
     : Command(client)
     , unparsed_bulks_(ba.absent_bulks())
 {
-  backend_endpoint_ = BackendLoactor::Instance().GetEndpointByKey(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
+  backend_endpoint_ = BackendLoactor::Instance().Locate(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
   LOG_WARN << "RedisSetCommand key=" << ba[1].to_string() << " ep=" << backend_endpoint_
             << " ctor " << ++redis_set_cmd_count;
 }
@@ -67,34 +67,7 @@ void RedisSetCommand::RotateReplyingBackend(bool) {
   client_conn_->RotateReplyingCommand();
 }
 
-/*
-void RedisSetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  assert(backend == backend_conn_);
-  if (ec != ErrorCode::E_SUCCESS) {
-    if (ec == ErrorCode::E_CONNECT) {
-      LOG_WARN << "RedisSetCommand OnWriteQueryFinished connection_refused, endpoint=" << backend->remote_endpoint()
-               << " backend=" << backend;
-      OnBackendConnectError(backend);
-    } else {
-      client_conn_->Abort();
-      LOG_WARN << "RedisSetCommand OnWriteQueryFinished error";
-    }
-    return;
-  }
-  assert(backend == backend_conn_);
-  client_conn_->buffer()->dec_recycle_lock();
-
-  // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
-  if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
-    client_conn_->TryReadMoreQuery();
-  } else {
-    backend_conn_->ReadReply();
-  }
-}
-*/
-
-bool RedisSetCommand::QueryParsingComplete() {
-  LOG_WARN << "RedisSetCommand::QueryParsingComplete unparsed_bulks_=" << unparsed_bulks_;
+bool RedisSetCommand::query_parsing_complete() {
   return unparsed_bulks_ == 0;
 }
 
