@@ -23,7 +23,7 @@ public:
   BackendConn(WorkerContext& context, const ip::tcp::endpoint& endpoint);
   ~BackendConn();
 
-  void WriteQuery(const char* data, size_t bytes, bool has_more_data);
+  void WriteQuery(const char* data, size_t bytes);
 
   void ReadReply();
   void TryReadMoreReply();
@@ -36,10 +36,10 @@ public:
     reply_received_callback_ = reply_received_callback;
   }
 private:
-  void HandleWrite(const char * buf, const size_t bytes, bool has_more_data,
+  void HandleWrite(const char * buf, const size_t bytes,
       const boost::system::error_code& error, size_t bytes_transferred);
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  void HandleConnect(const char * buf, size_t bytes, bool has_more_data, const boost::system::error_code& error);
+  void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
 public:
   void Close();
   void Reset();

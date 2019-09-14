@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-#include "logging.h"
+#include "base/logging.h"
 
 #include "allocator.h"
 #include "backend_pool.h"

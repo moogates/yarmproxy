@@ -1,10 +1,11 @@
 #include "redis_get_command.h"
 
-#include "error_code.h"
-#include "logging.h"
+#include "base/logging.h"
 
+#include "error_code.h"
 #include "backend_conn.h"
 #include "backend_pool.h"
+#include "backend_locator.h"
 #include "client_conn.h"
 #include "read_buffer.h"
 #include "worker_pool.h"
@@ -12,19 +13,16 @@
 namespace yarmproxy {
 
 std::atomic_int redis_get_cmd_count;
-
-const char * GetLineEnd(const char * buf, size_t len);
-size_t GetValueBytes(const char * data, const char * end);
-
 RedisGetCommand::BackendQuery::~BackendQuery() {
 }
 
 RedisGetCommand::RedisGetCommand(std::shared_ptr<ClientConnection> client,
-                  const char* buf, size_t bytes, ip::tcp::endpoint& ep)
-  : Command(client, std::string(buf, bytes))
-{
-  // TODO : don't copy the query
-  query_set_.emplace_back(new BackendQuery(ep, std::string(buf, bytes)));
+                                 const redis::BulkArray& ba)
+    : Command(client) {
+  ip::tcp::endpoint ep = BackendLoactor::Instance().GetEndpointByKey(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
+  LOG_WARN << "CreateCommand RedisGetCommand key=" << ba[1].to_string()
+           << " ep=" << ep;
+  query_set_.emplace_back(new BackendQuery(ep, std::string(ba.raw_data(), ba.total_size()))); // TODO : don't copy the query
   LOG_DEBUG << "RedisGetCommand ctor, count=" << ++redis_get_cmd_count;
 }
 
@@ -48,7 +46,7 @@ void RedisGetCommand::WriteQuery() {
     LOG_DEBUG << "RedisGetCommand WriteQuery cmd=" << this
               << " backend=" << query->backend_conn_ << ", query=("
               << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
-    query->backend_conn_->WriteQuery(query->query_line_.data(), query->query_line_.size(), false);
+    query->backend_conn_->WriteQuery(query->query_line_.data(), query->query_line_.size());
   }
 }
 
@@ -94,7 +92,7 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
   TryMarkLastBackend(backend);
   if (ec != ErrorCode::E_SUCCESS
       || ParseReply(backend) == false) {
-    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
+    LOG_WARN << "RedisGetCommand::OnBackendReplyReceived error, backend=" << backend;
     client_conn_->Abort();
     return;
   }

@@ -15,6 +15,7 @@ class BulkArray;
 class RedisSetCommand : public Command {
 public:
   RedisSetCommand(const ip::tcp::endpoint & ep, std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba);
+  RedisSetCommand(std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba);
   virtual ~RedisSetCommand();
 
   virtual bool QueryParsingComplete() override;

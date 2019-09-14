@@ -1,9 +1,8 @@
 #include "proxy_server.h"
 
 #include <iostream>
-// #include <functional>
 
-#include "logging.h"
+#include "base/logging.h"
 
 #include "client_conn.h"
 #include "worker_pool.h"

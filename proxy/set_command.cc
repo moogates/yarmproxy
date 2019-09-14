@@ -1,7 +1,9 @@
 #include "set_command.h"
 
-#include "logging.h"
+#include "base/logging.h"
+
 #include "backend_conn.h"
+#include "backend_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "error_code.h"
@@ -10,16 +12,43 @@
 
 namespace yarmproxy {
 
-const char * GetLineEnd(const char * buf, size_t len);
-
 std::atomic_int write_cmd_count;
-SetCommand::SetCommand(const ip::tcp::endpoint & ep,
-        std::shared_ptr<ClientConnection> client,
-        const char * buf, size_t cmd_len, size_t body_bytes)
-    : Command(client, std::string(buf, cmd_len))
-    , backend_endpoint_(ep)
-{
-  LOG_DEBUG << "SetCommand ctor " << ++write_cmd_count;
+
+SetCommand::SetCommand(std::shared_ptr<ClientConnection> client,
+          const char* buf, size_t cmd_len, size_t* body_bytes) 
+    : Command(client) {
+  std::string key;
+  ParseCommandLine(buf, cmd_len, &key, body_bytes);
+  backend_endpoint_ = BackendLoactor::Instance().GetEndpointByKey(key);
+  LOG_WARN << "SetCommand key=" << key << " body_bytes=" << *body_bytes
+            << " ctor " << ++write_cmd_count;
+}
+
+int SetCommand::ParseCommandLine(const char* cmd_line, size_t cmd_len, std::string* key, size_t* bytes) {
+  //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
+  {
+    const char *p = cmd_line;
+    while(*(p++) != ' ') {
+      ;
+    }
+    const char *q = p;
+    while(*(++q) != ' ') {
+      ;
+    }
+    key->assign(p, q - p);
+  }
+
+  {
+    const char *p = cmd_line + cmd_len - 2;
+    while(*(p-1) != ' ') {
+      --p;
+    }
+    *bytes = std::atoi(p) + 2; // 2 is lenght of the ending "\r\n"
+  }
+  LOG_DEBUG << "ParseCommandLine cmd=" << std::string(cmd_line, cmd_len - 2)
+            << " key=[" << *key << "]" << " body_bytes=" << *bytes;
+
+  return 0;
 }
 
 SetCommand::~SetCommand() {
@@ -37,13 +66,12 @@ void SetCommand::WriteQuery() {
 
   client_conn_->buffer()->inc_recycle_lock();
   backend_conn_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
-          client_conn_->buffer()->unprocessed_bytes(),
-          client_conn_->buffer()->parsed_unreceived_bytes() > 0);
+          client_conn_->buffer()->unprocessed_bytes());
 }
 
 void SetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
-    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
+    LOG_WARN << "SetCommand::OnBackendReplyReceived error, backend=" << backend;
     client_conn_->Abort();
     return;
   }
@@ -94,7 +122,8 @@ void SetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, Erro
 bool SetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(backend_conn_ == backend);
   const char * entry = backend_conn_->buffer()->unparsed_data();
-  const char * p = GetLineEnd(entry, backend_conn_->buffer()->unparsed_bytes());
+  const char * p = static_cast<const char *>(memchr(entry, '\n',
+                       backend_conn_->buffer()->unparsed_bytes()));
   if (p == nullptr) {
     LOG_DEBUG << "SetCommand ParseReply no enough data for parsing, please read more"
               // << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
@@ -104,7 +133,6 @@ bool SetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
 
   backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
   LOG_DEBUG << "SetCommand ParseReply resp.size=" << p - entry + 1
-            // << " contont=[" << std::string(entry, p - entry - 1) << "]"
             << " set_reply_recv_complete, backend=" << backend;
   backend->set_reply_recv_complete();
   return true;

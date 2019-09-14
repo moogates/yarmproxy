@@ -14,8 +14,11 @@ using namespace boost::asio;
 
 class ParallelGetCommand : public Command {
 public:
-  ParallelGetCommand(std::shared_ptr<ClientConnection> client, const std::string& original_header, 
+  ParallelGetCommand(std::shared_ptr<ClientConnection> client,
                      std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
+
+  ParallelGetCommand(std::shared_ptr<ClientConnection> client,
+                     const char* cmd_data, size_t cmd_size);
 
   virtual ~ParallelGetCommand();
 
@@ -43,12 +46,15 @@ private:
   }
 
 private:
+  static size_t ReplyBodyBytes(const char * data, const char * end);
+  static void GroupKeysByEndpoint(const char* cmd_data, size_t cmd_size,
+        std::map<ip::tcp::endpoint, std::string>* endpoint_key_map);
+
   struct BackendQuery {
     BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
         : query_line_(query_line)
         , backend_endpoint_(ep) {
     }
-    ~BackendQuery();
     std::string query_line_;
     ip::tcp::endpoint backend_endpoint_;
     std::shared_ptr<BackendConn> backend_conn_;

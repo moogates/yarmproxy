@@ -11,9 +11,10 @@ using namespace boost::asio;
 
 class SetCommand : public Command {
 public:
-  SetCommand(const ip::tcp::endpoint & ep,
-          std::shared_ptr<ClientConnection> client,
-          const char * buf, size_t cmd_len, size_t body_bytes);
+  SetCommand(std::shared_ptr<ClientConnection> client,
+            const char* buf,
+            size_t cmd_len,
+            size_t* body_bytes);
 
   virtual ~SetCommand();
 
@@ -29,6 +30,7 @@ private:
     return true;
   }
 
+  static int ParseCommandLine(const char* cmd_line, size_t cmd_len, std::string* key, size_t* bytes);
 private:
   ip::tcp::endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_conn_;

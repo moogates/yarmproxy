@@ -1,6 +1,6 @@
 #include "backend_locator.h"
 
-#include "logging.h"
+#include "base/logging.h"
 
 #include "consist_hash.h"
 

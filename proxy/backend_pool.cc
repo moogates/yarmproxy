@@ -1,7 +1,7 @@
 #include "backend_pool.h"
 
 #include "backend_conn.h"
-#include "logging.h"
+#include "base/logging.h"
 
 namespace yarmproxy {
 

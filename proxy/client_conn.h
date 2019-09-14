@@ -51,12 +51,12 @@ public:
 
   void TryReadMoreQuery();
   ReadBuffer* buffer() {
-    return read_buffer_;
+    return buffer_;
   }
 
 private:
   ip::tcp::socket socket_;
-  ReadBuffer* read_buffer_;
+  ReadBuffer* buffer_;
 
 protected:
   WorkerContext& context_;
@@ -69,8 +69,6 @@ private:
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   bool ProcessUnparsedQuery();
-
-  void HandleTimeoutWrite(const boost::system::error_code& error);
 };
 
 }
