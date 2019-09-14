@@ -46,6 +46,10 @@ private:
   }
 
 private:
+  static size_t ReplyBodyBytes(const char * data, const char * end);
+  static void GroupKeysByEndpoint(const char* cmd_data, size_t cmd_size,
+        std::map<ip::tcp::endpoint, std::string>* endpoint_key_map);
+
   struct BackendQuery {
     BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
         : query_line_(query_line)

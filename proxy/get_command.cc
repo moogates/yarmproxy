@@ -15,26 +15,13 @@ namespace yarmproxy {
 
 std::atomic_int parallel_get_cmd_count;
 
-size_t GetValueBytes(const char * data, const char * end) {
-  // "VALUE <key> <flag> <bytes>\r\n"
-  const char * p = data + sizeof("VALUE ");
-  int count = 0;
-  while(p != end) {
-    if (*p == ' ') {
-      if (++count == 2) {
-        return std::stoi(p + 1);
-      }
-    }
-    ++p;
-  }
-  return 0;
-}
-
-bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size,
+void ParallelGetCommand::GroupKeysByEndpoint(const char* cmd_data,
+        size_t cmd_size,
         std::map<ip::tcp::endpoint, std::string>* endpoint_key_map) {
-  LOG_DEBUG << "GroupKeysByEndpoint begin, cmd=[" << std::string(cmd_line, cmd_line_size - 2) << "]";
-  for(const char* p = cmd_line + 4/*strlen("get ")*/
-      ; p < cmd_line + cmd_line_size - 2/*strlen("\r\n")*/; ++p) {
+  LOG_DEBUG << "GroupKeysByEndpoint begin, cmd=["
+            << std::string(cmd_data, cmd_size - 2) << "]";
+  for(const char* p = cmd_data + 4/*strlen("get ")*/
+      ; p < cmd_data + cmd_size - 2/*strlen("\r\n")*/; ++p) {
     const char* q = p;
     while(*q != ' ' && *q != '\r') {
       ++q;
@@ -57,8 +44,8 @@ bool GroupKeysByEndpoint(const char* cmd_line, size_t cmd_line_size,
     LOG_DEBUG << "GroupKeysByEndpoint ep=" << it.first << " keys=" << it.second;
     it.second.append("\r\n");
   }
-  LOG_DEBUG << "GroupKeysByEndpoint end, endpoint_key_map.size=" << endpoint_key_map->size();
-  return true;
+  LOG_DEBUG << "GroupKeysByEndpoint end, endpoint_key_map.size="
+            << endpoint_key_map->size();
 }
 
 
@@ -139,13 +126,13 @@ bool ParallelGetCommand::TryActivateReplyingBackend(std::shared_ptr<BackendConn>
 void ParallelGetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend) {
   if (client_conn_->IsFirstCommand(shared_from_this())
       && TryActivateReplyingBackend(backend)) {
-    if (backend->finished()) { // 新收的新数据，可能不需要转发，例如收到的刚好是"END\r\n"
+    if (backend->finished()) { // newly received data might needn't forwarding, eg. some "END\r\n"
       RotateReplyingBackend(backend->recyclable());
     } else {
       TryWriteReply(backend);
     }
   } else {
-    // push backend into waiting_reply_queue_ if not existing
+    // push backend into waiting_reply_queue_ if doesn't exist
     if (std::find(waiting_reply_queue_.begin(), waiting_reply_queue_.end(),
                   backend) == waiting_reply_queue_.end()) {
       waiting_reply_queue_.push_back(backend);
@@ -163,7 +150,7 @@ void ParallelGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> bac
   }
 
   BackendReadyToReply(backend);
-  backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
+  backend->TryReadMoreReply();
 }
 
 
@@ -248,7 +235,7 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
 
     if (entry[0] == 'V') {
       // "VALUE <key> <flag> <bytes>\r\n"
-      size_t body_bytes = GetValueBytes(entry, p);
+      size_t body_bytes = ReplyBodyBytes(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
       LOG_DEBUG << "ParseReply VALUE data, backend=" << backend
                 << " bytes=" << std::min(unparsed_bytes, entry_bytes)
@@ -273,7 +260,6 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
       } else {
         LOG_WARN << "ParseReply ERROR, data=(" << std::string(entry, p - entry)
                  << ") backend=" << backend;
-        // TODO : ERROR
         return false;
       }
     }
@@ -281,6 +267,22 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   // all received data is parsed, no more no less
   return true;
 }
+
+size_t ParallelGetCommand::ReplyBodyBytes(const char * data, const char * end) {
+  // "VALUE <key> <flag> <bytes>\r\n"
+  const char * p = data + sizeof("VALUE ");
+  int count = 0;
+  while(p != end) {
+    if (*p == ' ') {
+      if (++count == 2) {
+        return std::stoi(p + 1);
+      }
+    }
+    ++p;
+  }
+  return 0;
+}
+
 
 }
 

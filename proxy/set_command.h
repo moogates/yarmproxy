@@ -30,7 +30,7 @@ private:
     return true;
   }
 
-  int ParseCommandLine(const char* cmd_line, size_t cmd_len, std::string* key, size_t* bytes);
+  static int ParseCommandLine(const char* cmd_line, size_t cmd_len, std::string* key, size_t* bytes);
 private:
   ip::tcp::endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_conn_;
