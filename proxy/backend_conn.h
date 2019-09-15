@@ -24,9 +24,6 @@ public:
   ~BackendConn();
 
   void WriteQuery(const char* data, size_t bytes);
-  const std::string& query() {
-    return query_;
-  }
 
   void ReadReply();
   void TryReadMoreReply();
@@ -74,7 +71,6 @@ private:
   ReadBuffer* buffer_;
   ip::tcp::endpoint remote_endpoint_;
   ip::tcp::socket socket_;
-  std::string query_;
 
   BackendReplyReceivedCallback reply_received_callback_;
   BackendQuerySentCallback query_sent_callback_;

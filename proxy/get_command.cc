@@ -203,9 +203,6 @@ void ParallelGetCommand::NextBackendStartReply() {
 }
 
 bool ParallelGetCommand::HasUnfinishedBanckends() const {
-  LOG_DEBUG << "ParallelGetCommand::HasUnfinishedBanckends"
-            << " completed_backends_=" << completed_backends_ 
-            << " total_backends=" << query_set_.size();
   return unreachable_backends_ + completed_backends_ < query_set_.size();
 }
 
@@ -252,9 +249,6 @@ bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
       // "VALUE <key> <flag> <bytes>\r\n"
       size_t body_bytes = ReplyBodyBytes(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
-      LOG_DEBUG << "ParseReply VALUE data, backend=" << backend
-                << " bytes=" << std::min(unparsed_bytes, entry_bytes)
-                << " data=(" << std::string(entry, std::min(unparsed_bytes, entry_bytes)) << ")";
       backend->buffer()->update_parsed_bytes(entry_bytes);
       // return true; // 这里如果return, 则每次转发一条，only for test
     } else {

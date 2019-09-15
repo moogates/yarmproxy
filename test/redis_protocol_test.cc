@@ -1,5 +1,5 @@
 #include "../proxy/redis_protocol.h"
-#include "../proxy/logging.h"
+#include "base/logging.h"
 
 #include <cassert>
 #include <iostream>
@@ -18,7 +18,6 @@ void BulkArrayTest() {
     assert(bulkv.total_bulks() == 1);
     assert(bulkv.present_bulks() == 1);
   }
-  return;
 
   {
     char data[] = "*5\r\n$3\r\nset\r\n$4\r\nkey1\r\n$10\r\n00_abcdef_\r\n$2\r\nEX\r\n$5\r\n86400\r\n";
@@ -206,8 +205,9 @@ void BulkTest() {
 
 int main() {
   loguru::g_stderr_verbosity = 8;
-  // BulkTest();
+  std::cout << "============ BulkTest ============" << std::endl;
+  BulkTest();
 
-  std::cout << "============\tBulkArrayTest\t============" << std::endl;
+  std::cout << "============ BulkArrayTest ============" << std::endl;
   BulkArrayTest();
 }

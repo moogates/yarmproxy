@@ -161,12 +161,10 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCo
 
   if (backend->finished()) {
     assert(!backend->buffer()->recycle_locked());
-    LOG_DEBUG << "OnWriteReplyFinished backend->finished ok, backend=" << backend
-           << " query=" << backend->query();
+    LOG_DEBUG << "OnWriteReplyFinished backend->finished ok, backend=" << backend;
     RotateReplyingBackend(backend->recyclable());
   } else {
-    LOG_DEBUG << "OnWriteReplyFinished backend unfinished, backend=" << backend
-           << " query=" << backend->query();
+    LOG_DEBUG << "OnWriteReplyFinished backend unfinished, backend=" << backend;
     backend->TryReadMoreReply(); // 这里必须继续try
     TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }
@@ -200,7 +198,6 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
                                   // std::bind(&Command::OnWriteReplyFinished, shared_from_this(), backend));
 
     LOG_DEBUG << "Command::TryWriteReply backend=" << backend
-              << " query=[" << backend->query()
               << "] unprocessed=" << unprocessed;
              // << " data=(" << std::string(backend->buffer()->unprocessed_data(), unprocessed) << ")";
     backend->buffer()->update_processed_bytes(unprocessed);

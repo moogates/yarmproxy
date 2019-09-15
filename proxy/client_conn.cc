@@ -47,14 +47,14 @@ void ClientConnection::IdleTimeout(const boost::system::error_code& ec) {
     LOG_WARN << "ClientConnection IdleTimeout canceled.";
   } else {
     LOG_WARN << "ClientConnection IdleTimeout.";
-    // Timer was not cancelled, take necessary action.
+    // timer was not cancelled, take necessary action.
   }
 }
 
 void ClientConnection::UpdateTimer() {
   // TODO : config timeout
-//timer_.expires_after(std::chrono::milliseconds(100));
-//timer_.async_wait(std::bind(&ClientConnection::IdleTimeout, shared_from_this(), std::placeholders::_1));
+  // timer_.expires_after(std::chrono::milliseconds(60000));
+  // timer_.async_wait(std::bind(&ClientConnection::IdleTimeout, shared_from_this(), std::placeholders::_1));
 }
 
 void ClientConnection::StartRead() {
@@ -64,10 +64,10 @@ void ClientConnection::StartRead() {
 
   UpdateTimer();
 
-  if (!ec) {
-  //boost::asio::socket_base::linger linger(true, 0);
-  //socket_.set_option(linger, ec); // TODO : linger的作用
-  }
+  // if (!ec) {
+  //   boost::asio::socket_base::linger linger(true, 0);
+  //   socket_.set_option(linger, ec); // don't disable linger here
+  // }
 
   if (ec) {
     socket_.close();
@@ -96,11 +96,6 @@ void ClientConnection::AsyncRead() {
 }
 
 void ClientConnection::RotateReplyingCommand() {
-  if (active_cmd_queue_.size() == 1) {
-    LOG_WARN << "ClientConnection::AsyncRead when all commands processed";
-    AsyncRead();
-  }
-
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
     active_cmd_queue_.front()->StartWriteReply();
@@ -110,14 +105,12 @@ void ClientConnection::RotateReplyingCommand() {
 
 void ClientConnection::WriteReply(const char* data, size_t bytes,
                                   const WriteReplyCallback& callback) {
-  std::shared_ptr<ClientConnection> ptr(shared_from_this());
-  auto cb_wrap = [ptr, data, bytes, callback](const boost::system::error_code& error,
+  std::shared_ptr<ClientConnection> client_conn(shared_from_this());
+  auto cb_wrap = [client_conn, data, bytes, callback](const boost::system::error_code& error,
                                               size_t bytes_transferred) {
     if (!error && bytes_transferred < bytes) {
-      ptr->WriteReply(data + bytes_transferred, bytes - bytes_transferred, callback);
+      client_conn->WriteReply(data + bytes_transferred, bytes - bytes_transferred, callback);
     } else {
-      // LOG_DEBUG << "Command::TryWriteReply callback, error=" << error
-      //       << " bytes_transferred=" << bytes_transferred;
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
     }
   };
@@ -140,12 +133,10 @@ bool ClientConnection::ProcessUnparsedQuery() {
       return false;
     }  else if (parsed_bytes == 0) {
       if (buffer_->unparsed_received_bytes() > 1024) {
-        LOG_WARN << "ProcessUnparsedQuery too long unparsable command line";
+        LOG_WARN << "Too long unparsable command line";
         return false;
       }
-      TryReadMoreQuery();
-      LOG_DEBUG << "ProcessUnparsedQuery waiting for more data";
-      return true;
+      break;
     } else {
       buffer_->update_parsed_bytes(parsed_bytes);
       size_t to_process_bytes = std::min((size_t)parsed_bytes, buffer_->received_bytes());
@@ -160,8 +151,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       }
     }
   }
-  LOG_DEBUG << "ProcessUnparsedQuery active_cmd_queue_.size=" << active_cmd_queue_.size();
-  // TryReadMoreQuery(); // TODO : read should continues here, so that the conn shared_ptr won't be released
+  TryReadMoreQuery();
   return true;
 }
 
@@ -182,7 +172,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   UpdateTimer();
 
   buffer_->update_received_bytes(bytes_transferred);
-  LOG_DEBUG << "ClientConnection::HandleRead bytes_transferred=" << bytes_transferred
+  LOG_DEBUG << "HandleRead bytes_transferred=" << bytes_transferred
             << " parsed_unprocessed_bytes=" << buffer_->parsed_unprocessed_bytes();
 
   if (buffer_->parsed_unprocessed_bytes() > 0) {

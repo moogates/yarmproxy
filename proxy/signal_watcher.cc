@@ -25,8 +25,8 @@ void SignalWatcher::HandlerEntry(int signal) {
   SignalWatcher::Instance().OnSignal(signal);
 }
 
-// void SignalWatcher::RegisterHandler(int signal, std::function<void(int)>&& handler) {
-void SignalWatcher::RegisterHandler(int signal, const std::function<void(int)>& handler) {
+void SignalWatcher::RegisterHandler(int signal,
+    const std::function<void(int)>& handler) {
   const auto it = signal_handlers_.find(signal);
   if (it == signal_handlers_.end()) {
     sigaction(signal, &sigaction_, NULL);

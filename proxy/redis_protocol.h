@@ -197,18 +197,8 @@ public:
         items_.pop_back();
         return;
       }
-      LOG_DEBUG << "BulkArray ctor, back.present_size= "<< back.present_size()
-                << " data=[" << std::string(back.raw_data(), back.present_size()) << "]";
       parsed_size_ += back.total_size();
-      LOG_DEBUG << "BulkArray ctor, parsed_size_= "<< parsed_size_;
       p += back.total_size();
-      LOG_DEBUG << "BulkArray ctor, p-data= "<< int(p - data)
-              << " total_bulks=" << bulks
-              << " item_[" << items_.size() - 1 << "].total_size=" << back.total_size()
-              << " item_[" << items_.size() - 1 << "].present_size=" << back.present_size()
-              << " item_[" << items_.size() - 1 << "].completed=" << back.completed()
-              << " item_[" << items_.size() - 1 << "].payload=(" << back.to_string()
-              << ") item_[" << items_.size() - 1 << "].payload_size=" << back.payload_size();
     }
   }
 
