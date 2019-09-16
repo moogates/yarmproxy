@@ -17,7 +17,12 @@ namespace yarmproxy {
 std::atomic_int redis_mset_cmd_count;
 
 static const std::string& MsetPrefix(size_t keys_count) {
-  static std::map<size_t, std::string> prefix_cache; // TODO : init
+  static std::map<size_t, std::string> prefix_cache {
+        {3, "*3\r\n$4\r\nmset\r\n"},
+        {5, "*5\r\n$4\r\nmset\r\n"},
+        {7, "*7\r\n$4\r\nmset\r\n"},
+        {9, "*9\r\n$4\r\nmset\r\n"}
+      };
   const auto& it = prefix_cache.find(keys_count);
   if (it != prefix_cache.end()) {
     return it->second;
