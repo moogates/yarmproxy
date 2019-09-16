@@ -16,7 +16,33 @@ namespace yarmproxy {
 
 std::atomic_int redis_mset_cmd_count;
 
-RedisMsetCommand::RedisMsetCommand(/*const ip::tcp::endpoint & ep, */std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba)
+static const std::string& MsetPrefix(size_t keys_count) {
+  static std::map<size_t, std::string> prefix_cache; // TODO : init
+  const auto& it = prefix_cache.find(keys_count);
+  if (it != prefix_cache.end()) {
+    return it->second;
+  }
+
+  std::ostringstream oss;
+  oss << '*' << (keys_count * 2 + 1) << "\r\n$4\r\nmset\r\n";
+  const auto& new_it = prefix_cache.insert(std::make_pair(keys_count, oss.str())).first;
+  return new_it->second;
+}
+
+void RedisMsetCommand::PushSubquery(const ip::tcp::endpoint& ep, const char* data, size_t bytes) {
+  if (true || waiting_subqueries_.empty() || waiting_subqueries_.back()->backend_endpoint_ != ep) {
+    client_conn_->buffer()->inc_recycle_lock();
+    waiting_subqueries_.emplace_back(new Subquery(ep, 2, data, bytes, subquery_index_++));
+    tail_query_ = waiting_subqueries_.back();
+  } else {
+    auto& query = waiting_subqueries_.back();
+    assert(data == query->data_ + query->present_bytes_);
+    ++query->bulks_count_; // TODO : replace it with keys_count_
+    query->present_bytes_ += bytes;
+  }
+}
+
+RedisMsetCommand::RedisMsetCommand(std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba)
     : Command(client)
     , unparsed_bulks_(ba.absent_bulks())
     , subquery_index_(0)  // TODO : for test only
@@ -27,8 +53,9 @@ RedisMsetCommand::RedisMsetCommand(/*const ip::tcp::endpoint & ep, */std::shared
   unparsed_bulks_ += unparsed_bulks_ % 2;  // don't parse the 'key' now if 'value' not present
   for(size_t i = 1; (i + 1) < ba.present_bulks(); i += 2) { // only 'key' is inadequate, 'value' field must be present
     ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(ba[i].payload_data(), ba[i].payload_size(), "REDIS_bj");
-    LOG_DEBUG << "RedisMsetCommand ctor, waiting for ActivateWaitingSubquery, key[" << (i - 1) / 2 << "/" << (ba.present_bulks() - 1) / 2
+    LOG_DEBUG << "RedisMsetCommand ctor, key[" << (i - 1) / 2 << "/" << (ba.present_bulks() - 1) / 2
               << "]=" << ba[i].to_string() << " ep=" << ep;
+  //PushSubquery(ep, ba[i].raw_data(), ba[i].present_size() + ba[i+1].present_size());
     client_conn_->buffer()->inc_recycle_lock();
     waiting_subqueries_.emplace_back(new Subquery(ep, 2, ba[i].raw_data(),
                                      ba[i].present_size() + ba[i+1].present_size(),
@@ -55,8 +82,10 @@ void RedisMsetCommand::WriteQuery() {
   if (!init_write_query_) {
     assert(tail_query_);
     tail_query_->phase_ = 3;
-    LOG_DEBUG << "RedisMsetCommand WriteQuery non-init, data.size=" << client_conn_->buffer()->unprocessed_bytes()
-             << " backend=" << tail_query_->backend_ << " query=" << tail_query_->index_;
+    LOG_DEBUG << "RedisMsetCommand WriteQuery non-init, data.size="
+             << client_conn_->buffer()->unprocessed_bytes()
+             << " backend=" << tail_query_->backend_
+             << " query=" << tail_query_->index_;
     tail_query_->backend_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
         client_conn_->buffer()->unprocessed_bytes());
     return;
@@ -146,7 +175,7 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
     } else if (query->phase_ == 3) {
       if (query == tail_query_ && client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
         LOG_DEBUG << "OnWriteQueryFinished query=" << query->index_ << " phase 3, TryReadMoreQuery";
-        assert(!client_conn_->buffer()->recycle_locked());
+        // assert(!client_conn_->buffer()->recycle_locked());
         client_conn_->TryReadMoreQuery();
       } else {
         LOG_DEBUG << "OnWriteQueryFinished query=" << query->index_ << " phase 3 completed";
@@ -191,6 +220,7 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
     pending_subqueries_[query->backend_] = query;
 
     static const char MSET_PREFIX[] = "*3\r\n$4\r\nmset\r\n";
+    const std::string& mset_prefix = MsetPrefix(1);
 
     LOG_DEBUG << "RedisMsetCommand WriteQuery ActivateWaitingSubquery, cmd=" << this
               << " query=" << query->index_
@@ -198,10 +228,12 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
               << redis::Bulk(query->data_, query->present_bytes_).to_string() << ")"
               << " k_v_present_bytes_=" << query->present_bytes_
               << " prefix=[" << MSET_PREFIX << "]"
+              << " prefix2=[" << mset_prefix << "]"
               << " data=[" << std::string(query->data_, query->present_bytes_) << "]";
 
     // TODO : merge adjcent shared-endpoint queries
-    query->backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1);
+    // query->backend_->WriteQuery(MSET_PREFIX, sizeof(MSET_PREFIX) - 1);
+    query->backend_->WriteQuery(mset_prefix.data(), mset_prefix.size());
   }
 }
 
@@ -244,6 +276,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
              << " v.present_size=[" << new_bulks[i + 1].present_size() << "] ep=" << ep;
     to_process_bytes += new_bulks[i].present_size();
     to_process_bytes += new_bulks[i + 1].present_size();
+    // PushSubquery(ep, new_bulks[i].raw_data(), new_bulks[i].present_size() + new_bulks[i+1].present_size());
 
     client_conn_->buffer()->inc_recycle_lock();
     waiting_subqueries_.emplace_back(new Subquery(ep, 2, new_bulks[i].raw_data(),

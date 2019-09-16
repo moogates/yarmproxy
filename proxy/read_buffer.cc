@@ -39,11 +39,18 @@ void ReadBuffer::update_processed_bytes(size_t processed) {
   try_recycle_buffer();
 }
 
+bool ReadBuffer::recycle_locked() const {
+  LOG_DEBUG << "recycle_locked recycle_lock_count_=" << recycle_lock_count_;
+  return recycle_lock_count_ > 0;
+}
+
 // FIXME : lock should begin at read-start-point, finishes at sent-done-point. please recheck.
 void ReadBuffer::inc_recycle_lock() {
+  LOG_DEBUG << "inc_recycle_lock, PRE recycle_lock_count_=" << recycle_lock_count_;
   ++recycle_lock_count_;
 }
 void ReadBuffer::dec_recycle_lock() {
+  LOG_DEBUG << "dec_recycle_lock, PRE recycle_lock_count_=" << recycle_lock_count_;
   if (recycle_lock_count_ > 0) {
     --recycle_lock_count_;
   }
