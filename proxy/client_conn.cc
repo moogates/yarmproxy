@@ -96,6 +96,11 @@ void ClientConnection::AsyncRead() {
 }
 
 void ClientConnection::RotateReplyingCommand() {
+  if (active_cmd_queue_.size() == 1) {
+    LOG_WARN << "RotateReplyingCommand AsyncRead when all commands processed";
+    AsyncRead();
+  }
+
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
     active_cmd_queue_.front()->StartWriteReply();
@@ -136,7 +141,9 @@ bool ClientConnection::ProcessUnparsedQuery() {
         LOG_WARN << "Too long unparsable command line";
         return false;
       }
-      break;
+      TryReadMoreQuery();
+      LOG_DEBUG << "ProcessUnparsedQuery waiting for more data";
+      return true;
     } else {
       buffer_->update_parsed_bytes(parsed_bytes);
       size_t to_process_bytes = std::min((size_t)parsed_bytes, buffer_->received_bytes());
@@ -151,7 +158,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       }
     }
   }
-  TryReadMoreQuery();
+  // TryReadMoreQuery();
   return true;
 }
 

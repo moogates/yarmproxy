@@ -61,6 +61,8 @@ private:
 
   size_t subquery_index_;
   std::list<std::shared_ptr<Subquery>> waiting_subqueries_;
+  void PushSubquery(const ip::tcp::endpoint& ep, const char* data, size_t bytes);
+
   // std::map<std::shared_ptr<BackendConn>, size_t> backend_index_;
   std::shared_ptr<Subquery> tail_query_;
 
