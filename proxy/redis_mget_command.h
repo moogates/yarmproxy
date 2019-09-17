@@ -68,9 +68,6 @@ private:
   size_t unreachable_backends_;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 
-/////////////////////////
-  std::shared_ptr<BackendConn> first_reply_backend_;
-
   std::map<std::shared_ptr<BackendConn>, size_t> absent_bulks_tracker_;
 };
 

@@ -60,7 +60,7 @@ public:
       }
     }
     size_t total = 0;
-    while(*p != '\r' && p - data < bytes) {
+    while(*p != '\r' && size_t(p - data) < bytes) {
       total = total * 10 + size_t(*p - '0');
       ++p;
     }
@@ -106,14 +106,14 @@ public:
     // return std::stoi(raw_data_ + 1);
   }
 
-  bool equals(const char* str, size_t len) const {
+  bool equals(const char* str, size_t size) const {
     assert(absent_size() == 0);
-    if (len != payload_size()) {
+    if (size != payload_size()) {
       return false;
     }
     const char* p = str;
     const char* q = payload_data();
-    while(p - str < len) {
+    while(size_t(p - str) < size) {
       if (*p++ != *q++) {
         return false;
       }
@@ -127,9 +127,8 @@ public:
 
   size_t absent_size() const {
     size_t total = total_size();
-  //LOG_DEBUG << "Bulk absent_size() present_size_="<< present_size_
-  //          << " total=" << total;
-    return present_size_ >= total ? 0 : (total - present_size_);
+    return (size_t)present_size_ >= total ?
+               0 : (total - (size_t)present_size_);
   }
   std::string to_string() const {
     if (raw_data_[1] == '-') {

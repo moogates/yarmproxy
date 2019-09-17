@@ -82,7 +82,7 @@ RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
   GroupKeysByEndpoint(ba, &endpoint_keys);
   for(auto& it : endpoint_keys) {
     LOG_DEBUG << "RedisMgetCommand ctor, create query ep=" << it.first << " query=(" << it.second << ")";
-    query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
+    query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second))); // TODO : zero copy
   }
 }
 
@@ -134,9 +134,6 @@ void RedisMgetCommand::WriteQuery() {
 
 void RedisMgetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
   if (received_reply_backends_.insert(backend).second) {
-    if (received_reply_backends_.size() == 1) {
-      first_reply_backend_ = backend;
-    }
     if (received_reply_backends_.size() == query_set_.size()) {
       last_backend_ = backend;
     }
@@ -181,7 +178,7 @@ void RedisMgetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
     return;
   }
 
-  LOG_WARN << "RedisMgetCommand::OnBackendReplyReceived, endpoint="
+  LOG_DEBUG << "RedisMgetCommand::OnBackendReplyReceived, endpoint="
            << backend->remote_endpoint() << " backend=" << backend
            << " finished=" << backend->finished();
   BackendReadyToReply(backend);
