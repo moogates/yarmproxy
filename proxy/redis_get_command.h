@@ -61,8 +61,8 @@ private:
   std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<BackendConn> last_backend_;
 
-  size_t completed_backends_;
-  size_t unreachable_backends_;
+  size_t completed_backends_ = 0;
+  size_t unreachable_backends_ = 0;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 /////////////////////////
   std::shared_ptr<BackendConn> first_reply_backend_;

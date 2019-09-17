@@ -152,6 +152,7 @@ void RedisGetCommand::NextBackendStartReply() {
 
 bool RedisGetCommand::HasUnfinishedBanckends() const {
   LOG_DEBUG << "RedisGetCommand::HasUnfinishedBanckends"
+            << " unreachable_backends_=" << unreachable_backends_
             << " completed_backends_=" << completed_backends_ 
             << " total_backends=" << query_set_.size();
   return unreachable_backends_ + completed_backends_ < query_set_.size();
