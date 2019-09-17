@@ -32,40 +32,28 @@ private:
   void RotateReplyingBackend(bool success) override;
 
 private:
-  void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
-  void BackendReadyToReply(std::shared_ptr<BackendConn> backend);
-
   bool HasUnfinishedBanckends() const;
   void NextBackendStartReply();
-  bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
 
   bool query_data_zero_copy() override {
-    return false;
+    return true;
   }
 
 private:
   struct BackendQuery {
-    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
-        : query_line_(query_line)
+    BackendQuery(const ip::tcp::endpoint& ep, const char* cmd_data, size_t cmd_bytes)
+        : cmd_data_(cmd_data)
+        , cmd_bytes_(cmd_bytes)
         , backend_endpoint_(ep) {
     }
     ~BackendQuery();
-    std::string query_line_;
+    const char* cmd_data_;
+    size_t cmd_bytes_;
     ip::tcp::endpoint backend_endpoint_;
     std::shared_ptr<BackendConn> backend_conn_;
   };
 
-  std::vector<std::unique_ptr<BackendQuery>> query_set_;
-  std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
-
-  std::shared_ptr<BackendConn> replying_backend_;
-  std::shared_ptr<BackendConn> last_backend_;
-
-  size_t completed_backends_ = 0;
-  size_t unreachable_backends_ = 0;
-  std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
-/////////////////////////
-  std::shared_ptr<BackendConn> first_reply_backend_;
+  std::unique_ptr<BackendQuery> backend_query_;
 };
 
 }
