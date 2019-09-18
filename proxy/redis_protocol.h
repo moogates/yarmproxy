@@ -134,8 +134,6 @@ public:
     if (raw_data_[1] == '-') {
       return "nil";
     }
-  //LOG_DEBUG << "Bulk to_string() total_size="<< total_size()
-  //          << " absent_size=" << absent_size();
     return std::string(payload_data(), total_size() - (payload_data() - raw_data_) - absent_size() - 2);
   }
 private:
@@ -172,7 +170,6 @@ public:
     for(++p; p < data + bytes && isdigit(*p); ++p) {
       bulks = bulks * 10 + size_t(*p - '0');
     }
-    LOG_DEBUG << "BulkArray bulks=" << bulks;
     if (p + 2 > data + bytes) {
       parsed_size_ = 0;
       return;
@@ -183,9 +180,7 @@ public:
     }
     p += 2;
     parsed_size_ = p - data;
-    LOG_DEBUG << "BulkArray offset=" << int(p - data);
     while(p < data + bytes && items_.size() < bulks) {
-      LOG_DEBUG << "BulkArray emplace_back bulk, data_len=" << int(data + bytes - p);
       items_.emplace_back(p, data + bytes - p);
       Bulk& back = items_.back();
       if (back.present_size() < 0) {
@@ -221,13 +216,9 @@ public:
   }
 
   bool completed() const {
-    LOG_DEBUG << "BulkArray completed items_.size="<< items_.size()
-              << " total_bulks=" << total_bulks();
     if (items_.size() != total_bulks()) {
       return false;
     }
-    LOG_DEBUG << "BulkArray completed items_.size="<< items_.size()
-              << " back_absent=" << (items_.empty() ? 0 : items_.back().absent_size());
     if (items_.size() > 0 && items_.back().absent_size() > 0) {
       return false;
     }

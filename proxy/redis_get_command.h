@@ -32,28 +32,15 @@ private:
   void RotateReplyingBackend(bool success) override;
 
 private:
-  bool HasUnfinishedBanckends() const;
-  void NextBackendStartReply();
-
   bool query_data_zero_copy() override {
     return true;
   }
 
 private:
-  struct BackendQuery {
-    BackendQuery(const ip::tcp::endpoint& ep, const char* cmd_data, size_t cmd_bytes)
-        : cmd_data_(cmd_data)
-        , cmd_bytes_(cmd_bytes)
-        , backend_endpoint_(ep) {
-    }
-    ~BackendQuery();
-    const char* cmd_data_;
-    size_t cmd_bytes_;
-    ip::tcp::endpoint backend_endpoint_;
-    std::shared_ptr<BackendConn> backend_conn_;
-  };
-
-  std::unique_ptr<BackendQuery> backend_query_;
+  const char* cmd_data_;
+  size_t cmd_bytes_;
+  ip::tcp::endpoint backend_endpoint_;
+  std::shared_ptr<BackendConn> backend_conn_;
 };
 
 }

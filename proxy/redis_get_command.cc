@@ -12,35 +12,31 @@
 
 namespace yarmproxy {
 
-RedisGetCommand::BackendQuery::~BackendQuery() {
-}
-
 RedisGetCommand::RedisGetCommand(std::shared_ptr<ClientConnection> client,
                                  const redis::BulkArray& ba)
-    : Command(client) {
-  ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
-  LOG_WARN << "CreateCommand type=" << ba[0].to_string() << " key=" << ba[1].to_string() << " ep=" << ep;
-  backend_query_.reset(new BackendQuery(ep, ba.raw_data(), ba.total_size()));
+    : Command(client)
+    , cmd_data_(ba.raw_data())
+    , cmd_bytes_(ba.total_size())
+{
+  backend_endpoint_ = BackendLoactor::Instance().Locate(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
+  // LOG_DEBUG << "CreateCommand type=" << ba[0].to_string() << " key=" << ba[1].to_string() << " ep=" << backend_endpoint_;
 }
 
 RedisGetCommand::~RedisGetCommand() {
-  if (backend_query_->backend_conn_) {
-    backend_pool()->Release(backend_query_->backend_conn_);
+  if (backend_conn_) {
+    backend_pool()->Release(backend_conn_);
   }
 }
 
 void RedisGetCommand::WriteQuery() {
-  if (!backend_query_->backend_conn_) {
-    backend_query_->backend_conn_ = AllocateBackend(backend_query_->backend_endpoint_);
+  if (!backend_conn_) {
+    backend_conn_ = AllocateBackend(backend_endpoint_);
   }
-  LOG_DEBUG << "RedisGetCommand WriteQuery cmd=" << this
-            << " backend=" << backend_query_->backend_conn_ << ", backend_query_=("
-            << std::string(backend_query_->cmd_data_, backend_query_->cmd_bytes_ - 2) << ")";
-  backend_query_->backend_conn_->WriteQuery(backend_query_->cmd_data_, backend_query_->cmd_bytes_);
+  backend_conn_->WriteQuery(cmd_data_, cmd_bytes_);
 }
 
 void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  assert(backend == backend_query_->backend_conn_);
+  assert(backend == backend_conn_);
 
   if (ec != ErrorCode::E_SUCCESS
       || ParseReply(backend) == false) {
@@ -57,13 +53,11 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
 
 
 void RedisGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
-  assert(backend == backend_query_->backend_conn_);
-  LOG_DEBUG << "RedisGetCommand::OnBackendConnectError endpoint="
-            << backend->remote_endpoint() << " backend=" << backend;
+  assert(backend == backend_conn_);
 
   static const char END_RN[] = "-Backend Connect Failed\r\n"; // TODO : 统一放置错误码
   backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
-  LOG_WARN << "RedisGetCommand::OnBackendConnectError last, endpoint="
+  LOG_WARN << "RedisGetCommand::OnBackendConnectError endpoint="
           << backend->remote_endpoint() << " backend=" << backend;
 
   backend->set_reply_recv_complete();
@@ -79,13 +73,11 @@ void RedisGetCommand::RotateReplyingBackend(bool) {
 }
 
 void RedisGetCommand::StartWriteReply() {
-  TryWriteReply(backend_query_->backend_conn_);
+  TryWriteReply(backend_conn_);
 }
 
 bool RedisGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
-  LOG_DEBUG << "RedisGetCommand::ParseReply unparsed_bytes=" << unparsed_bytes
-            << " parsed_unreceived=" << backend->buffer()->parsed_unreceived_bytes();
 
   if (unparsed_bytes == 0) {
     if (backend->buffer()->parsed_unreceived_bytes() == 0) {
@@ -102,7 +94,6 @@ bool RedisGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   if (bulk.present_size() == 0) {
     return true;
   }
-  LOG_DEBUG << "ParseReply data=(" << std::string(entry, bulk.present_size()) << ")";
 
   if (bulk.completed()) {
     LOG_DEBUG << "ParseReply bulk completed";

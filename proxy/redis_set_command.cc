@@ -21,7 +21,7 @@ RedisSetCommand::RedisSetCommand(std::shared_ptr<ClientConnection> client, const
     , unparsed_bulks_(ba.absent_bulks())
 {
   backend_endpoint_ = BackendLoactor::Instance().Locate(ba[1].payload_data(), ba[1].payload_size(), "REDIS_bj");
-  LOG_WARN << "RedisSetCommand key=" << ba[1].to_string() << " ep=" << backend_endpoint_
+  LOG_DEBUG << "RedisSetCommand key=" << ba[1].to_string() << " ep=" << backend_endpoint_
             << " ctor " << ++redis_set_cmd_count;
 }
 
@@ -35,7 +35,6 @@ RedisSetCommand::~RedisSetCommand() {
 void RedisSetCommand::WriteQuery() {
   if (!backend_conn_) {
     backend_conn_ = AllocateBackend(backend_endpoint_);
-    LOG_DEBUG << "RedisSetCommand::WriteQuery allocated backend=" << backend_conn_;
   }
 
   client_conn_->buffer()->inc_recycle_lock();
@@ -79,11 +78,9 @@ bool RedisSetCommand::ParseIncompleteQuery() {
 
     redis::Bulk bulk(entry, unparsed_bytes);
     if (bulk.present_size() < 0) {
-      LOG_WARN << "ParseIncompleteQuery sub_bulk error";
       return false;
     }
     if (bulk.present_size() == 0) {
-      LOG_WARN << "ParseIncompleteQuery sub_bulk need more data";
       return true;
     }
     LOG_WARN << "ParseIncompleteQuery parsed_bytes=" << bulk.total_size();
@@ -99,21 +96,17 @@ bool RedisSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(unparsed > 0);
   const char * entry = backend_conn_->buffer()->unparsed_data();
   if (entry[0] != '+' && entry[0] != '-' && entry[0] != '$') {
-    LOG_DEBUG << "RedisSetCommand ParseReply unknown reply format(" << std::string(entry, unparsed) << ")";
+    LOG_DEBUG << "ParseReply unknown format";
     return false;
   }
 
   const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed));
   if (p == nullptr) {
-    LOG_DEBUG << "RedisSetCommand ParseReply no enough data for parsing, please read more"
-              // << " data=" << std::string(entry, backend_conn_->buffer()->unparsed_bytes())
-              << " bytes=" << backend_conn_->buffer()->unparsed_bytes();
     return true;
   }
 
   backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
   LOG_DEBUG << "RedisSetCommand ParseReply resp.size=" << p - entry + 1
-            // << " contont=[" << std::string(entry, p - entry - 1) << "]"
             << " set_reply_recv_complete, backend=" << backend;
   backend->set_reply_recv_complete();
   return true;

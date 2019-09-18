@@ -148,9 +148,6 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
     return;
   }
 
-  LOG_DEBUG << "HandleConnect ok, to_write_bytes=" << bytes
-           << " write_data=[" <<  std::string(data, bytes)
-           << "] , backend=" << this;
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
           std::placeholders::_1, std::placeholders::_2));
