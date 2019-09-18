@@ -1,6 +1,7 @@
 #include "read_buffer.h"
 
 #include <cstring>
+#include <cassert>
 
 #include "base/logging.h"
 

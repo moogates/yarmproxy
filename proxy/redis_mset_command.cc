@@ -39,8 +39,8 @@ void RedisMsetCommand::PushSubquery(const ip::tcp::endpoint& ep, const char* dat
   if (it == subqueries_.cend()) {
     LOG_DEBUG << "PushSubquery inc_recycle_lock add new endpoint " << ep << " , key=" << redis::Bulk(data, bytes).to_string();
     client_conn_->buffer()->inc_recycle_lock();
-    auto res = subqueries_.insert(std::make_pair(ep, new Subquery(ep, 2, data,
-                             bytes)));
+    auto res = subqueries_.insert(std::make_pair(ep, std::shared_ptr<Subquery>(
+                 new Subquery(ep, 2, data, bytes))));
     tail_query_ = res.first->second;
     return;
   }
