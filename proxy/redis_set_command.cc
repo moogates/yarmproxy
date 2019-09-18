@@ -33,6 +33,21 @@ RedisSetCommand::~RedisSetCommand() {
 }
 
 void RedisSetCommand::WriteQuery() {
+  if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
+    LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is true";
+    query_recv_complete_ = true;
+  }
+
+  if (backend_conn_ && connect_error_) {
+    LOG_WARN << "RedisSetCommand WriteQuery connect_error_ is true, query_recv_complete_=" << query_recv_complete_;
+    if (client_conn_->IsFirstCommand(shared_from_this())
+        && query_recv_complete_) {
+      LOG_WARN << "RedisSetCommand WriteQuery connect_error_ write reply";
+      TryWriteReply(backend_conn_);
+    }
+    return;
+  }
+
   if (!backend_conn_) {
     backend_conn_ = AllocateBackend(backend_endpoint_);
   }
@@ -49,17 +64,17 @@ void RedisSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
     return;
   }
 
-  // 判断是否最靠前的command, 是才可以转发
   if (client_conn_->IsFirstCommand(shared_from_this())) {
     TryWriteReply(backend);
   }
-  backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
+  backend->TryReadMoreReply();
 }
 
 void RedisSetCommand::StartWriteReply() {
   LOG_DEBUG << "StartWriteReply TryWriteReply backend_conn_=" << backend_conn_;
-  // TODO : if connection refused, should report error & rotate
-  TryWriteReply(backend_conn_);
+  if (query_recv_complete_) {
+    TryWriteReply(backend_conn_);
+  }
 }
 
 void RedisSetCommand::RotateReplyingBackend(bool) {
@@ -69,6 +84,23 @@ void RedisSetCommand::RotateReplyingBackend(bool) {
 bool RedisSetCommand::query_parsing_complete() {
   return unparsed_bulks_ == 0;
 }
+
+void RedisSetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+  static const char BACKEND_ERROR[] = "-BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
+  backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+  backend->set_reply_recv_complete();
+  backend->set_no_recycle();
+
+  if (client_conn_->IsFirstCommand(shared_from_this())
+      && query_recv_complete_) {
+    LOG_WARN << "RedisSetCommand OnBackendConnectError write reply";
+    TryWriteReply(backend);
+  } else {
+    LOG_WARN << "RedisSetCommand OnBackendConnectError no write reply, query_recv_complete_=" << query_recv_complete_;
+    connect_error_ = true;
+  }
+}
+
 
 bool RedisSetCommand::ParseIncompleteQuery() {
   ReadBuffer* buffer = client_conn_->buffer();
@@ -96,7 +128,7 @@ bool RedisSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(unparsed > 0);
   const char * entry = backend_conn_->buffer()->unparsed_data();
   if (entry[0] != '+' && entry[0] != '-' && entry[0] != '$') {
-    LOG_DEBUG << "ParseReply unknown format";
+    LOG_DEBUG << "RedisSetCommand ParseReply unknown format";
     return false;
   }
 
@@ -106,8 +138,8 @@ bool RedisSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   }
 
   backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
-  LOG_DEBUG << "RedisSetCommand ParseReply resp.size=" << p - entry + 1
-            << " set_reply_recv_complete, backend=" << backend;
+  LOG_DEBUG << "RedisSetCommand ParseReply complete, resp.size=" << p - entry + 1
+            << " backend=" << backend;
   backend->set_reply_recv_complete();
   return true;
 }

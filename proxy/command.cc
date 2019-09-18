@@ -27,13 +27,10 @@ namespace yarmproxy {
 std::atomic_int x_cmd_count;
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 Command::Command(std::shared_ptr<ClientConnection> client)
-    : client_conn_(client)
-    , is_transfering_reply_(false) {
-  LOG_WARN << "Command ctor " << ++x_cmd_count;
+    : client_conn_(client) {
 };
 
 Command::~Command() {
-  LOG_WARN << "Command dtor " << --x_cmd_count;
 }
 
 BackendConnPool* Command::backend_pool() {
@@ -129,12 +126,16 @@ std::shared_ptr<BackendConn> Command::AllocateBackend(const ip::tcp::endpoint& e
 void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     if (ec == ErrorCode::E_CONNECT) {
-    //LOG_WARN << "OnWriteQueryFinished conn_refused, endpoint=" << backend->remote_endpoint()
-    //         << " backend=" << backend;
       OnBackendConnectError(backend);
+
+      // the buffer is still valid when backend CONNECT error
+      client_conn_->buffer()->dec_recycle_lock();
+      if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+        client_conn_->TryReadMoreQuery();
+      }
     } else {
-      client_conn_->Abort();
       LOG_WARN << "OnWriteQueryFinished error";
+      client_conn_->Abort();
     }
     return;
   }

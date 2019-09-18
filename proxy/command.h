@@ -68,7 +68,7 @@ private:
 protected:
   std::shared_ptr<ClientConnection> client_conn_;
 private:
-  bool is_transfering_reply_;
+  bool is_transfering_reply_ = false;
 };
 
 }

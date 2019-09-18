@@ -32,10 +32,8 @@ ClientConnection::ClientConnection(WorkerContext& context)
 
 ClientConnection::~ClientConnection() {
   if (socket_.is_open()) {
-    LOG_WARN << "ClientConnection destroyed close socket.";
+    LOG_DEBUG << "ClientConnection destroyed close socket.";
     socket_.close();
-  } else {
-    LOG_DEBUG << "ClientConnection destroyed need not close socket.";
   }
   context_.allocator_->Release(buffer_->data());
   delete buffer_;
@@ -97,7 +95,7 @@ void ClientConnection::AsyncRead() {
 
 void ClientConnection::RotateReplyingCommand() {
   if (active_cmd_queue_.size() == 1) {
-    LOG_WARN << "RotateReplyingCommand AsyncRead when all commands processed";
+    LOG_DEBUG << "RotateReplyingCommand AsyncRead when all commands processed";
     AsyncRead();
   }
 
@@ -168,9 +166,10 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
   if (error) {
     if (error == boost::asio::error::eof) {
       // TODO : gracefully shutdown
-      LOG_WARN << "ClientConnection::HandleRead eof error, conn=" << this;
+      LOG_DEBUG << "ClientConnection::HandleRead eof error, conn=" << this;
     } else {
-      LOG_WARN << "ClientConnection::HandleRead error=" << error << "/" << error.message() << " conn=" << this;
+      LOG_WARN << "ClientConnection::HandleRead error=" << error
+               << "/" << error.message() << " conn=" << this;
       Abort();
     }
     return;
@@ -188,7 +187,8 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
     active_cmd_queue_.back()->WriteQuery();
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
     if (buffer_->parsed_unreceived_bytes() > 0) {
-      // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery的回调函数里面才继续read. 这并不是最佳方式
+      // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
+                             // 的回调函数里面才继续read. 这并不是最佳方式
       return;
     }
   }
@@ -199,7 +199,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error, size_t
     active_cmd_queue_.back()->ParseIncompleteQuery();
   }
 
-  if (active_cmd_queue_.empty() || active_cmd_queue_.back()->query_parsing_complete()) { // 避免从bulk array中间开始解析新指令
+  if (active_cmd_queue_.empty() || active_cmd_queue_.back()->query_parsing_complete()) {
     ProcessUnparsedQuery();
   }
   return;

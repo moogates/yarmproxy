@@ -53,6 +53,7 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
 
 
 void RedisGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+  // TODO : use base class impl
   assert(backend == backend_conn_);
 
   static const char END_RN[] = "-Backend Connect Failed\r\n"; // TODO : 统一放置错误码

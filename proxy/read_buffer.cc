@@ -47,6 +47,7 @@ void ReadBuffer::inc_recycle_lock() {
   ++recycle_lock_count_;
 }
 void ReadBuffer::dec_recycle_lock() {
+  assert(recycle_lock_count_ > 0);
   if (recycle_lock_count_ > 0) {
     --recycle_lock_count_;
   }
