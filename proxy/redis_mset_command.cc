@@ -81,6 +81,31 @@ RedisMsetCommand::~RedisMsetCommand() {
 void RedisMsetCommand::WriteQuery() {
   if (!init_write_query_) {
     assert(tail_query_);
+
+    if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
+      LOG_WARN << "RedisMsetCommand WriteQuery query_recv_complete_ is true";
+      tail_query_->query_recv_complete_ = true;
+    }
+
+    if (tail_query_->backend_ && tail_query_->connect_error_) {
+      if (tail_query_->query_recv_complete_) {
+        if (unparsed_bulks_ == 0 && subqueries_.size() == 0 && pending_subqueries_.size() == 1) {
+          if (client_conn_->IsFirstCommand(shared_from_this())) {
+            LOG_WARN << "RedisMsetCommand WriteQuery connect_error_, last pending, write reply";
+            TryWriteReply(tail_query_->backend_);
+          } else {
+            LOG_WARN << "RedisMsetCommand WriteQuery connect_error_, last pending, wait to reply";
+          }
+        } else {
+          pending_subqueries_.erase(tail_query_->backend_);
+          LOG_WARN << "RedisMsetCommand WriteQuery connect_error_ query_recv_complete_, no last pending";
+        }
+      } else {
+        LOG_WARN << "RedisMsetCommand WriteQuery connect_error_ no query_recv_complete_, drop data";
+      }
+      return;
+    }
+
     tail_query_->phase_ = 3;
     LOG_DEBUG << "WriteQuery non-init, data.size="
              << client_conn_->buffer()->unprocessed_bytes()
@@ -95,6 +120,35 @@ void RedisMsetCommand::WriteQuery() {
   ActivateWaitingSubquery();
 }
 
+void RedisMsetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+  static const char BACKEND_ERROR[] = "-MSET_BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
+  backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+  backend->set_reply_recv_complete();
+  backend->set_no_recycle();
+  assert(subqueries_.size() == 0);
+  auto& subquery = pending_subqueries_[backend];
+  if (subquery->query_recv_complete_) {
+    if (unparsed_bulks_ == 0 && subqueries_.size() == 0 && pending_subqueries_.size() == 1) {
+      if (client_conn_->IsFirstCommand(shared_from_this())) {
+        LOG_WARN << "RedisMsetCommand OnBackendConnectError write reply, ep=" << subquery->backend_endpoint_;
+        TryWriteReply(backend);
+      } else {
+        LOG_WARN << "RedisMsetCommand OnBackendConnectError waiting to write reply, ep=" << subquery->backend_endpoint_;
+        replying_backend_ = backend;
+      }
+    } else {
+      LOG_WARN << "RedisMsetCommand OnBackendConnectError need not reply, ep=" << subquery->backend_endpoint_
+               << " is_tail=" << (subquery == tail_query_) << " pending_subqueries_.size=" << pending_subqueries_.size();
+      backend->set_reply_recv_complete();
+      backend->set_no_recycle();
+      pending_subqueries_.erase(backend);
+    }
+  } else {
+    subquery->connect_error_ = true; // waiting for more query
+    LOG_WARN << "RedisMsetCommand OnBackendConnectError connect_error_, waiting for more query, ep=" << subquery->backend_endpoint_;
+  }
+}
+
 void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
     LOG_DEBUG << "Command::OnBackendReplyReceived error, backend=" << backend;
@@ -107,18 +161,22 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
     return;
   }
 
+  assert(subqueries_.size() == 0);
   if (unparsed_bulks_ == 0 && subqueries_.size() == 0 && pending_subqueries_.size() == 1) {
     if (client_conn_->IsFirstCommand(shared_from_this())) {
       TryWriteReply(backend);
-      LOG_DEBUG << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+      LOG_WARN << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
                << " write reply, backend=" << backend;
     } else {
-      LOG_DEBUG << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+      LOG_WARN << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
                << " waiting to write reply, backend=" << backend;
       replying_backend_ = backend;
     }
   } else {
-    LOG_DEBUG << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+    LOG_WARN << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+             << " unparsed_bulks_=" << unparsed_bulks_
+             << " subqueries_.size=" << subqueries_.size()
+             << " pending_subqueries_.size=" << pending_subqueries_.size()
              << " don't write reply, backend=" << backend;
     // TODO : prepare for recycling, a bit tedious
     assert(backend->buffer()->unparsed_bytes() == 0);
@@ -148,9 +206,20 @@ void RedisMsetCommand::RotateReplyingBackend(bool success) {
 void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     if (ec == ErrorCode::E_CONNECT) {
-    //LOG_DEBUG << "OnWriteQueryFinished conn_refused, endpoint=" << backend->remote_endpoint()
-    //         << " backend=" << backend;
       OnBackendConnectError(backend);
+      // 等同于转发完成已收数据
+      client_conn_->buffer()->dec_recycle_lock();
+      if (!client_conn_->buffer()->recycle_locked() // 全部完成write query 才能释放recycle_lock
+          && (client_conn_->buffer()->parsed_unreceived_bytes() > 0
+              || !query_parsing_complete())) {
+        client_conn_->TryReadMoreQuery();
+        LOG_WARN << "OnWriteQueryFinished E_CONNECT TryReadMoreQuery";
+      } else {
+        LOG_WARN << "OnWriteQueryFinished E_CONNECT no TryReadMoreQuery"
+                 << " recycle_locked=" << client_conn_->buffer()->recycle_locked()
+                 << " parsed_unreceived_bytes=" << client_conn_->buffer()->parsed_unreceived_bytes()
+                 << " query_parsing_complete=" << query_parsing_complete();
+      }
     } else {
       client_conn_->Abort();
       LOG_DEBUG << "OnWriteQueryFinished error, ec=" << int(ec);
@@ -176,11 +245,19 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
           && (client_conn_->buffer()->parsed_unreceived_bytes() > 0
               || !query_parsing_complete())) {
         client_conn_->TryReadMoreQuery();
+        LOG_WARN << "OnWriteQueryFinished ok TryReadMoreQuery";
+      } else {
+        LOG_WARN << "OnWriteQueryFinished ok no TryReadMoreQuery"
+                 << " recycle_locked=" << client_conn_->buffer()->recycle_locked()
+                 << " parsed_unreceived_bytes=" << client_conn_->buffer()->parsed_unreceived_bytes()
+                 << " query_parsing_complete=" << query_parsing_complete();
       }
 
       if (query != tail_query_ || client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
-        LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " read reply, backend=" << backend;
+        LOG_WARN << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " read reply, backend=" << backend;
         backend->ReadReply();
+      } else {
+        LOG_WARN << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " no read reply, backend=" << backend;
       }
       return;
     } else {
@@ -219,6 +296,16 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
     assert(query->backend_ == nullptr);
     query->backend_ = AllocateBackend(query->backend_endpoint_);
     pending_subqueries_[query->backend_] = query;
+
+    if (query != tail_query_
+        || client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
+      LOG_WARN << "WriteQuery ep=" << query->backend_endpoint_
+               << " query_recv_complete_ is true, pending_subqueries_.size=" << pending_subqueries_.size();
+      query->query_recv_complete_ = true;
+    } else {
+      LOG_WARN << "WriteQuery ep=" << query->backend_endpoint_
+               << " query_recv_complete_ is false, pending_subqueries_.size=" << pending_subqueries_.size();
+    }
 
     const std::string& mset_prefix = MsetPrefix(query->bulks_count_ / 2);
 

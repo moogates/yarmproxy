@@ -91,13 +91,16 @@ void RedisSetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
-  if (client_conn_->IsFirstCommand(shared_from_this())
-      && query_recv_complete_) {
-    LOG_WARN << "RedisSetCommand OnBackendConnectError write reply";
-    TryWriteReply(backend);
+  connect_error_ = true;
+  if (query_recv_complete_) {
+    if (client_conn_->IsFirstCommand(shared_from_this())) {
+      LOG_WARN << "RedisSetCommand OnBackendConnectError write reply";
+      TryWriteReply(backend);
+    } else {
+      LOG_WARN << "RedisSetCommand OnBackendConnectError waiting to write reply";
+    }
   } else {
-    LOG_WARN << "RedisSetCommand OnBackendConnectError no write reply, query_recv_complete_=" << query_recv_complete_;
-    connect_error_ = true;
+    LOG_WARN << "RedisSetCommand OnBackendConnectError waiting for more query data";
   }
 }
 

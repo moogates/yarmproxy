@@ -23,6 +23,7 @@ public:
 private:
   void StartWriteReply() override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
+  void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
 
   bool ParseIncompleteQuery() override;
   bool ParseIncompleteQuery2();
@@ -49,6 +50,8 @@ private:
 
     size_t bulks_count_;
     size_t phase_ = 0;
+    bool query_recv_complete_ = false;
+    bool connect_error_ = false;
     std::list<std::pair<const char*, size_t>> segments_;
   };
 
