@@ -1,5 +1,5 @@
 cat ./mset3.data | nc 127.0.0.1 11311
-echo
+#cat ./mset3.data | nc 127.0.0.1 6380
 
 for key in key2019; do
   key_len=${#key}

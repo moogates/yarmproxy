@@ -25,6 +25,7 @@ private:
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
   bool ParseIncompleteQuery() override;
+  bool ParseIncompleteQuery2();
 
   void WriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
@@ -35,47 +36,31 @@ private:
   }
 
 private:
-  size_t unparsed_bulks_;
-
   struct Subquery {
-    Subquery(const ip::tcp::endpoint& ep, size_t bulks_count, const char* data, size_t present_bytes, size_t index)
+    Subquery(const ip::tcp::endpoint& ep, size_t bulks_count, const char* data, size_t present_bytes)
         : backend_endpoint_(ep)
         , bulks_count_(bulks_count)
-        , data_(data)
-        , present_bytes_(present_bytes)
-        , phase_(0)
-        , index_(index)
     {
+      segments_.emplace_back(data, present_bytes);
     }
 
     ip::tcp::endpoint backend_endpoint_;
+    std::shared_ptr<BackendConn> backend_;
 
     size_t bulks_count_;
-    const char* data_;
-    size_t present_bytes_;
-    size_t phase_;
-    size_t index_;
-
-    std::shared_ptr<BackendConn> backend_;
+    size_t phase_ = 0;
+    std::list<std::pair<const char*, size_t>> segments_;
   };
 
-  size_t subquery_index_;
-  std::list<std::shared_ptr<Subquery>> waiting_subqueries_;
-  void PushSubquery(const ip::tcp::endpoint& ep, const char* data, size_t bytes);
-
-  // std::map<std::shared_ptr<BackendConn>, size_t> backend_index_;
-  std::shared_ptr<Subquery> tail_query_;
-
+  size_t unparsed_bulks_;
+  bool init_write_query_ = true;
+  std::map<ip::tcp::endpoint, std::shared_ptr<Subquery>> subqueries_;
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> pending_subqueries_;
-
-  size_t completed_backends_;
-  size_t unreachable_backends_;
-
-  bool init_write_query_;
-
-  // std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
+  std::shared_ptr<Subquery> tail_query_;
+  std::shared_ptr<BackendConn> replying_backend_;
 private:
   void ActivateWaitingSubquery();
+  void PushSubquery(const ip::tcp::endpoint& ep, const char* data, size_t bytes);
 };
 
 }

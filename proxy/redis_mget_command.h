@@ -16,10 +16,6 @@ using namespace boost::asio;
 class RedisMgetCommand : public Command {
 public:
   RedisMgetCommand(std::shared_ptr<ClientConnection> client,
-                  size_t keys_count,
-                  std::list<std::pair<ip::tcp::endpoint, std::string>>&& endpoint_query_list);
-
-  RedisMgetCommand(std::shared_ptr<ClientConnection> client,
                   const redis::BulkArray& ba);
 
   virtual ~RedisMgetCommand();
@@ -65,8 +61,8 @@ private:
   std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<BackendConn> last_backend_;
 
-  size_t completed_backends_;
-  size_t unreachable_backends_;
+  size_t completed_backends_ = 0;
+  size_t unreachable_backends_ = 0;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 
   std::map<std::shared_ptr<BackendConn>, size_t> absent_bulks_tracker_;

@@ -44,7 +44,6 @@ bool ReadBuffer::recycle_locked() const {
   return recycle_lock_count_ > 0;
 }
 
-// FIXME : lock should begin at read-start-point, finishes at sent-done-point. please recheck.
 void ReadBuffer::inc_recycle_lock() {
   LOG_DEBUG << "inc_recycle_lock, PRE recycle_lock_count_=" << recycle_lock_count_;
   ++recycle_lock_count_;
@@ -64,6 +63,7 @@ void ReadBuffer::try_recycle_buffer() {
       processed_offset_ = received_offset_ = 0;
     } else if (processed_offset_ > (buffer_size_ - received_offset_)) {
       memmove(data_, data_ + processed_offset_, received_offset_ - processed_offset_);
+      assert(parsed_offset_ >= processed_offset_);
       parsed_offset_ -= processed_offset_;
       received_offset_ -= processed_offset_;
       processed_offset_ = 0;

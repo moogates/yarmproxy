@@ -2,11 +2,11 @@ query="*2049\r\n\$4\r\nmset\r\n\$4\r\nkey1\r\n\$6\r\nvalue1\r\n\$4\r\nkey3\r\n\$
 #echo "--------- $query -----------"
 echo "[[ `date`"
 printf "$query" | nc 127.0.0.1 11311
-#printf "$query" | nc 127.0.0.1 6379 -w2
+#printf "$query" | nc 127.0.0.1 6379
 echo "`date`]]"
 echo
 query="*2\r\n\$3\r\nget\r\n\$4\r\nkey7\r\n"
 echo "$query"
 #printf "$query" | nc 127.0.0.1 6379
-printf "$query" | nc 127.0.0.1 11311
+#printf "$query" | nc 127.0.0.1 11311
 echo

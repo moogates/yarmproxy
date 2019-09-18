@@ -75,25 +75,8 @@ bool RedisMgetCommand::GroupKeysByEndpoint(const redis::BulkArray& ba) {
 RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
                   const redis::BulkArray& ba)
     : Command(client)
-    , completed_backends_(0)
-    , unreachable_backends_(0)
 {
   GroupKeysByEndpoint(ba);
-}
-
-RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
-    size_t keys_count,
-    std::list<std::pair<ip::tcp::endpoint, std::string>>&& endpoint_query_list)
-    : Command(client)
-    , completed_backends_(0)
-    , unreachable_backends_(0)
-{
-  for(auto& it : endpoint_query_list) {
-    LOG_DEBUG << "RedisMgetCommand ctor, create query ep=" << it.first << " query=(" << it.second << ")";
-    query_set_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
-  }
-  LOG_WARN << "RedisMgetCommand ctor, query_set_.size=" << query_set_.size()
-            << " count=" << ++redis_mget_cmd_count;
 }
 
 RedisMgetCommand::~RedisMgetCommand() {

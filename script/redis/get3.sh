@@ -5,5 +5,6 @@ for i in `seq 1 10`; do
   printf "$query" | nc 127.0.0.1 11311
   echo -e "round $i ok.\r\n"
 done
+
 echo
 
