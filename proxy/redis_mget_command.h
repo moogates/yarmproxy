@@ -43,8 +43,9 @@ private:
   bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
 
   bool query_data_zero_copy() override {
-    return false;
+    return false; // a bit more copy, for less system call
   }
+  bool GroupKeysByEndpoint(const redis::BulkArray& ba);
 
 private:
   struct BackendQuery {
