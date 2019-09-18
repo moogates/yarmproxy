@@ -49,7 +49,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       LOG_DEBUG << "CreateCommand redis command empty bulk array";
       return -1;
     }
-    if (ba.present_bulks() == 0) {
+    if (ba.present_bulks() == 0 || ba[0].absent_size() > 0) {
       LOG_DEBUG << "CreateCommand redis command bulk array need more data";
       return 0;
     }
