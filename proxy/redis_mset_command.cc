@@ -309,7 +309,7 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
 
     const std::string& mset_prefix = MsetPrefix(query->bulks_count_ / 2);
 
-    LOG_DEBUG << "ActivateWaitingSubquery, cmd=" << this
+    LOG_WARN << "ActivateWaitingSubquery, cmd=" << this
               << " backend=" << query->backend_
               << " ep=" << query->backend_endpoint_
               << " query=" << query->backend_endpoint_
@@ -323,11 +323,15 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
   subqueries_.clear();
 }
 
-bool RedisMsetCommand::ParseIncompleteQuery2() {
-  LOG_DEBUG << "RedisMsetCommand::ParseIncompleteQuery2 unparsed_bulks_=" << unparsed_bulks_;
+bool RedisMsetCommand::ParseIncompleteQuery() {
   ReadBuffer* buffer = client_conn_->buffer();
   std::vector<redis::Bulk> new_bulks;
   size_t total_parsed = 0;
+
+  if (suspect_) {
+    LOG_WARN << "RedisMsetCommand::ParseIncompleteQuery unparsed_bulks_=" << unparsed_bulks_
+             << " unparsed_received_bytes=" << buffer->unparsed_received_bytes();
+  }
 
   while(new_bulks.size() < unparsed_bulks_ && total_parsed < buffer->unparsed_received_bytes()) {
     const char * entry = buffer->unparsed_data() + total_parsed;
@@ -336,6 +340,10 @@ bool RedisMsetCommand::ParseIncompleteQuery2() {
     redis::Bulk& bulk = new_bulks.back();
 
     if (bulk.present_size() < 0) {
+      if (suspect_) {
+        LOG_WARN << "RedisMsetCommand::ParseIncompleteQuery present_size error, data=["
+                 << std::string(entry, unparsed_bytes) << "]";
+      }
       return false;
     }
 
@@ -344,36 +352,54 @@ bool RedisMsetCommand::ParseIncompleteQuery2() {
       break;
     }
     total_parsed += bulk.total_size();
-    LOG_DEBUG << "ParseIncompleteQuery2 parsed_bytes=" << bulk.total_size() << " total_parsed=" << total_parsed;
+    LOG_DEBUG << "ParseIncompleteQuery parsed_bytes=" << bulk.total_size() << " total_parsed=" << total_parsed;
   }
 
   if (new_bulks.size() % 2 == 1) {
     total_parsed -= new_bulks.back().total_size();
     new_bulks.pop_back();
   }
-  LOG_DEBUG << "ParseIncompleteQuery2 new_bulks.size=" << new_bulks.size() << " unparsed_bulks_=" << unparsed_bulks_;
+
+  if (new_bulks.size() == 0) {
+    assert()
+    LOG_WARN << "ParseIncompleteQuery new_bulks empty, data=" << std::string(buffer->unprocessed_data(), buffer->received_bytes())
+             << " unparsed_bulks_=" << unparsed_bulks_
+             << " unparsed_received_bytes=" << buffer->unparsed_received_bytes();
+    assert(subqueries_.empty());
+    assert(total_parsed == 0);
+    suspect_ = true;
+
+    client_conn_->TryReadMoreQuery();
+    return true;
+  }
+
+  LOG_DEBUG << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size() << " unparsed_bulks_=" << unparsed_bulks_;
 
   size_t to_process_bytes = 0;
   for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) {
     // TODO : limit max pending subqueries
     ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(new_bulks[i].payload_data(), new_bulks[i].payload_size(), "REDIS_bj");
-    LOG_DEBUG << "ParseIncompleteQuery2, key=" << new_bulks[i].to_string()
+    if (suspect_) {
+      LOG_WARN << "ParseIncompleteQuery, key=" << new_bulks[i].to_string()
              << " v.present_size=[" << new_bulks[i + 1].present_size() << "] ep=" << ep;
+    }
     to_process_bytes += new_bulks[i].present_size();
     to_process_bytes += new_bulks[i + 1].present_size();
     PushSubquery(ep, new_bulks[i].raw_data(), new_bulks[i].present_size() + new_bulks[i+1].present_size());
   }
 
+  if (suspect_) {
+    LOG_WARN << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size() << " unparsed_bulks_=" << unparsed_bulks_
+          << " to_process_bytes=" << to_process_bytes
+          << " to_process_data=[" << std::string(buffer->unparsed_data(), to_process_bytes)
+          << "] total_parsed_bytes=" << total_parsed;
+  }
   assert(total_parsed >= to_process_bytes);
   buffer->update_processed_bytes(to_process_bytes);
   buffer->update_parsed_bytes(total_parsed);
   unparsed_bulks_ -= new_bulks.size();
   ActivateWaitingSubquery();
   return true;
-}
-
-bool RedisMsetCommand::ParseIncompleteQuery() {
-  return ParseIncompleteQuery2();
 }
 
 bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {

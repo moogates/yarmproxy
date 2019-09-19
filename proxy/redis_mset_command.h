@@ -26,7 +26,6 @@ private:
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
 
   bool ParseIncompleteQuery() override;
-  bool ParseIncompleteQuery2();
 
   void WriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
@@ -55,6 +54,7 @@ private:
     std::list<std::pair<const char*, size_t>> segments_;
   };
 
+  bool suspect_ = false;
   size_t unparsed_bulks_;
   bool init_write_query_ = true;
   std::map<ip::tcp::endpoint, std::shared_ptr<Subquery>> subqueries_;

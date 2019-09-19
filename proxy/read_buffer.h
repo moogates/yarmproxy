@@ -2,6 +2,8 @@
 #define _YARMPROXY_READ_BUFFER_H_
 
 #include <algorithm>
+#include <cassert>
+#include "base/logging.h"
 
 namespace yarmproxy {
 
@@ -78,6 +80,7 @@ public:
   size_t unparsed_bytes() const;  // 尚未解析的数据
 
   size_t parsed_unprocessed_bytes() const {
+    assert(parsed_offset_ >= processed_offset_);
     if (parsed_offset_ > processed_offset_) {
       return parsed_offset_ - processed_offset_;
     }
