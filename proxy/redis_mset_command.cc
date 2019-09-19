@@ -18,10 +18,10 @@ std::atomic_int redis_mset_cmd_count;
 
 static const std::string& MsetPrefix(size_t keys_count) {
   static std::map<size_t, std::string> prefix_cache {
-        {3, "*3\r\n$4\r\nmset\r\n"},
-        {5, "*5\r\n$4\r\nmset\r\n"},
-        {7, "*7\r\n$4\r\nmset\r\n"},
-        {9, "*9\r\n$4\r\nmset\r\n"}
+        {1, "*3\r\n$4\r\nmset\r\n"},
+        {2, "*5\r\n$4\r\nmset\r\n"},
+        {3, "*7\r\n$4\r\nmset\r\n"},
+        {4, "*9\r\n$4\r\nmset\r\n"}
       };
   const auto& it = prefix_cache.find(keys_count);
   if (it != prefix_cache.end()) {
@@ -394,10 +394,16 @@ bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   }
 
   backend->buffer()->update_parsed_bytes(p - entry + 1);
+
+  auto& query= pending_subqueries_[backend];
   LOG_DEBUG << "RedisMsetCommand ParseReply resp.size=" << p - entry + 1
-            << " contont=[" << std::string(entry, p - entry - 1) << "]"
-            << " set_reply_recv_complete, backend=" << backend
-            << " query=" << pending_subqueries_[backend]->backend_endpoint_;
+          << " contont=[" << std::string(entry, p - entry - 1) << "]"
+          << " unparsed_bytes=" << backend->buffer()->unparsed_bytes()
+          << "[" << std::string(p+1, backend->buffer()->unparsed_bytes()) << "]"
+          << "] set_reply_recv_complete, backend=" << backend
+          << " query.ep=" << query->backend_endpoint_
+          << " query.bulks_count=" << query->bulks_count_;
+  assert(backend->buffer()->unparsed_bytes() == 0);
   backend->set_reply_recv_complete();
   return true;
 }
