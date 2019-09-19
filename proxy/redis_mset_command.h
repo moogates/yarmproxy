@@ -57,7 +57,7 @@ private:
   bool suspect_ = false;
   size_t unparsed_bulks_;
   bool init_write_query_ = true;
-  std::map<ip::tcp::endpoint, std::shared_ptr<Subquery>> subqueries_;
+  std::map<ip::tcp::endpoint, std::shared_ptr<Subquery>> waiting_subqueries_;
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> pending_subqueries_;
   std::shared_ptr<Subquery> tail_query_;
   std::shared_ptr<BackendConn> replying_backend_;

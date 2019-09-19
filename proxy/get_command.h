@@ -15,9 +15,6 @@ using namespace boost::asio;
 class ParallelGetCommand : public Command {
 public:
   ParallelGetCommand(std::shared_ptr<ClientConnection> client,
-                     std::map<ip::tcp::endpoint, std::string>&& endpoint_query_map);
-
-  ParallelGetCommand(std::shared_ptr<ClientConnection> client,
                      const char* cmd_data, size_t cmd_size);
 
   virtual ~ParallelGetCommand();
@@ -46,28 +43,27 @@ private:
   }
 
 private:
-  static size_t ReplyBodyBytes(const char * data, const char * end);
-  static void GroupKeysByEndpoint(const char* cmd_data, size_t cmd_size,
-        std::map<ip::tcp::endpoint, std::string>* endpoint_key_map);
+  static size_t ParseReplyBodyBytes(const char * data, const char * end);
+  void ParseQuery(const char* cmd_data, size_t cmd_size);
 
   struct BackendQuery {
-    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
-        : query_line_(query_line)
+    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_data)
+        : query_data_(query_data)
         , backend_endpoint_(ep) {
     }
-    std::string query_line_;
+    std::string query_data_;
     ip::tcp::endpoint backend_endpoint_;
     std::shared_ptr<BackendConn> backend_conn_;
   };
 
-  std::vector<std::unique_ptr<BackendQuery>> query_set_;
+  std::vector<std::unique_ptr<BackendQuery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
 
   std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<BackendConn> last_backend_;
 
-  size_t completed_backends_;
-  size_t unreachable_backends_;
+  size_t completed_backends_ = 0;
+  size_t unreachable_backends_ = 0;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 };
 
