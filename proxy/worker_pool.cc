@@ -1,12 +1,13 @@
 #include "worker_pool.h"
 
+#include <iostream>
+
 #include "base/logging.h"
 
 #include "allocator.h"
-#include "backend_conn.h"
-// #include "client_conn.h"
+#include "backend_pool.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 #define SLAB_SIZE (4*1024) // TODO : use c++11 enum
 
@@ -23,27 +24,32 @@ BackendConnPool* WorkerContext::backend_conn_pool() {
   return backend_conn_pool_;
 }
 
-thread_local int WorkerPool::worker_id_;
-
 void WorkerPool::StartDispatching() {
   for(size_t i = 0; i < concurrency_; ++i) {
     WorkerContext& woker = workers_[i];
-    std::thread th([&woker, i]() {
-          WorkerPool::worker_id_ = i;
-          try {
+    std::atomic_bool& stopped(stopped_);
+    std::thread th([&woker, &stopped, i]() {
+        while(!stopped) {
+        //try {
             woker.io_service_.run();
-          } catch (std::exception& e) {
-            LOG_ERROR << "WorkerThread io_service.run error:" << e.what();
-          }
-        });
-    th.detach();
+        //} catch (std::exception& e) {
+        //  LOG_ERROR << "WorkerThread " << i << " io_service.run error:" << e.what();
+        //}
+        }
+        LOG_WARN << "WorkerThread " << i << " stopped.";
+      });
     woker.thread_ = std::move(th); // what to to with this thread handle?
   }
 }
 
 void WorkerPool::StopDispatching() {
+  stopped_ = true;
   for(size_t i = 0; i < concurrency_; ++i) {
     workers_[i].io_service_.stop();
+  }
+  for(size_t i = 0; i < concurrency_; ++i) {
+    LOG_WARN << "WorkerPool StopDispatching join " << i;
+    workers_[i].thread_.join();
   }
 }
 

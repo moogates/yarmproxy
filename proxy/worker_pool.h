@@ -1,10 +1,11 @@
-#ifndef _WORKER_POOL_H_
-#define _WORKER_POOL_H_
+#ifndef _YARMPROXY_WORKER_POOL_H_
+#define _YARMPROXY_WORKER_POOL_H_
 
 #include <thread>
+#include <atomic>
 #include <boost/asio.hpp>
 
-namespace mcproxy {
+namespace yarmproxy {
 using namespace boost::asio;
 
 class BackendConnPool;
@@ -27,6 +28,7 @@ class WorkerPool {
 public:
   explicit WorkerPool(size_t concurrency)
       : concurrency_(concurrency)
+      , stopped_(false)
       , workers_(new WorkerContext[concurrency])
       , next_worker_(0) { 
   }
@@ -38,9 +40,8 @@ public:
     return workers_[next_worker_++ % concurrency_];
   }
 private:
-  static thread_local int worker_id_;
-
   size_t concurrency_;
+  std::atomic_bool stopped_;
   WorkerContext* workers_; // TODO : use std::unique_ptr
 
   size_t next_worker_;
@@ -48,5 +49,5 @@ private:
 
 }
 
-#endif // _WORKER_POOL_H_
+#endif // _YARMPROXY_WORKER_POOL_H_
 

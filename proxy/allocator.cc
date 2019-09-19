@@ -2,7 +2,7 @@
 
 #include "base/logging.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 Allocator::Allocator(int slab_size, int slab_count)
     : slab_size_(slab_size)

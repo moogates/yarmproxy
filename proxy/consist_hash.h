@@ -1,5 +1,5 @@
-#ifndef _CONSIST_HASH_H_
-#define _CONSIST_HASH_H_
+#ifndef _YARMPROXY_CONSIST_HASH_H_
+#define _YARMPROXY_CONSIST_HASH_H_
 
 #include <string>
 #include <map>
@@ -11,7 +11,7 @@
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 using CacheNodeMap = std::map<ip::tcp::endpoint, size_t>;
 
@@ -50,5 +50,5 @@ private:
 
 }
 
-#endif // _CONSIST_HASH_H_
+#endif // _YARMPROXY_CONSIST_HASH_H_
 
