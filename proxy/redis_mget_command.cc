@@ -14,10 +14,7 @@ namespace yarmproxy {
 
 std::atomic_int redis_mget_cmd_count;
 
-RedisMgetCommand::BackendQuery::~BackendQuery() {
-}
-
-bool RedisMgetCommand::GroupKeysByEndpoint(const redis::BulkArray& ba) {
+bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
   ip::tcp::endpoint last_endpoint;
   const char* current_bulks_data = nullptr;
   size_t current_bulks_count = 0;
@@ -28,26 +25,26 @@ bool RedisMgetCommand::GroupKeysByEndpoint(const redis::BulkArray& ba) {
     ip::tcp::endpoint current_endpoint = BackendLoactor::Instance().Locate(bulk.payload_data(), bulk.payload_size(), "REDIS_bj");
     // ip::tcp::endpoint current_endpoint = BackendLoactor::Instance().Locate(bulk.payload_data(), bulk.payload_size());
 
-    LOG_DEBUG << "GroupKeysByEndpoint key=" << bulk.to_string() << " ep=" << current_endpoint
+    LOG_DEBUG << "ParseQuery key=" << bulk.to_string() << " ep=" << current_endpoint
               << " last_ep=" << last_endpoint;
 
     if (current_endpoint == last_endpoint) {
       ++current_bulks_count;
       current_bulks_bytes += bulk.total_size();
-      LOG_DEBUG << "GroupKeysByEndpoint subquery=[" << std::string(bulk.raw_data(), bulk.total_size()) << "]";
+      LOG_DEBUG << "ParseQuery subquery=[" << std::string(bulk.raw_data(), bulk.total_size()) << "]";
     } else {
       if (current_bulks_data != nullptr) {
         std::string subquery(redis::BulkArray::SerializePrefix(current_bulks_count + 1));
         subquery.append("$4\r\nmget\r\n"); // (ba[0].raw_data(), ba[0].total_size())
         subquery.append(current_bulks_data, current_bulks_bytes);
 
-        LOG_DEBUG << "GroupKeysByEndpoint create subquery ep=" << last_endpoint
+        LOG_DEBUG << "ParseQuery create subquery ep=" << last_endpoint
               << " bulks_count=" << current_bulks_count
               << " query=(" << subquery
               << ") current_key=" << bulk.to_string() << "(not included)";
 
         // endpoint_keys_list->emplace_back(last_endpoint, std::move(subquery));
-        query_set_.emplace_back(new BackendQuery(last_endpoint, std::move(subquery))); // TODO : zero copy
+        subqueries_.emplace_back(new BackendQuery(last_endpoint, std::move(subquery)));
 
         current_bulks_data = nullptr;
       }
@@ -55,7 +52,7 @@ bool RedisMgetCommand::GroupKeysByEndpoint(const redis::BulkArray& ba) {
       current_bulks_data = bulk.raw_data();
       current_bulks_count = 1;
       current_bulks_bytes = bulk.total_size();
-      LOG_DEBUG << "GroupKeysByEndpoint subquery=[" << std::string(bulk.raw_data(), bulk.total_size()) << "]";
+      LOG_DEBUG << "ParseQuery subquery=[" << std::string(bulk.raw_data(), bulk.total_size()) << "]";
     }
   }
 
@@ -64,23 +61,23 @@ bool RedisMgetCommand::GroupKeysByEndpoint(const redis::BulkArray& ba) {
     subquery.append("$4\r\nmget\r\n"); // (ba[0].raw_data(), ba[0].total_size())
     subquery.append(current_bulks_data, current_bulks_bytes);
     // endpoint_keys_list->emplace_back(last_endpoint, std::move(subquery));
-    query_set_.emplace_back(new BackendQuery(last_endpoint, std::move(subquery))); // TODO : zero copy
+    subqueries_.emplace_back(new BackendQuery(last_endpoint, std::move(subquery)));
 
-    LOG_DEBUG << "GroupKeysByEndpoint create last subquery ep=" << last_endpoint
+    LOG_DEBUG << "ParseQuery create last subquery ep=" << last_endpoint
               << " bulks_count=" << current_bulks_count;
   }
   return true;
 }
 
 RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
-                  const redis::BulkArray& ba)
+                                   const redis::BulkArray& ba)
     : Command(client)
 {
-  GroupKeysByEndpoint(ba);
+  ParseQuery(ba);
 }
 
 RedisMgetCommand::~RedisMgetCommand() {
-  for(auto& query : query_set_) {
+  for(auto& query : subqueries_) {
     if (!query->backend_conn_) {
       LOG_DEBUG << "RedisMgetCommand dtor Release null backend";
     } else {
@@ -92,27 +89,27 @@ RedisMgetCommand::~RedisMgetCommand() {
 }
 
 void RedisMgetCommand::WriteQuery() {
-  for(auto& query : query_set_) {
+  for(auto& query : subqueries_) {
     if (!query->backend_conn_) {
       query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
-      {
-        // redis mget special
-        waiting_reply_queue_.push_back(query->backend_conn_);
-        if (!replying_backend_) {
-          replying_backend_ = query->backend_conn_;
-        }
+
+      // redis mget special
+      waiting_reply_queue_.push_back(query->backend_conn_);
+      if (!replying_backend_) {
+        replying_backend_ = query->backend_conn_;
       }
     }
     LOG_DEBUG << "RedisMgetCommand WriteQuery cmd=" << this
               << " backend=" << query->backend_conn_ << ", query=("
-              << query->query_line_.substr(0, query->query_line_.size() - 2) << ")";
-    query->backend_conn_->WriteQuery(query->query_line_.data(), query->query_line_.size());
+              << query->query_data_.substr(0, query->query_data_.size() - 2) << ")";
+    query->backend_conn_->WriteQuery(query->query_data_.data(),
+                                     query->query_data_.size());
   }
 }
 
 void RedisMgetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
   if (received_reply_backends_.insert(backend).second) {
-    if (received_reply_backends_.size() == query_set_.size()) {
+    if (received_reply_backends_.size() == subqueries_.size()) {
       last_backend_ = backend;
     }
   }
@@ -202,8 +199,8 @@ bool RedisMgetCommand::HasUnfinishedBanckends() const {
   LOG_DEBUG << "RedisMgetCommand::HasUnfinishedBanckends"
             << " unreachable_backends_=" << unreachable_backends_
             << " completed_backends_=" << completed_backends_ 
-            << " total_backends=" << query_set_.size();
-  return unreachable_backends_ + completed_backends_ < query_set_.size();
+            << " total_backends=" << subqueries_.size();
+  return unreachable_backends_ + completed_backends_ < subqueries_.size();
 }
 
 void RedisMgetCommand::RotateReplyingBackend(bool recyclable) {

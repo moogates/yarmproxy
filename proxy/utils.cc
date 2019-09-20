@@ -6,6 +6,20 @@
 
 #include "base/logging.h"
 
+#define _GNU_SOURCE
+#include <sched.h>
+
+int SetCpuAffinity(int cpu) {
+#ifdef _LINUX
+  cpu_set_t  mask;
+  CPU_ZERO(&mask);
+  CPU_SET(cpu, &mask);
+  return sched_setaffinity(0, sizeof(mask), &mask);
+#else
+  return 1;
+#endif
+}
+
 int Daemonize() {
 #ifndef _WINDOWS  // TODO : 更标准的做法是怎样的?
     switch (fork()) {
@@ -14,29 +28,27 @@ int Daemonize() {
     case 0:
         break;
     default:
-        _exit(0);
+        exit(0);
     }
 
-    if (setsid() == -1)
-        return -1;
+    if (setsid() == -1) {
+      return -1;
+    }
+
     int fd = open("/dev/null", O_RDWR, 0);
     if (fd != -1) {
-        if(dup2(fd, STDIN_FILENO) < 0) {
-            LOG_WARN << "dup2 stdin error";
+        if (dup2(fd, STDIN_FILENO) < 0) {
             return -1;
         }
-        if(dup2(fd, STDOUT_FILENO) < 0) {
-            LOG_WARN << "dup2 stdout error";
+        if (dup2(fd, STDOUT_FILENO) < 0) {
             return -1;
         }
-        if(dup2(fd, STDERR_FILENO) < 0) {
-            LOG_WARN << "dup2 stderr error";
+        if (dup2(fd, STDERR_FILENO) < 0) {
             return -1;
         }
 
         if (fd > STDERR_FILENO) {
             if(close(fd) < 0) {
-                LOG_WARN << "close fd error";
                 return -1;
             }
         }

@@ -37,9 +37,9 @@ private:
 
 private:
   struct Subquery {
-    Subquery(const ip::tcp::endpoint& ep, size_t bulks_count, const char* data, size_t present_bytes)
+    Subquery(const ip::tcp::endpoint& ep, size_t keys_count, const char* data, size_t present_bytes)
         : backend_endpoint_(ep)
-        , bulks_count_(bulks_count)
+        , keys_count_(keys_count)
     {
       segments_.emplace_back(data, present_bytes);
     }
@@ -47,7 +47,7 @@ private:
     ip::tcp::endpoint backend_endpoint_;
     std::shared_ptr<BackendConn> backend_;
 
-    size_t bulks_count_;
+    size_t keys_count_;
     size_t phase_ = 0;
     bool query_recv_complete_ = false;
     bool connect_error_ = false;

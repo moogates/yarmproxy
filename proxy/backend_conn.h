@@ -75,9 +75,9 @@ private:
   BackendReplyReceivedCallback reply_received_callback_;
   BackendQuerySentCallback query_sent_callback_;
 
-  bool is_reading_more_;
-  bool reply_recv_complete_;  // if reveived end of reply from backend server. TODO : rename to "received_end_of_reply_"
-  bool no_recycle_;
+  bool is_reading_reply_    = false;
+  bool reply_recv_complete_ = false;
+  bool no_recycle_          = false;
 };
 
 }

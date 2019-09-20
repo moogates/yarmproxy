@@ -28,9 +28,8 @@ class WorkerPool {
 public:
   explicit WorkerPool(size_t concurrency)
       : concurrency_(concurrency)
-      , stopped_(false)
       , workers_(new WorkerContext[concurrency])
-      , next_worker_(0) { 
+      , stopped_(false) {
   }
 
   void StartDispatching();
@@ -41,10 +40,10 @@ public:
   }
 private:
   size_t concurrency_;
-  std::atomic_bool stopped_;
   WorkerContext* workers_; // TODO : use std::unique_ptr
 
-  size_t next_worker_;
+  std::atomic_bool stopped_;
+  size_t next_worker_ = 0;
 };
 
 }

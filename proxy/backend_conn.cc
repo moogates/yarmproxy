@@ -18,10 +18,7 @@ BackendConn::BackendConn(WorkerContext& context,
   : context_(context)
   , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , remote_endpoint_(endpoint)
-  , socket_(context.io_service_)
-  , is_reading_more_(false)
-  , reply_recv_complete_(false)
-  , no_recycle_(false) {
+  , socket_(context.io_service_) {
 }
 
 BackendConn::~BackendConn() {
@@ -37,19 +34,19 @@ void BackendConn::Close() {
 }
 
 void BackendConn::SetReplyData(const char* data, size_t bytes) {
-  assert(is_reading_more_ == false);
+  assert(is_reading_reply_ == false);
   buffer()->Reset();
   buffer()->push_reply_data(data, bytes);
 }
 
 void BackendConn::Reset() {
-  is_reading_more_ = false;
+  is_reading_reply_ = false;
   reply_recv_complete_  = false;
   buffer()->Reset();
 }
 
 void BackendConn::ReadReply() {
-  is_reading_more_ = true;
+  is_reading_reply_ = true;
   buffer_->inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(buffer_->free_space_begin(),
           buffer_->free_space_size()),
@@ -58,7 +55,7 @@ void BackendConn::ReadReply() {
 }
 
 void BackendConn::TryReadMoreReply() {
-  if (reply_recv_complete_ || is_reading_more_
+  if (reply_recv_complete_ || is_reading_reply_
       || !buffer_->has_much_free_space()) {
     return;
   }
@@ -111,7 +108,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error,
   } else {
     LOG_DEBUG << "HandleRead read ok, bytes_transferred="
               << bytes_transferred << " backend=" << this;
-    is_reading_more_ = false;
+    is_reading_reply_ = false;
 
     buffer_->update_received_bytes(bytes_transferred);
     buffer_->dec_recycle_lock();

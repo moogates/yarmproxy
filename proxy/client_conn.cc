@@ -75,12 +75,12 @@ void ClientConnection::TryReadMoreQuery() {
 }
 
 void ClientConnection::AsyncRead() {
-  if (is_reading_more_) {
+  if (is_reading_query_) {
     LOG_DEBUG << "ClientConnection::AsyncRead do nothing";
     return;
   }
   LOG_DEBUG << "ClientConnection::AsyncRead begin";
-  is_reading_more_ = true;
+  is_reading_query_ = true;
   buffer_->inc_recycle_lock();
   socket_.async_read_some(boost::asio::buffer(buffer_->free_space_begin(),
           buffer_->free_space_size()),
@@ -156,7 +156,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
 
 void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
-  is_reading_more_ = false;
+  is_reading_query_ = false;
   buffer_->dec_recycle_lock();
   if (error) {
     if (error == boost::asio::error::eof) {

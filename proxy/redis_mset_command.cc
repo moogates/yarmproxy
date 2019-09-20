@@ -30,23 +30,23 @@ static const std::string& MsetPrefix(size_t keys_count) {
 
   std::ostringstream oss;
   oss << '*' << (keys_count * 2 + 1) << "\r\n$4\r\nmset\r\n";
-  const auto& new_it = prefix_cache.insert(std::make_pair(keys_count, oss.str())).first;
+  const auto& new_it = prefix_cache.emplace(keys_count, oss.str()).first;
   return new_it->second;
 }
 
 void RedisMsetCommand::PushSubquery(const ip::tcp::endpoint& ep, const char* data, size_t bytes) {
   const auto& it = waiting_subqueries_.find(ep);
   if (it == waiting_subqueries_.cend()) {
-    LOG_DEBUG << "PushSubquery inc_recycle_lock add new endpoint " << ep << " , key=" << redis::Bulk(data, bytes).to_string();
+    LOG_DEBUG << "PushSubquery inc_recycle_lock add new endpoint " << ep
+              << " , key=" << redis::Bulk(data, bytes).to_string();
     client_conn_->buffer()->inc_recycle_lock();
-    auto res = waiting_subqueries_.insert(std::make_pair(ep, std::shared_ptr<Subquery>(
-                 new Subquery(ep, 2, data, bytes))));
+    auto res = waiting_subqueries_.emplace(ep, new Subquery(ep, 1, data, bytes));
     tail_query_ = res.first->second;
     return;
   }
 
   tail_query_ = it->second;
-  it->second->bulks_count_ += 2;
+  ++(it->second->keys_count_);
 
   auto& segment = it->second->segments_.back();
   if (segment.first + segment.second == data) {
@@ -306,14 +306,14 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
                << " query_recv_complete_ is false, pending_subqueries_.size=" << pending_subqueries_.size();
     }
 
-    const std::string& mset_prefix = MsetPrefix(query->bulks_count_ / 2);
+    const std::string& mset_prefix = MsetPrefix(query->keys_count_);
 
     LOG_WARN << "ActivateWaitingSubquery, cmd=" << this
               << " backend=" << query->backend_
               << " ep=" << query->backend_endpoint_
               << " query=" << query->backend_endpoint_
               << " segments_.size=" << query->segments_.size()
-              << " bulks_count_=" << query->bulks_count_
+              << " keys_count_=" << query->keys_count_
               << " prefix=[" << mset_prefix << "]";
 
     // TODO : merge adjcent shared-endpoint queries
@@ -425,7 +425,7 @@ bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
           << "[" << std::string(p+1, backend->buffer()->unparsed_bytes()) << "]"
           << "] set_reply_recv_complete, backend=" << backend
           << " query.ep=" << query->backend_endpoint_
-          << " query.bulks_count=" << query->bulks_count_;
+          << " query.keys_count=" << query->keys_count_;
   assert(backend->buffer()->unparsed_bytes() == 0);
   backend->set_reply_recv_complete();
   return true;

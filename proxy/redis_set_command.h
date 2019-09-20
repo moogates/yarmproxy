@@ -38,7 +38,7 @@ private:
 private:
   ip::tcp::endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_conn_;
-  /////////////////////// redis set only:
+
   size_t unparsed_bulks_;
   bool query_recv_complete_ = false;
   bool connect_error_ = false;

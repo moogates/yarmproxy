@@ -36,7 +36,8 @@ void RedisGetCommand::WriteQuery() {
   backend_conn_->WriteQuery(cmd_data_, cmd_bytes_);
 }
 
-void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
+        ErrorCode ec) {
   assert(backend == backend_conn_);
 
   if (ec != ErrorCode::E_SUCCESS
@@ -49,7 +50,7 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
   if (client_conn_->IsFirstCommand(shared_from_this())) {
     TryWriteReply(backend);
   }
-  backend->TryReadMoreReply(); // backend 正在read more的时候，不能memmove，不然写回的数据位置会相对漂移
+  backend->TryReadMoreReply();
 }
 
 

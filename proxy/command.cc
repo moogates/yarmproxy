@@ -46,11 +46,9 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   if (strncmp(buf, "*", 1) == 0) {
     redis::BulkArray ba(buf, size);
     if (ba.total_bulks() == 0) {
-      LOG_DEBUG << "CreateCommand redis command empty bulk array";
       return -1;
     }
     if (ba.present_bulks() == 0 || ba[0].absent_size() > 0) {
-      LOG_DEBUG << "CreateCommand redis command bulk array need more data";
       return 0;
     }
     if (ba[0].equals("get", sizeof("get") - 1)) {
@@ -73,8 +71,6 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       return ba.parsed_size();
     } else if (ba[0].equals("mset", sizeof("mset") - 1)) {
       if (ba.present_bulks() < 2 || !ba[1].completed()) {
-        LOG_DEBUG << "CreateCommand RedisMsetCommand need more data, present_bulks=" << ba.present_bulks()
-                  << "ba[1].completed=" << ba[1].completed();
         return 0;
       }
       command->reset(new RedisMsetCommand(client, ba));
@@ -101,6 +97,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
 
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
   if (strncmp(buf, "get ", 4) == 0) {
+    // TODO : strict protocol check
     command->reset(new ParallelGetCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;
   } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0
@@ -108,11 +105,11 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     size_t body_bytes;
     command->reset(new SetCommand(client, buf, cmd_line_bytes, &body_bytes));
     return cmd_line_bytes + body_bytes;
-  } else {
-    LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
-             << ") len=" << cmd_line_bytes << " client_conn=" << client;
-    return -1;
   }
+
+  LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
+           << ") len=" << cmd_line_bytes << " client_conn=" << client;
+  return -1;
 }
 
 std::shared_ptr<BackendConn> Command::AllocateBackend(const ip::tcp::endpoint& ep) {
@@ -123,15 +120,19 @@ std::shared_ptr<BackendConn> Command::AllocateBackend(const ip::tcp::endpoint& e
   return backend;
 }
 
-void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
+                                   ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     if (ec == ErrorCode::E_CONNECT) {
       OnBackendConnectError(backend);
 
-      // the buffer is still valid when backend CONNECT error
-      client_conn_->buffer()->dec_recycle_lock();
-      if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
-        client_conn_->TryReadMoreQuery();
+      // TODO : no duplicate code
+      if (query_data_zero_copy()) {
+        // client buffer is still valid when backend CONNECT error
+        client_conn_->buffer()->dec_recycle_lock();
+        if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+          client_conn_->TryReadMoreQuery();
+        }
       }
     } else {
       LOG_WARN << "OnWriteQueryFinished error";
@@ -150,14 +151,16 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCo
   backend->ReadReply();
 }
 
-void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
+                                   ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_WARN << "Command::OnWriteReplyFinished error, backend=" << backend;
+    LOG_WARN << "Command::OnWriteReplyFinished error, backend="
+             << backend;
     client_conn_->Abort();
     return;
   }
 
-  is_transfering_reply_ = false;
+  is_writing_reply_ = false;
   backend->buffer()->dec_recycle_lock();
 
   if (backend->finished()) {
@@ -172,8 +175,8 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCo
 }
 
 void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
-  LOG_DEBUG << "Command::OnBackendConnectError endpoint=" << backend->remote_endpoint()
-           << " backend=" << backend;
+  LOG_DEBUG << "Command::OnBackendConnectError endpoint="
+            << backend->remote_endpoint() << " backend=" << backend;
   static const char BACKEND_ERROR[] = "BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
   backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
   backend->set_reply_recv_complete();
@@ -186,21 +189,22 @@ void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
 
 void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
-  if (!is_transfering_reply_ && unprocessed > 0) {
-    is_transfering_reply_ = true; // TODO : 这个flag是否真的需要? 需要，防止重复的写回请求
+  if (!is_writing_reply_ && unprocessed > 0) {
+    is_writing_reply_ = true;
+
     backend->buffer()->inc_recycle_lock();
-  //client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
-  //                              WeakBind(&Command::OnWriteReplyFinished, backend));
-    std::shared_ptr<Command> cmd_ptr = shared_from_this();
+
+    // TODO : weak or shared?
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
-                                  [cmd_ptr, backend](ErrorCode ec) {
-                                    cmd_ptr->OnWriteReplyFinished(backend, ec);
-                                  });
-                                  // std::bind(&Command::OnWriteReplyFinished, shared_from_this(), backend));
+                                  WeakBind(&Command::OnWriteReplyFinished, backend));
+  //std::shared_ptr<Command> cmd_ptr = shared_from_this();
+  //client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
+  //                              [cmd_ptr, backend](ErrorCode ec) {
+  //                                cmd_ptr->OnWriteReplyFinished(backend, ec);
+  //                              });
 
     LOG_DEBUG << "Command::TryWriteReply backend=" << backend
               << "] unprocessed=" << unprocessed;
-             // << " data=(" << std::string(backend->buffer()->unprocessed_data(), unprocessed) << ")";
     backend->buffer()->update_processed_bytes(unprocessed);
   }
 }

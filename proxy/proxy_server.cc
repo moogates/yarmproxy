@@ -57,12 +57,14 @@ void ProxyServer::Run() {
     return;
   }
 
-  // SignalWatcher::Instance().RegisterHandler(SIGHUP, [this](int) { Stop(); });
-  SignalWatcher::Instance().RegisterHandler(SIGINT, [this](int) {
+  // SignalWatcher::Instance().RegisterHandler(SIGHUP, [this](int) { ReloadBackends(); });
+  SignalWatcher::Instance().RegisterHandler(SIGINT,
+      [this](int) {
         LOG_ERROR << "SIGINT Received.";
         Stop();
       });
-  SignalWatcher::Instance().RegisterHandler(SIGTERM, [this](int) {
+  SignalWatcher::Instance().RegisterHandler(SIGTERM,
+      [this](int) {
         LOG_ERROR << "SIGTERM Received.";
         Stop();
       });
@@ -94,10 +96,11 @@ void ProxyServer::StartAccept() {
 
   acceptor_.async_accept(client_conn->socket(),
       std::bind(&ProxyServer::HandleAccept, this, client_conn,
-        std::placeholders::_1));
+                std::placeholders::_1));
 }
 
-void ProxyServer::HandleAccept(std::shared_ptr<ClientConnection> client_conn, const boost::system::error_code& error) {
+void ProxyServer::HandleAccept(std::shared_ptr<ClientConnection> client_conn,
+                               const boost::system::error_code& error) {
   if (!error) {
     client_conn->StartRead();
     StartAccept();

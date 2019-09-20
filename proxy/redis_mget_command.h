@@ -41,21 +41,20 @@ private:
   bool query_data_zero_copy() override {
     return false; // a bit more copy, for less system call
   }
-  bool GroupKeysByEndpoint(const redis::BulkArray& ba);
+  bool ParseQuery(const redis::BulkArray& ba);
 
 private:
   struct BackendQuery {
-    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_line)
-        : query_line_(query_line)
+    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_data)
+        : query_data_(query_data)
         , backend_endpoint_(ep) {
     }
-    ~BackendQuery();
-    std::string query_line_;
+    std::string query_data_;
     ip::tcp::endpoint backend_endpoint_;
     std::shared_ptr<BackendConn> backend_conn_;
   };
 
-  std::vector<std::unique_ptr<BackendQuery>> query_set_;
+  std::vector<std::unique_ptr<BackendQuery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
 
   std::shared_ptr<BackendConn> replying_backend_;
