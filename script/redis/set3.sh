@@ -1,6 +1,5 @@
-echo "set key size is 100000"
 cat ./set3.data | nc 127.0.0.1 11311
-echo
+exit
 
 for key in key2019; do
   key_len=${#key}
