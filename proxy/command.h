@@ -28,7 +28,7 @@ protected: // TODO : best practice ?
   Command(std::shared_ptr<ClientConnection> client);
 public:
   virtual ~Command();
-  virtual void WriteQuery() = 0;
+  virtual bool WriteQuery() = 0;
   virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
   virtual void StartWriteReply() = 0;
 
@@ -36,6 +36,9 @@ public:
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
   virtual bool query_parsing_complete() {
+    return true;
+  }
+  virtual bool query_recv_complete() {
     return true;
   }
   virtual bool ParseIncompleteQuery() { return true; }

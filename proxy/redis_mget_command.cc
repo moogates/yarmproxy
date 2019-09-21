@@ -88,7 +88,7 @@ RedisMgetCommand::~RedisMgetCommand() {
   LOG_DEBUG << "RedisMgetCommand dtor, cmd=" << this << " count=" << --redis_mget_cmd_count;
 }
 
-void RedisMgetCommand::WriteQuery() {
+bool RedisMgetCommand::WriteQuery() {
   for(auto& query : subqueries_) {
     if (!query->backend_conn_) {
       query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
@@ -105,6 +105,7 @@ void RedisMgetCommand::WriteQuery() {
     query->backend_conn_->WriteQuery(query->query_data_.data(),
                                      query->query_data_.size());
   }
+  return false;
 }
 
 void RedisMgetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {

@@ -43,9 +43,17 @@ BackendConnPool* Command::backend_pool() {
 int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* command) {
+  const char * p = static_cast<const char *>(memchr(buf, '\n', size));
+  if (p == nullptr) {
+    LOG_DEBUG << "CreateCommand need more data";
+    return 0;
+  }
+
   if (strncmp(buf, "*", 1) == 0) {
     redis::BulkArray ba(buf, size);
     if (ba.total_bulks() == 0) {
+      LOG_WARN << "CreateCommand data_size=" << size << " bad_data=[" << std::string(buf, size) << "]";
+      abort();
       return -1;
     }
     if (ba.present_bulks() == 0 || ba[0].absent_size() > 0) {
@@ -87,12 +95,6 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
 
   {
     // TODO : memcached binary
-  }
-
-  const char * p = static_cast<const char *>(memchr(buf, '\n', size));
-  if (p == nullptr) {
-    LOG_DEBUG << "CreateCommand need more data";
-    return 0;
   }
 
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度

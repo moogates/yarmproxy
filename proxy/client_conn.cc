@@ -83,9 +83,7 @@ void ClientConnection::AsyncRead() {
   buffer_->inc_recycle_lock();
 
   LOG_DEBUG << "ClientConnection::AsyncRead begin, free_space_size=" << buffer_->free_space_size()
-            << " free_space_offset=" << buffer_->free_space_offset()
-            << " buffer=" << buffer_
-            << " recycle_lock_count=" << buffer_->recycle_lock_count();
+            << " buffer=" << buffer_;
 
   assert(buffer_->recycle_locked());
   socket_.async_read_some(boost::asio::buffer(buffer_->free_space_begin(),
@@ -165,7 +163,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
   is_reading_query_ = false;
 
-  LOG_WARN << "HandleRead dec_recycle_lock";
   if (error) {
     if (error == boost::asio::error::eof) {
       // TODO : gracefully shutdown
@@ -184,7 +181,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   buffer_->dec_recycle_lock();
 
   LOG_DEBUG << "HandleRead bytes_transferred=" << bytes_transferred
-            << " free_space_offset=" << buffer_->free_space_offset()
             << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes()
             << " buffer=" << buffer_
             << " unparsed_data=" << std::string(buffer_->unparsed_data(), buffer_->unparsed_received_bytes());
@@ -194,13 +190,16 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 
     LOG_DEBUG << "HandleRead BEFORE WriteQuery parsed_unreceived_bytes=" << buffer_->parsed_unreceived_bytes()
               << " unprocessed_bytes=" << buffer_->unprocessed_bytes();
-    active_cmd_queue_.back()->WriteQuery(); // TODO : WriteQuery is finished
+    bool no_callback = active_cmd_queue_.back()->WriteQuery(); // TODO : WriteQuery is finished
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
     LOG_DEBUG << "HandleRead AFTER WriteQuery parsed_unreceived_bytes=" << buffer_->parsed_unreceived_bytes();
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
-      // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
-                             // 的回调函数里面才继续read. 这并不是最佳方式
+      if (no_callback) {
+         // 现在的做法是，这里不继续read, 而是在WriteQuery
+         // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
+         TryReadMoreQuery(); 
+      }
       return;
     }
   }

@@ -6,11 +6,12 @@
 
 #include "base/logging.h"
 
-#define _GNU_SOURCE
+#ifdef _GNU_SOURCE
 #include <sched.h>
+#endif
 
 int SetCpuAffinity(int cpu) {
-#ifdef _LINUX
+#ifdef _GNU_SOURCE
   cpu_set_t  mask;
   CPU_ZERO(&mask);
   CPU_SET(cpu, &mask);

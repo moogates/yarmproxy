@@ -28,12 +28,13 @@ RedisGetCommand::~RedisGetCommand() {
   }
 }
 
-void RedisGetCommand::WriteQuery() {
+bool RedisGetCommand::WriteQuery() {
   if (!backend_conn_) {
     backend_conn_ = AllocateBackend(backend_endpoint_);
   }
   client_conn_->buffer()->inc_recycle_lock();
   backend_conn_->WriteQuery(cmd_data_, cmd_bytes_);
+  return false;
 }
 
 void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
