@@ -101,7 +101,8 @@ void RedisMsetCommand::WriteQuery() {
           LOG_WARN << "RedisMsetCommand WriteQuery connect_error_ query_recv_complete_, no last pending";
         }
       } else {
-        LOG_WARN << "RedisMsetCommand WriteQuery connect_error_ no query_recv_complete_, drop data";
+        LOG_WARN << "RedisMsetCommand WriteQuery connect_error_ no query_recv_complete_, read and drop all query data";
+        client_conn_->TryReadMoreQuery();
       }
       return;
     }
