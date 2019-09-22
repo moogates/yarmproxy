@@ -78,7 +78,8 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       command->reset(new RedisSetCommand(client, ba));
       return ba.parsed_size();
     } else if (ba[0].equals("mset", sizeof("mset") - 1)) {
-      if (ba.present_bulks() < 2 || !ba[1].completed()) {
+      // if (ba.present_bulks() < 2 || !ba[1].completed()) {
+      if (ba.present_bulks() < 3) {
         return 0;
       }
       command->reset(new RedisMsetCommand(client, ba));
