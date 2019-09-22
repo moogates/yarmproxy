@@ -247,10 +247,9 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
     if (query->segments_.empty()) {
       query->phase_ = 2;
       client_conn_->buffer()->dec_recycle_lock();
-      // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
-      if (!client_conn_->buffer()->recycle_locked() // 全部完成write query 才能释放recycle_lock
-          && (client_conn_->buffer()->parsed_unreceived_bytes() > 0
-              || !query_parsing_complete())) {
+      if (!client_conn_->buffer()->recycle_locked() &&
+          (client_conn_->buffer()->parsed_unreceived_bytes() > 0 ||
+              !query_parsing_complete())) {
         client_conn_->TryReadMoreQuery();
         LOG_DEBUG << "OnWriteQueryFinished ok TryReadMoreQuery";
       } else {
@@ -280,20 +279,36 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
     }
   } else if (query->phase_ == 3) {
     client_conn_->buffer()->dec_recycle_lock();
-    if (query == tail_query_ &&
-        !tail_query_->query_recv_complete_) {
-      LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3, TryReadMoreQuery"
+
+    if (query->query_recv_complete_) {
+      query->phase_ = 4;
+      LOG_WARN << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3 completed"
+                << " command=" << this
+                << " backend=" << backend;
+      backend->ReadReply();
+    } else {
+      assert(query == tail_query_);
+      client_conn_->TryReadMoreQuery();
+      LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3 continue"
                << " query_parsed_unreceived_bytes=" << client_conn_->buffer()->parsed_unreceived_bytes()
                << " command=" << this
                << " backend=" << backend;
-      client_conn_->TryReadMoreQuery();
-    } else {
-      LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3 completed"
-                << " command=" << this
-                << " backend=" << backend;
-      query->phase_ = 4;
-      backend->ReadReply();
     }
+
+  //if (query == tail_query_ &&
+  //    !tail_query_->query_recv_complete_) {
+  //  LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3, TryReadMoreQuery"
+  //           << " query_parsed_unreceived_bytes=" << client_conn_->buffer()->parsed_unreceived_bytes()
+  //           << " command=" << this
+  //           << " backend=" << backend;
+  //  client_conn_->TryReadMoreQuery();
+  //} else {
+  //  LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3 completed"
+  //            << " command=" << this
+  //            << " backend=" << backend;
+  //  query->phase_ = 4;
+  //  backend->ReadReply();
+  //}
     return;  // TODO : should return here?
   } else {
     assert(false);
