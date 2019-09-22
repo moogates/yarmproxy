@@ -22,18 +22,21 @@ private:
   void StartWriteReply() override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
-  void WriteQuery() override;
+  bool WriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool) override;
 
   bool query_data_zero_copy() override {
     return true;
   }
+  bool query_recv_complete() override;
 
   size_t ParseQuery(const char* cmd_line, size_t cmd_len);
 private:
   ip::tcp::endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_conn_;
+
+  bool query_recv_complete_ = false;
 };
 
 }

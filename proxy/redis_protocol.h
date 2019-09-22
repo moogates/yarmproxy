@@ -101,9 +101,13 @@ public:
     return p + 1;
   }
   size_t payload_size() const {
-    int sz = std::stoi(raw_data_ + 1);
-    return sz > 0 ? sz : 0;
-    // return std::stoi(raw_data_ + 1);
+    try {
+      int sz = std::stoi(raw_data_ + 1);
+      return sz > 0 ? sz : 0;
+    } catch (...) {
+      LOG_WARN << "stoi payload_size error, prefix=[" << std::string(raw_data_, 5) << "]";
+      return 0;
+    }
   }
 
   bool equals(const char* str, size_t size) const {
@@ -241,7 +245,12 @@ public:
   }
 
   size_t total_bulks() const {
-    return std::stoi(raw_data_ + 1);
+    try {
+      return std::stoi(raw_data_ + 1);
+    } catch (...) {
+      LOG_WARN << "stoi total_bulks error, prefix=[" << std::string(raw_data_, 5) << "]";
+      return 0;
+    }
   }
   size_t present_bulks() const {
     return items_.size();

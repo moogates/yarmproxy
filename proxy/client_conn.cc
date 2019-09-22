@@ -54,6 +54,7 @@ void ClientConnection::StartRead() {
   boost::system::error_code ec;
   ip::tcp::no_delay nodelay(true);
   socket_.set_option(nodelay, ec);
+  LOG_ERROR << "ClientConnection StartRead ===================================";
 
   UpdateTimer();
 
@@ -79,9 +80,13 @@ void ClientConnection::AsyncRead() {
     LOG_DEBUG << "ClientConnection::AsyncRead do nothing";
     return;
   }
-  LOG_DEBUG << "ClientConnection::AsyncRead begin";
   is_reading_query_ = true;
   buffer_->inc_recycle_lock();
+
+  LOG_DEBUG << "ClientConnection::AsyncRead begin, free_space_size=" << buffer_->free_space_size()
+            << " buffer=" << buffer_;
+
+  assert(buffer_->recycle_locked());
   socket_.async_read_some(boost::asio::buffer(buffer_->free_space_begin(),
           buffer_->free_space_size()),
       std::bind(&ClientConnection::HandleRead, shared_from_this(),
@@ -139,6 +144,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       LOG_DEBUG << "ProcessUnparsedQuery waiting for more data";
       return true;
     } else {
+      LOG_DEBUG << "ProcessUnparsedQuery parsed_bytes=" << parsed_bytes;
       buffer_->update_parsed_bytes(parsed_bytes);
 
       command->WriteQuery();
@@ -157,7 +163,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
 void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
   is_reading_query_ = false;
-  buffer_->dec_recycle_lock();
+
   if (error) {
     if (error == boost::asio::error::eof) {
       // TODO : gracefully shutdown
@@ -173,17 +179,25 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   UpdateTimer();
 
   buffer_->update_received_bytes(bytes_transferred);
+  buffer_->dec_recycle_lock();
+
   LOG_DEBUG << "HandleRead bytes_transferred=" << bytes_transferred
+            << " buffer=" << buffer_
             << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes();
+            // << " unparsed_data=" << std::string(buffer_->unparsed_data(), buffer_->unparsed_received_bytes());
 
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(!active_cmd_queue_.empty());
 
-    active_cmd_queue_.back()->WriteQuery();
+    bool no_callback = active_cmd_queue_.back()->WriteQuery(); // TODO : WriteQuery is finished
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
+
     if (buffer_->parsed_unreceived_bytes() > 0) {
-      // TryReadMoreQuery(); // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
-                             // 的回调函数里面才继续read. 这并不是最佳方式
+      // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
+      // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
+      if (no_callback) {
+         TryReadMoreQuery(); 
+      }
       return;
     }
   }

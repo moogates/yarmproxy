@@ -52,7 +52,7 @@ void ParallelGetCommand::ParseQuery(const char* cmd_data,
   }
 }
 
-void ParallelGetCommand::WriteQuery() {
+bool ParallelGetCommand::WriteQuery() {
   for(auto& query : subqueries_) {
     if (!query->backend_conn_) {
       query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
@@ -60,6 +60,7 @@ void ParallelGetCommand::WriteQuery() {
     query->backend_conn_->WriteQuery(query->query_data_.data(),
                                      query->query_data_.size());
   }
+  return false;
 }
 
 void ParallelGetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {

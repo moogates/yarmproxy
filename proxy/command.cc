@@ -43,9 +43,17 @@ BackendConnPool* Command::backend_pool() {
 int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* command) {
+  const char * p = static_cast<const char *>(memchr(buf, '\n', size));
+  if (p == nullptr) {
+    LOG_DEBUG << "CreateCommand need more data";
+    return 0;
+  }
+
   if (strncmp(buf, "*", 1) == 0) {
     redis::BulkArray ba(buf, size);
     if (ba.total_bulks() == 0) {
+      LOG_WARN << "CreateCommand data_size=" << size << " bad_data=[" << std::string(buf, size) << "]";
+      abort();
       return -1;
     }
     if (ba.present_bulks() == 0 || ba[0].absent_size() > 0) {
@@ -70,7 +78,8 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       command->reset(new RedisSetCommand(client, ba));
       return ba.parsed_size();
     } else if (ba[0].equals("mset", sizeof("mset") - 1)) {
-      if (ba.present_bulks() < 2 || !ba[1].completed()) {
+      // if (ba.present_bulks() < 2 || !ba[1].completed()) {
+      if (ba.present_bulks() < 3) {
         return 0;
       }
       command->reset(new RedisMsetCommand(client, ba));
@@ -87,12 +96,6 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
 
   {
     // TODO : memcached binary
-  }
-
-  const char * p = static_cast<const char *>(memchr(buf, '\n', size));
-  if (p == nullptr) {
-    LOG_DEBUG << "CreateCommand need more data";
-    return 0;
   }
 
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
@@ -116,7 +119,6 @@ std::shared_ptr<BackendConn> Command::AllocateBackend(const ip::tcp::endpoint& e
   auto backend = backend_pool()->Allocate(ep);
   backend->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend),
                              WeakBind(&Command::OnBackendReplyReceived, backend));
-  LOG_DEBUG << "SetCommand::WriteQuery allocated backend=" << backend;
   return backend;
 }
 
@@ -124,6 +126,8 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     if (ec == ErrorCode::E_CONNECT) {
+      LOG_WARN << "OnWriteQueryFinished connect error, backend=" << backend
+               << " ep=" << backend->remote_endpoint();
       OnBackendConnectError(backend);
 
       // TODO : no duplicate code
@@ -135,20 +139,29 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
         }
       }
     } else {
-      LOG_WARN << "OnWriteQueryFinished error";
+      LOG_WARN << "OnWriteQueryFinished error, backend=" << backend
+               << " ep=" << backend->remote_endpoint();
       client_conn_->Abort();
     }
     return;
   }
+  LOG_DEBUG << "OnWriteQueryFinished ok, backend=" << backend;
   if (query_data_zero_copy()) {
     client_conn_->buffer()->dec_recycle_lock();
     // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
-    if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+    // if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+    if (!query_recv_complete()) {
       client_conn_->TryReadMoreQuery();
+      LOG_DEBUG << "OnWriteQueryFinished ok, begin to read more query, backend=" << backend;
       return;
     }
   }
-  backend->ReadReply();
+  if (query_recv_complete()) {
+    LOG_DEBUG << "OnWriteQueryFinished ok, begin read reply, backend=" << backend;
+    backend->ReadReply();
+  } else {
+    LOG_DEBUG << "OnWriteQueryFinished ok, need more query, backend=" << backend;
+  }
 }
 
 void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,

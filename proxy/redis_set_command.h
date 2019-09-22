@@ -27,12 +27,15 @@ private:
 
   bool ParseIncompleteQuery() override;
 
-  void WriteQuery() override;
+  bool WriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool) override;
 
   bool query_data_zero_copy() override {
     return true;
+  }
+  bool query_recv_complete() override {
+    return query_recv_complete_;
   }
 
 private:

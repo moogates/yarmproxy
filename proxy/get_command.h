@@ -19,7 +19,7 @@ public:
 
   virtual ~ParallelGetCommand();
 
-  void WriteQuery() override;
+  bool WriteQuery() override;
 
   void StartWriteReply() override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;

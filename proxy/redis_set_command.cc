@@ -32,29 +32,47 @@ RedisSetCommand::~RedisSetCommand() {
   LOG_DEBUG << "RedisSetCommand dtor " << --redis_set_cmd_count;
 }
 
-void RedisSetCommand::WriteQuery() {
+bool RedisSetCommand::WriteQuery() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
-    LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is true";
+    // LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is true";
     query_recv_complete_ = true;
+  } else {
+    // LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is false, need read more from client conn";
   }
 
-  if (backend_conn_ && connect_error_) {
+  if (connect_error_) {
+    assert(backend_conn_);
     LOG_WARN << "RedisSetCommand WriteQuery connect_error_ is true, query_recv_complete_=" << query_recv_complete_;
-    if (client_conn_->IsFirstCommand(shared_from_this())
-        && query_recv_complete_) {
-      LOG_WARN << "RedisSetCommand WriteQuery connect_error_ write reply";
-      TryWriteReply(backend_conn_);
+    if (query_recv_complete_) {
+      if (client_conn_->IsFirstCommand(shared_from_this())) {
+        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ write reply";
+        TryWriteReply(backend_conn_);
+      } else {
+        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ wait to write reply";
+      }
+    } else {
+      return true; // no callback, try read more query directly
+      if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ don't write reply, current command wait for more query";
+        client_conn_->TryReadMoreQuery();
+      } else {
+        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ don't write reply, current command all query read";
+      }
     }
-    return;
+    return false;
   }
 
   if (!backend_conn_) {
     backend_conn_ = AllocateBackend(backend_endpoint_);
+    // LOG_WARN << "RedisSetCommand WriteQuery begin, backend=" << backend_conn_;
   }
 
+  LOG_DEBUG << "RedisSetCommand WriteQuery data, backend=" << backend_conn_
+           << " bytes=" << client_conn_->buffer()->unprocessed_bytes();
   client_conn_->buffer()->inc_recycle_lock();
   backend_conn_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
           client_conn_->buffer()->unprocessed_bytes());
+  return false;
 }
 
 void RedisSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
@@ -65,7 +83,10 @@ void RedisSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
   }
 
   if (client_conn_->IsFirstCommand(shared_from_this())) {
+    LOG_DEBUG << "OnBackendReplyReceived TryWriteReply backend=" << backend;
     TryWriteReply(backend);
+  } else {
+    LOG_DEBUG << "OnBackendReplyReceived wait to WriteReply backend=" << backend;
   }
   backend->TryReadMoreReply();
 }
@@ -92,6 +113,7 @@ void RedisSetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend
   backend->set_no_recycle();
 
   connect_error_ = true;
+
   if (query_recv_complete_) {
     if (client_conn_->IsFirstCommand(shared_from_this())) {
       LOG_WARN << "RedisSetCommand OnBackendConnectError write reply";

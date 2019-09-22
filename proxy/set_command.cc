@@ -41,7 +41,12 @@ SetCommand::~SetCommand() {
   }
 }
 
-void SetCommand::WriteQuery() {
+bool SetCommand::WriteQuery() {
+  if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
+    // LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is true";
+    query_recv_complete_ = true;
+  }
+
   if (!backend_conn_) {
     backend_conn_ = AllocateBackend(backend_endpoint_);
     LOG_DEBUG << "SetCommand::WriteQuery backend=" << backend_conn_;
@@ -51,6 +56,7 @@ void SetCommand::WriteQuery() {
   buffer->inc_recycle_lock();
   backend_conn_->WriteQuery(buffer->unprocessed_data(),
                             buffer->unprocessed_bytes());
+  return false;
 }
 
 void SetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
@@ -74,6 +80,10 @@ void SetCommand::StartWriteReply() {
 
 void SetCommand::RotateReplyingBackend(bool) {
   client_conn_->RotateReplyingCommand();
+}
+
+bool SetCommand::query_recv_complete() {
+  return query_recv_complete_;
 }
 
 bool SetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {

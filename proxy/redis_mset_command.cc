@@ -40,7 +40,8 @@ void RedisMsetCommand::PushSubquery(const ip::tcp::endpoint& ep, const char* dat
     LOG_DEBUG << "PushSubquery inc_recycle_lock add new endpoint " << ep
               << " , key=" << redis::Bulk(data, bytes).to_string();
     client_conn_->buffer()->inc_recycle_lock();
-    auto res = waiting_subqueries_.emplace(ep, new Subquery(ep, 1, data, bytes));
+    std::shared_ptr<Subquery> query(new Subquery(ep, 1, data, bytes));
+    auto res = waiting_subqueries_.emplace(ep, query);
     tail_query_ = res.first->second;
     return;
   }
@@ -67,57 +68,66 @@ RedisMsetCommand::RedisMsetCommand(std::shared_ptr<ClientConnection> client, con
     ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(ba[i].payload_data(), ba[i].payload_size(), "REDIS_bj");
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size() + ba[i+1].present_size());
   }
-  LOG_DEBUG << "RedisMsetCommand ctor " << ++redis_mset_cmd_count;
+  LOG_WARN << "RedisMsetCommand ctor " << ++redis_mset_cmd_count;
 }
 
 RedisMsetCommand::~RedisMsetCommand() {
+  LOG_WARN << "RedisMsetCommand dtor " << --redis_mset_cmd_count
+           << " pending_subqueries_.size=" << pending_subqueries_.size();
+
   // TODO : release all backends
-//if (backend_conn_) {
-//  backend_pool()->Release(backend_conn_);
-//}
-  LOG_DEBUG << "RedisMsetCommand dtor " << --redis_mset_cmd_count;
+  if (pending_subqueries_.size() != 1) {
+    LOG_WARN << "RedisMsetCommand dtor pending_subqueries_.size error";
+  }
+  for(auto& it : pending_subqueries_) {
+    backend_pool()->Release(it.second->backend_);
+  }
+
 }
 
-void RedisMsetCommand::WriteQuery() {
+bool RedisMsetCommand::WriteQuery() {
   if (!init_write_query_) {
     assert(tail_query_);
 
     if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
-      LOG_WARN << "RedisMsetCommand WriteQuery query_recv_complete_ is true";
+      LOG_DEBUG << "RedisMsetCommand WriteQuery query_recv_complete_ is true";
       tail_query_->query_recv_complete_ = true;
     }
 
-    if (tail_query_->backend_ && tail_query_->connect_error_) {
+    if (tail_query_->connect_error_) {
+      assert(tail_query_->backend_);
       if (tail_query_->query_recv_complete_) {
-        if (unparsed_bulks_ == 0 && waiting_subqueries_.size() == 0 && pending_subqueries_.size() == 1) {
+        if (unparsed_bulks_ == 0 &&
+            waiting_subqueries_.size() == 0 &&
+            pending_subqueries_.size() == 1) {
+          // should write reply in this subquery
           if (client_conn_->IsFirstCommand(shared_from_this())) {
-            LOG_WARN << "RedisMsetCommand WriteQuery connect_error_, last pending, write reply";
+            LOG_DEBUG << "last pending, try write reply";
             TryWriteReply(tail_query_->backend_);
           } else {
-            LOG_WARN << "RedisMsetCommand WriteQuery connect_error_, last pending, wait to reply";
+            LOG_DEBUG << "last pending, wait to write reply";
           }
         } else {
+          // not last pending, don't write reply in this subquery
           pending_subqueries_.erase(tail_query_->backend_);
-          LOG_WARN << "RedisMsetCommand WriteQuery connect_error_ query_recv_complete_, no last pending";
+          backend_pool()->Release(tail_query_->backend_);
         }
+        return false;
       } else {
-        LOG_WARN << "RedisMsetCommand WriteQuery connect_error_ no query_recv_complete_, drop data";
+        return true; // no callback, try read more query directly
       }
-      return;
     }
 
     tail_query_->phase_ = 3;
-    LOG_DEBUG << "WriteQuery non-init, data.size="
-             << client_conn_->buffer()->unprocessed_bytes()
-             << " backend=" << tail_query_->backend_;
     client_conn_->buffer()->inc_recycle_lock();
     tail_query_->backend_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
         client_conn_->buffer()->unprocessed_bytes());
-    return;
+    return false;
   }
 
   init_write_query_ = false;
   ActivateWaitingSubquery();
+  return false;
 }
 
 void RedisMsetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
@@ -130,22 +140,23 @@ void RedisMsetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backen
   if (subquery->query_recv_complete_) {
     if (unparsed_bulks_ == 0 && waiting_subqueries_.size() == 0 && pending_subqueries_.size() == 1) {
       if (client_conn_->IsFirstCommand(shared_from_this())) {
-        LOG_WARN << "RedisMsetCommand OnBackendConnectError write reply, ep=" << subquery->backend_endpoint_;
+        LOG_DEBUG << "RedisMsetCommand OnBackendConnectError write reply, ep=" << subquery->backend_endpoint_;
         TryWriteReply(backend);
       } else {
-        LOG_WARN << "RedisMsetCommand OnBackendConnectError waiting to write reply, ep=" << subquery->backend_endpoint_;
+        LOG_DEBUG << "RedisMsetCommand OnBackendConnectError waiting to write reply, ep=" << subquery->backend_endpoint_;
         replying_backend_ = backend;
       }
     } else {
-      LOG_WARN << "RedisMsetCommand OnBackendConnectError need not reply, ep=" << subquery->backend_endpoint_
+      LOG_DEBUG << "RedisMsetCommand OnBackendConnectError need not reply, ep=" << subquery->backend_endpoint_
                << " is_tail=" << (subquery == tail_query_) << " pending_subqueries_.size=" << pending_subqueries_.size();
       backend->set_reply_recv_complete();
       backend->set_no_recycle();
       pending_subqueries_.erase(backend);
+      backend_pool()->Release(backend);
     }
   } else {
     subquery->connect_error_ = true; // waiting for more query
-    LOG_WARN << "RedisMsetCommand OnBackendConnectError connect_error_, waiting for more query, ep=" << subquery->backend_endpoint_;
+    LOG_DEBUG << "RedisMsetCommand OnBackendConnectError connect_error_, waiting for more query, ep=" << subquery->backend_endpoint_;
   }
 }
 
@@ -165,23 +176,27 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
   if (unparsed_bulks_ == 0 && pending_subqueries_.size() == 1) {
     if (client_conn_->IsFirstCommand(shared_from_this())) {
       TryWriteReply(backend);
-      LOG_WARN << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+      LOG_DEBUG << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+               << " command=" << this
                << " write reply, backend=" << backend;
     } else {
-      LOG_WARN << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+      LOG_DEBUG << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+               << " command=" << this
                << " waiting to write reply, backend=" << backend;
       replying_backend_ = backend;
     }
   } else {
-    LOG_WARN << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
-             << " unparsed_bulks_=" << unparsed_bulks_
-             << " pending_subqueries_.size=" << pending_subqueries_.size()
-             << " don't write reply, backend=" << backend;
     // TODO : prepare for recycling, a bit tedious
     assert(backend->buffer()->unparsed_bytes() == 0);
     backend->buffer()->update_processed_bytes(backend->buffer()->unprocessed_bytes());
     backend->set_reply_recv_complete();
     pending_subqueries_.erase(backend);
+    backend_pool()->Release(backend);
+
+    LOG_DEBUG << "OnBackendReplyReceived command=" << this
+             << " unparsed_bulks_=" << unparsed_bulks_
+             << " pending_subqueries_.size=" << pending_subqueries_.size()
+             << " don't write reply, backend=" << backend;
   }
 }
 
@@ -212,9 +227,9 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
           && (client_conn_->buffer()->parsed_unreceived_bytes() > 0
               || !query_parsing_complete())) {
         client_conn_->TryReadMoreQuery();
-        LOG_WARN << "OnWriteQueryFinished E_CONNECT TryReadMoreQuery";
+        LOG_DEBUG << "OnWriteQueryFinished E_CONNECT TryReadMoreQuery";
       } else {
-        LOG_WARN << "OnWriteQueryFinished E_CONNECT no TryReadMoreQuery"
+        LOG_DEBUG << "OnWriteQueryFinished E_CONNECT no TryReadMoreQuery"
                  << " recycle_locked=" << client_conn_->buffer()->recycle_locked()
                  << " parsed_unreceived_bytes=" << client_conn_->buffer()->parsed_unreceived_bytes()
                  << " query_parsing_complete=" << query_parsing_complete();
@@ -232,91 +247,90 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
     query->phase_ = 1;
     assert(!query->segments_.empty());
     query->backend_->WriteQuery(query->segments_.front().first, query->segments_.front().second);
-    LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 1 finished, phase 2 launched";
+    LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_
+              << " backend=" << query->backend_
+              << " phase 1 finished, phase 2 launched";
     return;
   } else if (query->phase_ == 1) {
     query->segments_.pop_front();
     if (query->segments_.empty()) {
       query->phase_ = 2;
       client_conn_->buffer()->dec_recycle_lock();
-      // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
-      if (!client_conn_->buffer()->recycle_locked() // 全部完成write query 才能释放recycle_lock
-          && (client_conn_->buffer()->parsed_unreceived_bytes() > 0
-              || !query_parsing_complete())) {
+      if (!client_conn_->buffer()->recycle_locked() &&
+          (client_conn_->buffer()->parsed_unreceived_bytes() > 0 ||
+              !query_parsing_complete())) {
         client_conn_->TryReadMoreQuery();
-        LOG_WARN << "OnWriteQueryFinished ok TryReadMoreQuery";
+        LOG_DEBUG << "OnWriteQueryFinished ok TryReadMoreQuery";
       } else {
-        LOG_WARN << "OnWriteQueryFinished ok no TryReadMoreQuery"
+        LOG_DEBUG << "OnWriteQueryFinished ok no TryReadMoreQuery"
+                 << " command=" << this
                  << " recycle_locked=" << client_conn_->buffer()->recycle_locked()
                  << " parsed_unreceived_bytes=" << client_conn_->buffer()->parsed_unreceived_bytes()
                  << " query_parsing_complete=" << query_parsing_complete();
       }
 
-      if (query != tail_query_ || client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
-        LOG_WARN << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " read reply, backend=" << backend;
+      if (query != tail_query_ ||
+          query->query_recv_complete_) {
+        LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_
+                  << " read reply, backend=" << backend;
         backend->ReadReply();
       } else {
-        LOG_WARN << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " no read reply, backend=" << backend;
+        LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_
+                  << " no read reply, backend=" << backend;
       }
       return;
     } else {
-      LOG_DEBUG << "OnWriteQueryFinished index=" << query->backend_endpoint_
-                << " " << query->segments_.size() << " setments to write";
       query->backend_->WriteQuery(query->segments_.front().first, query->segments_.front().second);
       return;
     }
   } else if (query->phase_ == 3) {
     client_conn_->buffer()->dec_recycle_lock();
-    if (query == tail_query_ && client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
-      LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3, TryReadMoreQuery"
-               << " query_parsed_unreceived_bytes=" << client_conn_->buffer()->parsed_unreceived_bytes();
-      client_conn_->TryReadMoreQuery();
-    } else {
-      LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3 completed";
+
+    if (query->query_recv_complete_) {
       query->phase_ = 4;
       backend->ReadReply();
+    } else {
+      assert(query == tail_query_);
+      client_conn_->TryReadMoreQuery();
     }
-    return;  // TODO : should return here?
+
+  //if (query == tail_query_ &&
+  //    !tail_query_->query_recv_complete_) {
+  //  LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3, TryReadMoreQuery"
+  //           << " query_parsed_unreceived_bytes=" << client_conn_->buffer()->parsed_unreceived_bytes()
+  //           << " command=" << this
+  //           << " backend=" << backend;
+  //  client_conn_->TryReadMoreQuery();
+  //} else {
+  //  LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3 completed"
+  //            << " command=" << this
+  //            << " backend=" << backend;
+  //  query->phase_ = 4;
+  //  backend->ReadReply();
+  //}
+    return;
   } else {
-    LOG_ERROR << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase=" << query->phase_;
     assert(false);
   }
 }
 
 bool RedisMsetCommand::query_parsing_complete() {
-  // assert(unparsed_bulks_ == 0);
   return unparsed_bulks_ == 0;
 }
 
 void RedisMsetCommand::ActivateWaitingSubquery() {
-  LOG_DEBUG << "ActivateWaitingSubquery begin, cmd=" << this;
   for(auto& it : waiting_subqueries_) {  // TODO : 能否直接遍历values?
     auto& query = it.second;
     assert(query->backend_ == nullptr);
     query->backend_ = AllocateBackend(query->backend_endpoint_);
     pending_subqueries_[query->backend_] = query;
 
-    if (query != tail_query_
-        || client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
-      LOG_WARN << "WriteQuery ep=" << query->backend_endpoint_
-               << " query_recv_complete_ is true, pending_subqueries_.size=" << pending_subqueries_.size();
+    if (query != tail_query_ ||
+        client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
       query->query_recv_complete_ = true;
-    } else {
-      LOG_WARN << "WriteQuery ep=" << query->backend_endpoint_
-               << " query_recv_complete_ is false, pending_subqueries_.size=" << pending_subqueries_.size();
     }
 
     const std::string& mset_prefix = MsetPrefix(query->keys_count_);
-
-    LOG_WARN << "ActivateWaitingSubquery, cmd=" << this
-              << " backend=" << query->backend_
-              << " ep=" << query->backend_endpoint_
-              << " query=" << query->backend_endpoint_
-              << " segments_.size=" << query->segments_.size()
-              << " keys_count_=" << query->keys_count_
-              << " prefix=[" << mset_prefix << "]";
-
-    // TODO : merge adjcent shared-endpoint queries
     query->backend_->WriteQuery(mset_prefix.data(), mset_prefix.size());
   }
   waiting_subqueries_.clear();
@@ -327,22 +341,14 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
   std::vector<redis::Bulk> new_bulks;
   size_t total_parsed = 0;
 
-  if (suspect_) {
-    LOG_WARN << "RedisMsetCommand::ParseIncompleteQuery unparsed_bulks_=" << unparsed_bulks_
-             << " unparsed_received_bytes=" << buffer->unparsed_received_bytes();
-  }
-
-  while(new_bulks.size() < unparsed_bulks_ && total_parsed < buffer->unparsed_received_bytes()) {
+  while(new_bulks.size() < unparsed_bulks_ &&
+        total_parsed < buffer->unparsed_received_bytes()) {
     const char * entry = buffer->unparsed_data() + total_parsed;
     size_t unparsed_bytes = buffer->unparsed_received_bytes() - total_parsed;
     new_bulks.emplace_back(entry, unparsed_bytes);
     redis::Bulk& bulk = new_bulks.back();
 
     if (bulk.present_size() < 0) {
-      if (suspect_) {
-        LOG_WARN << "RedisMsetCommand::ParseIncompleteQuery present_size error, data=["
-                 << std::string(entry, unparsed_bytes) << "]";
-      }
       return false;
     }
 
@@ -351,46 +357,37 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
       break;
     }
     total_parsed += bulk.total_size();
-    LOG_DEBUG << "ParseIncompleteQuery parsed_bytes=" << bulk.total_size() << " total_parsed=" << total_parsed;
+    LOG_DEBUG << "ParseIncompleteQuery current bulk parsed_bytes="
+              << bulk.total_size();
   }
 
   if (new_bulks.size() % 2 == 1) {
     total_parsed -= new_bulks.back().total_size();
     new_bulks.pop_back();
   }
+  LOG_DEBUG << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size()
+            << " total_parsed=" << total_parsed;
 
   if (new_bulks.size() == 0) {
-    LOG_WARN << "ParseIncompleteQuery new_bulks empty, data=" << std::string(buffer->unprocessed_data(), buffer->received_bytes())
-             << " unparsed_bulks_=" << unparsed_bulks_
-             << " unparsed_received_bytes=" << buffer->unparsed_received_bytes();
-    assert(waiting_subqueries_.empty());
-    assert(total_parsed == 0);
-    suspect_ = true;
-
     client_conn_->TryReadMoreQuery();
     return true;
   }
 
-  LOG_DEBUG << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size() << " unparsed_bulks_=" << unparsed_bulks_;
+  LOG_DEBUG << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size()
+            << " unparsed_bulks_=" << unparsed_bulks_;
 
   size_t to_process_bytes = 0;
   for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) {
-    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(new_bulks[i].payload_data(), new_bulks[i].payload_size(), "REDIS_bj");
-    if (suspect_) {
-      LOG_WARN << "ParseIncompleteQuery, key=" << new_bulks[i].to_string()
-             << " v.present_size=[" << new_bulks[i + 1].present_size() << "] ep=" << ep;
-    }
+    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
+                                new_bulks[i].payload_data(),
+                                new_bulks[i].payload_size(),
+                                "REDIS_bj");
     to_process_bytes += new_bulks[i].present_size();
     to_process_bytes += new_bulks[i + 1].present_size();
-    PushSubquery(ep, new_bulks[i].raw_data(), new_bulks[i].present_size() + new_bulks[i+1].present_size());
+    PushSubquery(ep, new_bulks[i].raw_data(),
+        new_bulks[i].present_size() + new_bulks[i+1].present_size());
   }
 
-  if (suspect_) {
-    LOG_WARN << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size() << " unparsed_bulks_=" << unparsed_bulks_
-          << " to_process_bytes=" << to_process_bytes
-          << " to_process_data=[" << std::string(buffer->unparsed_data(), to_process_bytes)
-          << "] total_parsed_bytes=" << total_parsed;
-  }
   assert(total_parsed >= to_process_bytes);
   buffer->update_processed_bytes(to_process_bytes);
   buffer->update_parsed_bytes(total_parsed);
@@ -404,28 +401,17 @@ bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(unparsed > 0);
   const char * entry = backend->buffer()->unparsed_data();
   if (entry[0] != '+' && entry[0] != '-' && entry[0] != '$') {
-    LOG_DEBUG << "RedisMsetCommand ParseReply unknown reply format(" << std::string(entry, unparsed) << ")";
     return false;
   }
 
   const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed));
   if (p == nullptr) {
-    LOG_DEBUG << "RedisMsetCommand ParseReply no enough data for parsing, please read more"
-              // << " data=" << std::string(entry, backend->buffer()->unparsed_bytes())
-              << " bytes=" << backend->buffer()->unparsed_bytes();
+    LOG_DEBUG << "RedisMsetCommand ParseReply need more data";
     return true;
   }
 
   backend->buffer()->update_parsed_bytes(p - entry + 1);
 
-  auto& query= pending_subqueries_[backend];
-  LOG_DEBUG << "RedisMsetCommand ParseReply resp.size=" << p - entry + 1
-          << " contont=[" << std::string(entry, p - entry - 1) << "]"
-          << " unparsed_bytes=" << backend->buffer()->unparsed_bytes()
-          << "[" << std::string(p+1, backend->buffer()->unparsed_bytes()) << "]"
-          << "] set_reply_recv_complete, backend=" << backend
-          << " query.ep=" << query->backend_endpoint_
-          << " query.keys_count=" << query->keys_count_;
   assert(backend->buffer()->unparsed_bytes() == 0);
   backend->set_reply_recv_complete();
   return true;
