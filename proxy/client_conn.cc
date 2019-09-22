@@ -54,6 +54,7 @@ void ClientConnection::StartRead() {
   boost::system::error_code ec;
   ip::tcp::no_delay nodelay(true);
   socket_.set_option(nodelay, ec);
+  LOG_ERROR << "ClientConnection StartRead ===================================";
 
   UpdateTimer();
 
@@ -143,7 +144,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       LOG_DEBUG << "ProcessUnparsedQuery waiting for more data";
       return true;
     } else {
-      LOG_DEBUG << "ProcessUnparsedQuery ~~~~~~~~~~~~~~~~~~~~~";
+      LOG_DEBUG << "ProcessUnparsedQuery parsed_bytes=" << parsed_bytes;
       buffer_->update_parsed_bytes(parsed_bytes);
 
       command->WriteQuery();
@@ -181,29 +182,25 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   buffer_->dec_recycle_lock();
 
   LOG_DEBUG << "HandleRead bytes_transferred=" << bytes_transferred
-            << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes()
             << " buffer=" << buffer_
-            << " unparsed_data=" << std::string(buffer_->unparsed_data(), buffer_->unparsed_received_bytes());
+            << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes();
+            // << " unparsed_data=" << std::string(buffer_->unparsed_data(), buffer_->unparsed_received_bytes());
 
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(!active_cmd_queue_.empty());
 
-    LOG_DEBUG << "HandleRead BEFORE WriteQuery parsed_unreceived_bytes=" << buffer_->parsed_unreceived_bytes()
-              << " unprocessed_bytes=" << buffer_->unprocessed_bytes();
     bool no_callback = active_cmd_queue_.back()->WriteQuery(); // TODO : WriteQuery is finished
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
-    LOG_DEBUG << "HandleRead AFTER WriteQuery parsed_unreceived_bytes=" << buffer_->parsed_unreceived_bytes();
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
+      // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
+      // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
       if (no_callback) {
-         // 现在的做法是，这里不继续read, 而是在WriteQuery
-         // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
          TryReadMoreQuery(); 
       }
       return;
     }
   }
-  LOG_DEBUG << "ClientConnection::HandleRead ====================";
 
   // process the big bulk arrays in redis query
   if (!active_cmd_queue_.empty() &&
@@ -214,7 +211,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 
   if (active_cmd_queue_.empty() ||
       active_cmd_queue_.back()->query_parsing_complete()) {
-    LOG_DEBUG << "ClientConnection::HandleRead ++++++++++++++++++++";
     ProcessUnparsedQuery();
   }
   return;
