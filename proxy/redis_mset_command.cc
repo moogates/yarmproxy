@@ -115,6 +115,7 @@ bool RedisMsetCommand::WriteQuery() {
             TryWriteReply(tail_query_->backend_);
           } else {
             LOG_DEBUG << "last pending, wait to write reply";
+            replying_backend_ = tail_query_->backend_;
           }
         } else {
           // not last pending, don't write reply in this subquery
