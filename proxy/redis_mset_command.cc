@@ -88,7 +88,6 @@ RedisMsetCommand::~RedisMsetCommand() {
 bool RedisMsetCommand::WriteQuery() {
   if (!init_write_query_) {
     assert(tail_query_);
-
     if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
       LOG_DEBUG << "RedisMsetCommand WriteQuery query_recv_complete_ is true";
       tail_query_->query_recv_complete_ = true;
@@ -135,20 +134,24 @@ void RedisMsetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backen
   backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
-  assert(waiting_subqueries_.size() == 0);
+
   auto& subquery = pending_subqueries_[backend];
   if (subquery->query_recv_complete_) {
-    if (unparsed_bulks_ == 0 && waiting_subqueries_.size() == 0 && pending_subqueries_.size() == 1) {
+    if (unparsed_bulks_ == 0 && pending_subqueries_.size() == 1) {
       if (client_conn_->IsFirstCommand(shared_from_this())) {
-        LOG_DEBUG << "RedisMsetCommand OnBackendConnectError write reply, ep=" << subquery->backend_endpoint_;
+        LOG_DEBUG << "RedisMsetCommand OnBackendConnectError write reply, ep="
+                  << subquery->backend_endpoint_;
         TryWriteReply(backend);
       } else {
-        LOG_DEBUG << "RedisMsetCommand OnBackendConnectError waiting to write reply, ep=" << subquery->backend_endpoint_;
+        LOG_DEBUG << "RedisMsetCommand OnBackendConnectError waiting to write reply, ep="
+                  << subquery->backend_endpoint_;
         replying_backend_ = backend;
       }
     } else {
-      LOG_DEBUG << "RedisMsetCommand OnBackendConnectError need not reply, ep=" << subquery->backend_endpoint_
-               << " is_tail=" << (subquery == tail_query_) << " pending_subqueries_.size=" << pending_subqueries_.size();
+      LOG_DEBUG << "RedisMsetCommand OnBackendConnectError need not reply, ep="
+                << subquery->backend_endpoint_
+                << " is_tail=" << (subquery == tail_query_)
+                << " pending_subqueries_.size=" << pending_subqueries_.size();
       backend->set_reply_recv_complete();
       backend->set_no_recycle();
       pending_subqueries_.erase(backend);
@@ -156,11 +159,13 @@ void RedisMsetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backen
     }
   } else {
     subquery->connect_error_ = true; // waiting for more query
-    LOG_DEBUG << "RedisMsetCommand OnBackendConnectError connect_error_, waiting for more query, ep=" << subquery->backend_endpoint_;
+    LOG_DEBUG << "RedisMsetCommand OnBackendConnectError connect_error_, waiting for more query, ep="
+              << subquery->backend_endpoint_;
   }
 }
 
-void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
+                                              ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
     LOG_DEBUG << "Command::OnBackendReplyReceived error, backend=" << backend;
     client_conn_->Abort();
