@@ -134,7 +134,8 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
       if (query_data_zero_copy()) {
         // client buffer is still valid when backend CONNECT error
         client_conn_->buffer()->dec_recycle_lock();
-        if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+        // if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
+        if (!query_recv_complete()) {
           client_conn_->TryReadMoreQuery();
         }
       }
