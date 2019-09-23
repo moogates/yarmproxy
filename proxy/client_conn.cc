@@ -101,7 +101,15 @@ void ClientConnection::RotateReplyingCommand() {
 
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
-    active_cmd_queue_.front()->StartWriteReply();
+    // active_cmd_queue_.front()->StartWriteReply();
+    auto& next = active_cmd_queue_.front();
+    next->StartWriteReply();
+    if (!next->query_recv_complete()) {
+      // reading next query might be interruptted by previous lock,
+      // so try to restart the reading here
+      // TryReadMoreQuery();
+    }
+
     ProcessUnparsedQuery();
   }
 }
@@ -147,11 +155,14 @@ bool ClientConnection::ProcessUnparsedQuery() {
       LOG_DEBUG << "ProcessUnparsedQuery parsed_bytes=" << parsed_bytes;
       buffer_->update_parsed_bytes(parsed_bytes);
 
-      command->WriteQuery();
+      bool no_callback = command->WriteQuery();
       active_cmd_queue_.push_back(command);
       buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
       if (!command->query_parsing_complete()) {
+        if (no_callback) {
+          TryReadMoreQuery();
+        }
         break;
       }
     }

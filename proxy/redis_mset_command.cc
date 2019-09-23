@@ -82,7 +82,17 @@ RedisMsetCommand::~RedisMsetCommand() {
   for(auto& it : pending_subqueries_) {
     backend_pool()->Release(it.second->backend_);
   }
+}
 
+bool RedisMsetCommand::query_recv_complete() {
+  return tail_query_->query_recv_complete_ && query_parsing_complete();
+//if ((tail_query_->query_recv_complete_ && query_parsing_complete()) != query_recv_complete_) {
+//  LOG_WARN << "query_recv_complete. total query_recv_complete_=" << query_recv_complete_
+//         << " tail_query_->query_recv_complete_=" << tail_query_->query_recv_complete_
+//         << " query_parsing_complete=" << query_parsing_complete();
+//  assert(false);
+//}
+//return query_recv_complete_; // TODO : remove query_recv_complete_
 }
 
 bool RedisMsetCommand::WriteQuery() {
@@ -229,10 +239,11 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
       // 等同于转发完成已收数据
       client_conn_->buffer()->dec_recycle_lock();
       if (!client_conn_->buffer()->recycle_locked() && // 全部完成write query 才能释放recycle_lock
-          !tail_query_->query_recv_complete_) {
-        //&& (client_conn_->buffer()->parsed_unreceived_bytes() > 0
+          (!tail_query_->query_recv_complete_ || !query_parsing_complete())) {
+        // 2.   !tail_query_->query_recv_complete_) {
+        // 3. (client_conn_->buffer()->parsed_unreceived_bytes() > 0
         //    || !query_parsing_complete())) {
-        // TODO : are they equal?
+        // TODO : check them extremely carefully
         assert(client_conn_->buffer()->parsed_unreceived_bytes() > 0 ||
               !query_parsing_complete());
         client_conn_->TryReadMoreQuery();
@@ -268,6 +279,8 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
       if (!client_conn_->buffer()->recycle_locked() &&
           (client_conn_->buffer()->parsed_unreceived_bytes() > 0 ||
               !query_parsing_complete())) {
+    //if (!client_conn_->buffer()->recycle_locked() && !query_recv_complete()) {
+        // TODO : check them extremely carefully
         client_conn_->TryReadMoreQuery();
         LOG_DEBUG << "OnWriteQueryFinished ok TryReadMoreQuery";
       } else {
