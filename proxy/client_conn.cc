@@ -159,7 +159,9 @@ bool ClientConnection::ProcessUnparsedQuery() {
       active_cmd_queue_.push_back(command);
       buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
-      if (!command->query_parsing_complete()) {
+      // TODO : check the precondition very carefully
+      // if (!command->query_parsing_complete()) {
+      if (buffer_->parsed_unreceived_bytes() > 0) {
         if (no_callback) {
           TryReadMoreQuery();
         }
