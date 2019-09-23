@@ -102,6 +102,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes,
 
 void BackendConn::HandleRead(const boost::system::error_code& error,
                              size_t bytes_transferred) {
+  is_reading_reply_ = false;
   if (error) {
     LOG_WARN << "HandleRead read error, backend=" << this
              << " ep=" << remote_endpoint_ << " err=" << error.message();
@@ -110,7 +111,6 @@ void BackendConn::HandleRead(const boost::system::error_code& error,
   } else {
     LOG_DEBUG << "HandleRead read ok, bytes_transferred="
               << bytes_transferred << " backend=" << this;
-    is_reading_reply_ = false;
 
     buffer_->update_received_bytes(bytes_transferred);
     buffer_->dec_recycle_lock();

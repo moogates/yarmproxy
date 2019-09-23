@@ -28,6 +28,8 @@ public:
 private:
   // void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
+  void OnBackendError(std::shared_ptr<BackendConn> backend, const char* err_reply); // TODO : base class need it!
+
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool success) override;
 
@@ -37,6 +39,7 @@ private:
   }
 
 private:
+  bool has_read_some_reply_ = false;
   const char* cmd_data_;
   size_t cmd_bytes_;
   ip::tcp::endpoint backend_endpoint_;

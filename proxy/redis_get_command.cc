@@ -37,17 +37,36 @@ bool RedisGetCommand::WriteQuery() {
   return false;
 }
 
-void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
-        ErrorCode ec) {
-  assert(backend == backend_conn_);
-
-  if (ec != ErrorCode::E_SUCCESS
-      || ParseReply(backend) == false) {
-    LOG_WARN << "RedisGetCommand::OnBackendReplyReceived error, backend=" << backend;
+void RedisGetCommand::OnBackendError(std::shared_ptr<BackendConn> backend, const char* err_reply) {
+  if (has_read_some_reply_) {
     client_conn_->Abort();
     return;
   }
+  backend->SetReplyData(err_reply, strlen(err_reply));
+  backend->set_reply_recv_complete();
+  backend->set_no_recycle();
 
+  if (client_conn_->IsFirstCommand(shared_from_this())) {
+    TryWriteReply(backend);
+  }
+}
+
+void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
+        ErrorCode ec) {
+  assert(backend == backend_conn_);
+  if (ec != ErrorCode::E_SUCCESS) {
+    LOG_WARN << "RedisGetCommand::OnBackendReplyReceived read error, backend=" << backend;
+    OnBackendError(backend, "-Backend Read Error\r\n");
+    return;
+  }
+
+  if (ParseReply(backend) == false) {
+    LOG_WARN << "RedisGetCommand::OnBackendReplyReceived protocol error, backend=" << backend;
+    OnBackendError(backend, "-Backend Protocol Error\r\n");
+    return;
+  }
+
+  has_read_some_reply_ = true;
   if (client_conn_->IsFirstCommand(shared_from_this())) {
     TryWriteReply(backend);
   }
@@ -58,18 +77,9 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
 void RedisGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
   // TODO : use base class impl
   assert(backend == backend_conn_);
-
-  static const char END_RN[] = "-Backend Connect Failed\r\n"; // TODO : 统一放置错误码
-  backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
   LOG_WARN << "RedisGetCommand::OnBackendConnectError endpoint="
           << backend->remote_endpoint() << " backend=" << backend;
-
-  backend->set_reply_recv_complete();
-  backend->set_no_recycle();
-
-  if (client_conn_->IsFirstCommand(shared_from_this())) {
-    TryWriteReply(backend);
-  }
+  OnBackendError(backend, "-Backend Connect Error\r\n");
 }
 
 void RedisGetCommand::RotateReplyingBackend(bool) {
