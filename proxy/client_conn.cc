@@ -218,6 +218,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 
 void ClientConnection::Abort() {
   LOG_WARN << "ClientConnection::Abort client=" << this;
+  // aborted_ = true; // TODO : add aborted_ flag to disable HandleRead callback?
   timer_.cancel();
   active_cmd_queue_.clear();
   socket_.close();

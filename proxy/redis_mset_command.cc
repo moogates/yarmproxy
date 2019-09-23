@@ -86,13 +86,13 @@ RedisMsetCommand::~RedisMsetCommand() {
 }
 
 bool RedisMsetCommand::WriteQuery() {
-  if (!init_write_query_) {
-    assert(tail_query_);
-    if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
-      LOG_DEBUG << "RedisMsetCommand WriteQuery query_recv_complete_ is true";
-      tail_query_->query_recv_complete_ = true;
-    }
+  assert(tail_query_);
+  if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
+    LOG_DEBUG << "RedisMsetCommand WriteQuery query_recv_complete_ is true";
+    tail_query_->query_recv_complete_ = true;
+  }
 
+  if (!init_write_query_) {
     if (tail_query_->connect_error_) {
       assert(tail_query_->backend_);
       if (tail_query_->query_recv_complete_) {
@@ -228,9 +228,13 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
       OnBackendConnectError(backend);
       // 等同于转发完成已收数据
       client_conn_->buffer()->dec_recycle_lock();
-      if (!client_conn_->buffer()->recycle_locked() // 全部完成write query 才能释放recycle_lock
-          && (client_conn_->buffer()->parsed_unreceived_bytes() > 0
-              || !query_parsing_complete())) {
+      if (!client_conn_->buffer()->recycle_locked() && // 全部完成write query 才能释放recycle_lock
+          !tail_query_->query_recv_complete_) {
+        //&& (client_conn_->buffer()->parsed_unreceived_bytes() > 0
+        //    || !query_parsing_complete())) {
+        // TODO : are they equal?
+        assert(client_conn_->buffer()->parsed_unreceived_bytes() > 0 ||
+              !query_parsing_complete());
         client_conn_->TryReadMoreQuery();
         LOG_DEBUG << "OnWriteQueryFinished E_CONNECT TryReadMoreQuery";
       } else {

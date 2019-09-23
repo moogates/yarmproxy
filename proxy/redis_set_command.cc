@@ -42,7 +42,7 @@ bool RedisSetCommand::WriteQuery() {
 
   if (connect_error_) {
     assert(backend_conn_);
-    LOG_WARN << "RedisSetCommand WriteQuery connect_error_ is true, query_recv_complete_=" << query_recv_complete_;
+    // LOG_WARN << "RedisSetCommand WriteQuery connect_error_ is true, query_recv_complete_=" << query_recv_complete_;
     if (query_recv_complete_) {
       if (client_conn_->IsFirstCommand(shared_from_this())) {
         LOG_WARN << "RedisSetCommand WriteQuery connect_error_ write reply";
@@ -53,10 +53,10 @@ bool RedisSetCommand::WriteQuery() {
     } else {
       return true; // no callback, try read more query directly
       if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
-        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ don't write reply, current command wait for more query";
+        // LOG_WARN << "RedisSetCommand WriteQuery connect_error_ don't write reply, current command wait for more query";
         client_conn_->TryReadMoreQuery();
       } else {
-        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ don't write reply, current command all query read";
+        // LOG_WARN << "RedisSetCommand WriteQuery connect_error_ don't write reply, current command all query read";
       }
     }
     return false;

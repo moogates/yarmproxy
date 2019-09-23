@@ -63,6 +63,7 @@ protected:
 private:
   std::list<std::shared_ptr<Command>> active_cmd_queue_;
   bool is_reading_query_ = false;
+  // bool aborted_ = false; // TODO : requeired?
 
   void AsyncRead();
 
