@@ -34,6 +34,7 @@ private:
   bool query_data_zero_copy() override {
     return true;
   }
+  bool query_recv_complete() override;
 
 private:
   struct Subquery {
