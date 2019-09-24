@@ -33,7 +33,7 @@ public:
   virtual void StartWriteReply() = 0;
 
   virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
-  void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+  virtual void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
   virtual bool query_parsing_complete() {
     return true;
