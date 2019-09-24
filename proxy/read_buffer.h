@@ -67,6 +67,7 @@ public:
   }
   size_t unprocessed_bytes() const;  // 已经接收，且已经解析，但尚未处理的数据
 
+  void update_processed_offset(size_t processed);
   void update_processed_bytes(size_t processes_bytes);
   void update_received_bytes(size_t received_bytes);
   void push_reply_data(const char* data, size_t bytes);

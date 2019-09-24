@@ -218,7 +218,7 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
   //                              });
 
     LOG_DEBUG << "Command::TryWriteReply backend=" << backend
-              << "] unprocessed=" << unprocessed;
+              << " unprocessed=" << unprocessed;
     backend->buffer()->update_processed_bytes(unprocessed);
   }
 }

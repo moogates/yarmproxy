@@ -12,6 +12,10 @@
 
 namespace yarmproxy {
 
+// TODO:
+// 1. MGET 支持不完整命令
+// 2. MGET 应当更早地释放backend conn, 而不是每个subquery一直持有一个连接
+
 std::atomic_int redis_mget_cmd_count;
 
 bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
@@ -119,11 +123,11 @@ void RedisMgetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
                                    ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     if (ec == ErrorCode::E_CONNECT) {
-      LOG_WARN << "OnWriteQueryFinished connect error, backend=" << backend
+      LOG_DEBUG << "OnWriteQueryFinished connect error, backend=" << backend
                << " ep=" << backend->remote_endpoint();
       OnBackendConnectError(backend);
     } else {
-      LOG_WARN << "OnWriteQueryFinished error, backend=" << backend
+      LOG_DEBUG << "OnWriteQueryFinished error, backend=" << backend
                << " ep=" << backend->remote_endpoint();
       client_conn_->Abort();
     }
@@ -135,7 +139,7 @@ void RedisMgetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
 
 void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
-  LOG_WARN << "RedisMgetCommand OnWriteReplyFinished, backend=" << backend << " ec" << int(ec);
+  LOG_DEBUG << "RedisMgetCommand OnWriteReplyFinished, backend=" << backend << " ec=" << int(ec);
   if (backend == nullptr) {
     if (ec != ErrorCode::E_SUCCESS) {
       client_conn_->Abort();
@@ -143,7 +147,7 @@ void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend
     }
     reply_prefix_complete_ = true;
 
-    LOG_WARN << "RedisMgetCommand ReplyPrefix complete, backend=" << backend;
+    LOG_DEBUG << "RedisMgetCommand ReplyPrefix complete, backend=" << backend;
     NextBackendStartReply();
     return;
   }
@@ -166,7 +170,7 @@ bool RedisMgetCommand::TryActivateReplyingBackend(std::shared_ptr<BackendConn> b
   }
   assert(waiting_reply_queue_.size() > 0);
   if (backend != waiting_reply_queue_.front()) {
-    LOG_WARN << "TryActivateReplyingBackend backend=" << backend << " runs too fast,"
+    LOG_DEBUG << "TryActivateReplyingBackend backend=" << backend << " runs too fast,"
              << " waiting_reply_queue_.size=" << waiting_reply_queue_.size()
              << " waiting_reply_queue_.front=" << waiting_reply_queue_.front();
     return false;
@@ -194,7 +198,7 @@ void RedisMgetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend)
     }
 
     assert(!backend->finished());
-    LOG_WARN << "RedisMgetCommand::BackendReadyToReply TryWriteReply, backend=" << backend;
+    LOG_DEBUG << "RedisMgetCommand::BackendReadyToReply TryWriteReply, backend=" << backend;
     TryWriteReply(backend);
 }
 
@@ -202,7 +206,7 @@ void RedisMgetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
   TryMarkLastBackend(backend);
   if (ec != ErrorCode::E_SUCCESS
       || ParseReply(backend) == false) {
-    LOG_WARN << "RedisMgetCommand::OnBackendReplyReceived error, backend=" << backend;
+    LOG_DEBUG << "RedisMgetCommand::OnBackendReplyReceived error, backend=" << backend;
     client_conn_->Abort();
     return;
   }
@@ -226,7 +230,7 @@ void RedisMgetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backen
   ++unreachable_backends_;
   TryMarkLastBackend(backend);
 
-  LOG_WARN << "RedisMgetCommand::OnBackendConnectError backend=" << backend
+  LOG_DEBUG << "RedisMgetCommand::OnBackendConnectError backend=" << backend
            << " key_count=" << backend_subqueries_[backend]->key_count_;
   std::string err_reply = ErrorReplyBody(backend_subqueries_[backend]->key_count_);
   backend->SetReplyData(err_reply.data(), err_reply.size());
@@ -237,13 +241,13 @@ void RedisMgetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backen
 }
 
 void RedisMgetCommand::StartWriteReply() {
-  LOG_WARN << "RedisMgetCommand::StartWriteReply cmd=" << this;
+  LOG_DEBUG << "RedisMgetCommand::StartWriteReply cmd=" << this;
   client_conn_->WriteReply(reply_prefix_.data(), reply_prefix_.size(),
           WeakBind(&Command::OnWriteReplyFinished, nullptr));
 }
 
 void RedisMgetCommand::NextBackendStartReply() {
-  LOG_WARN << "RedisMgetCommand::NextBackendStartReply cmd=" << this
+  LOG_DEBUG << "RedisMgetCommand::NextBackendStartReply cmd=" << this
             << " last_replying_backend_=" << replying_backend_;
   if (!reply_prefix_complete_) {
     return;
@@ -309,11 +313,12 @@ bool RedisMgetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
         LOG_DEBUG << "RedisMgetCommand::OnBackendReplyReceived ParseReply error, backend=" << backend;
         return false;
       }
-      if (bulk_array.parsed_size() == 0) {
+      if (bulk_array.parsed_size() == 0 || bulk_array.present_bulks() == 0) {
         LOG_DEBUG << "RedisMgetCommand ParseReply need more data, backend=" << backend;
         return true;
       }
       backend->buffer()->update_parsed_bytes(bulk_array.parsed_size());
+      backend->buffer()->update_processed_offset(bulk_array[0].raw_data() - bulk_array.raw_data());
 
       absent_bulks = bulk_array.absent_bulks();
       if (absent_bulks > 0) {

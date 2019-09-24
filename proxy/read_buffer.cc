@@ -34,6 +34,9 @@ size_t ReadBuffer::unprocessed_bytes() const {  // 已经接收，且已经解�
   return std::min(received_offset_, parsed_offset_) - processed_offset_;
 }
 
+void ReadBuffer::update_processed_offset(size_t processed) {
+  processed_offset_ += processed;
+}
 void ReadBuffer::update_processed_bytes(size_t processed) {
   processed_offset_ += processed;
   try_recycle_buffer();

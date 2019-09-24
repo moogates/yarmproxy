@@ -20,7 +20,6 @@ class ReadBuffer;
 
 enum class ErrorCode;
 
-// typedef std::function<void(const boost::system::error_code& error)> WriteReplyCallback;
 typedef std::function<void(ErrorCode ec)> WriteReplyCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
