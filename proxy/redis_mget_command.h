@@ -62,7 +62,12 @@ private:
     std::shared_ptr<BackendConn> backend_conn_;
   };
   std::string reply_prefix_;
-  bool reply_prefix_complete_ = false;
+  bool reply_prefix_complete() const {
+    return reply_prefix_.empty();
+  }
+  void set_reply_prefix_complete() {
+    reply_prefix_.clear();
+  }
 
   std::vector<std::shared_ptr<BackendQuery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;

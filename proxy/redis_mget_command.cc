@@ -76,9 +76,9 @@ bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
 RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
                                    const redis::BulkArray& ba)
     : Command(client)
+    , reply_prefix_(redis::BulkArray::SerializePrefix(ba.total_bulks() - 1))
 {
   ParseQuery(ba);
-  reply_prefix_ = redis::BulkArray::SerializePrefix(ba.total_bulks() - 1);
 
   LOG_DEBUG << "RedisMgetCommand ctor, cmd=" << this << " count=" << ++redis_mget_cmd_count
             << " reply_prefix_=" << reply_prefix_;
@@ -145,7 +145,7 @@ void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend
       client_conn_->Abort();
       return;
     }
-    reply_prefix_complete_ = true;
+    set_reply_prefix_complete();
 
     LOG_DEBUG << "RedisMgetCommand ReplyPrefix complete, backend=" << backend;
     NextBackendStartReply();
@@ -165,7 +165,7 @@ void RedisMgetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) 
 
 // return : is the backend successfully activated
 bool RedisMgetCommand::TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend) {
-  if (!reply_prefix_complete_) {
+  if (!reply_prefix_complete()) {
     return false;
   }
   assert(waiting_reply_queue_.size() > 0);
@@ -219,7 +219,7 @@ void RedisMgetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
 
 static std::string ErrorReplyBody(size_t keys) {
   std::ostringstream oss;
-  oss << "*" << keys << "\r\n";
+  // oss << "*" << keys << "\r\n";
   for(size_t i = 0; i < keys; ++i) {
     oss << "$-1\r\n";
   }
@@ -249,7 +249,7 @@ void RedisMgetCommand::StartWriteReply() {
 void RedisMgetCommand::NextBackendStartReply() {
   LOG_DEBUG << "RedisMgetCommand::NextBackendStartReply cmd=" << this
             << " last_replying_backend_=" << replying_backend_;
-  if (!reply_prefix_complete_) {
+  if (!reply_prefix_complete()) {
     return;
   }
 
@@ -318,6 +318,9 @@ bool RedisMgetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
         return true;
       }
       backend->buffer()->update_parsed_bytes(bulk_array.parsed_size());
+      LOG_WARN << "RedisMgetCommand ParseReply skip prefix data="
+               << std::string(bulk_array.raw_data(), bulk_array[0].raw_data() - bulk_array.raw_data() - 2)
+               << ", backend=" << backend;
       backend->buffer()->update_processed_offset(bulk_array[0].raw_data() - bulk_array.raw_data());
 
       absent_bulks = bulk_array.absent_bulks();
