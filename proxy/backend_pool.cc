@@ -60,7 +60,8 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
   } else {
     const static size_t kMaxConnPerEndpoint = 64;
     if (it->second.size() >= kMaxConnPerEndpoint){
-      LOG_WARN << "BackendConnPool::Release overflow, backend=" << backend
+      // TODO : should warn
+      LOG_DEBUG << "BackendConnPool::Release overflow, backend=" << backend
                << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
       backend->Close();
     } else {

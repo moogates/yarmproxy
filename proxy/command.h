@@ -55,8 +55,10 @@ protected:
   typedef void(Command::*BackendCallback)(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   WriteReplyCallback WeakBind(BackendCallback mem_func, std::shared_ptr<BackendConn> backend) {
     std::weak_ptr<Command> cmd_wptr(shared_from_this());
-    return [cmd_wptr, mem_func, backend](ErrorCode ec) {
+    std::weak_ptr<BackendConn> backend_wptr(backend);
+    return [cmd_wptr, mem_func, backend_wptr](ErrorCode ec) {
           if (auto cmd_ptr = cmd_wptr.lock()) {
+            auto backend = backend_wptr.lock();
             ((*cmd_ptr).*mem_func)(backend, ec);
           }
         };

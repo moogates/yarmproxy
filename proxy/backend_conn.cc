@@ -19,11 +19,11 @@ BackendConn::BackendConn(WorkerContext& context,
   , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , remote_endpoint_(endpoint)
   , socket_(context.io_service_) {
-  LOG_WARN << "BackendConn ctor, count=" << ++backend_conn_count;
+  LOG_DEBUG << "BackendConn ctor, count=" << ++backend_conn_count;
 }
 
 BackendConn::~BackendConn() {
-  LOG_WARN << "BackendConn dtor, count=" << --backend_conn_count;
+  LOG_DEBUG << "BackendConn dtor, count=" << --backend_conn_count;
   socket_.close();
 
   context_.allocator_->Release(buffer_->data());
@@ -139,7 +139,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
   if (connect_ec || option_ec) {
     socket_.close();
-    LOG_WARN << "HandleConnect error, connect_ec=" << connect_ec.message()
+    LOG_DEBUG << "HandleConnect error, connect_ec=" << connect_ec.message()
              << " option_ec=" << option_ec.message()
              << " endpoint=" << remote_endpoint_
              << " backend=" << this;

@@ -318,7 +318,7 @@ bool RedisMgetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
         return true;
       }
       backend->buffer()->update_parsed_bytes(bulk_array.parsed_size());
-      LOG_WARN << "RedisMgetCommand ParseReply skip prefix data="
+      LOG_DEBUG << "RedisMgetCommand ParseReply skip prefix data="
                << std::string(bulk_array.raw_data(), bulk_array[0].raw_data() - bulk_array.raw_data() - 2)
                << ", backend=" << backend;
       backend->buffer()->update_processed_offset(bulk_array[0].raw_data() - bulk_array.raw_data());
