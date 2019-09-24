@@ -1,12 +1,11 @@
-size=2027
-if [ $# -gt 0 ]; then
-  size=$1
-fi
+query="*3\r\n\$3\r\nset\r\n\$4\r\nkey1\r\n\$6\r\nvalue1\r\n"
+printf "$query" | nc 127.0.0.1 11311
 
-for id in `seq 1 9`; do
-  key=key$id
-  echo $key
-  # 存储命令: <command name> <key> <flags> <exptime> <bytes>
-  # ./data_gen $key $size | nc 127.0.0.1 6379
-  ./data_gen $key $size | nc 127.0.0.1 11311
-done
+query="*4\r\n\$3\r\nset\r\n\$4\r\nkey1\r\n\$6\r\nvalue1\r\n\$2\r\nNX\r\n"
+printf "$query" | nc 127.0.0.1 11311
+
+query="*5\r\n\$3\r\nset\r\n\$4\r\nkey1\r\n\$6\r\nvalue1\r\n\$2\r\nEX\r\n\$5\r\n86400\r\n"
+printf "$query" | nc 127.0.0.1 11311
+
+query="*6\r\n\$3\r\nset\r\n\$4\r\nkey1\r\n\$6\r\nvalue1\r\n\$2\r\nNX\r\n\$2\r\nEX\r\n\$5\r\n86400\r\n"
+printf "$query" | nc 127.0.0.1 11311

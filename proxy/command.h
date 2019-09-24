@@ -41,6 +41,8 @@ public:
   virtual bool query_recv_complete() {
     return true;
   }
+
+  virtual bool PreProcessIncompleteQuery() { return true; }
   virtual bool ParseIncompleteQuery() { return true; }
 
 protected:

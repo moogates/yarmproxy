@@ -33,11 +33,12 @@ RedisSetCommand::~RedisSetCommand() {
 }
 
 bool RedisSetCommand::WriteQuery() {
-  if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
-    // LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is true";
+  if (client_conn_->buffer()->parsed_unreceived_bytes() == 0 &&
+      unparsed_bulks_ == 0) {
+    LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is true";
     query_recv_complete_ = true;
   } else {
-    // LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is false, need read more from client conn";
+    LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is false, need read more from client conn";
   }
 
   if (connect_error_) {
@@ -52,12 +53,6 @@ bool RedisSetCommand::WriteQuery() {
       }
     } else {
       return true; // no callback, try read more query directly
-      if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
-        // LOG_WARN << "RedisSetCommand WriteQuery connect_error_ don't write reply, current command wait for more query";
-        client_conn_->TryReadMoreQuery();
-      } else {
-        // LOG_WARN << "RedisSetCommand WriteQuery connect_error_ don't write reply, current command all query read";
-      }
     }
     return false;
   }
@@ -126,8 +121,29 @@ void RedisSetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend
   }
 }
 
+bool RedisSetCommand::PreProcessIncompleteQuery() {
+  ReadBuffer* buffer = client_conn_->buffer();
+  LOG_WARN << "ParseIncompleteQuery unprocessed_bytes=" << buffer->unprocessed_bytes();
+  while(unparsed_bulks_ > 0 && buffer->unparsed_received_bytes() > 0) {
+    size_t unparsed_bytes = buffer->unparsed_received_bytes();
+    const char * entry = buffer->unparsed_data();
+
+    redis::Bulk bulk(entry, unparsed_bytes);
+    if (bulk.present_size() < 0) {
+      return false;
+    }
+    if (bulk.present_size() == 0) {
+      break;
+    }
+    LOG_WARN << "ParseIncompleteQuery parsed_bytes=" << bulk.total_size();
+    buffer->update_parsed_bytes(bulk.total_size());
+    --unparsed_bulks_;
+  }
+  return true;
+}
 
 bool RedisSetCommand::ParseIncompleteQuery() {
+  return true;
   ReadBuffer* buffer = client_conn_->buffer();
   while(unparsed_bulks_ > 0 && buffer->unparsed_received_bytes() > 0) {
     size_t unparsed_bytes = buffer->unparsed_received_bytes();

@@ -152,8 +152,8 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
     // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
     // if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
     if (!query_recv_complete()) {
-      client_conn_->TryReadMoreQuery();
       LOG_DEBUG << "OnWriteQueryFinished ok, begin to read more query, backend=" << backend;
+      client_conn_->TryReadMoreQuery();
       return;
     }
   }
