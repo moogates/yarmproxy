@@ -78,6 +78,7 @@ RedisMsetCommand::~RedisMsetCommand() {
   // TODO : release all backends
   if (pending_subqueries_.size() != 1) {
     LOG_WARN << "RedisMsetCommand dtor pending_subqueries_.size error";
+    assert(false); // TODO : check this
   }
   for(auto& it : pending_subqueries_) {
     backend_pool()->Release(it.second->backend_);
