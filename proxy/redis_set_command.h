@@ -25,8 +25,8 @@ private:
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
 
-  bool PreProcessIncompleteQuery() override;
-  bool ParseIncompleteQuery() override;
+  bool ParseUnparsedPart() override;
+  bool ProcessUnparsedPart() override;
 
   bool WriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;

@@ -203,12 +203,12 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(!active_cmd_queue_.empty());
 
-    if (!active_cmd_queue_.back()->PreProcessIncompleteQuery()) {
+    if (!active_cmd_queue_.back()->ParseUnparsedPart()) {
       Abort();
       return;
     }
 
-    bool no_callback = active_cmd_queue_.back()->WriteQuery(); // TODO : WriteQuery is finished
+    bool no_callback = active_cmd_queue_.back()->WriteQuery();
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
@@ -224,8 +224,8 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   // process the big bulk arrays in redis query
   if (!active_cmd_queue_.empty() &&
       !active_cmd_queue_.back()->query_parsing_complete()) {
-    LOG_WARN << "ClientConnection::HandleRead ParseIncompleteQuery";
-    if (!active_cmd_queue_.back()->ParseIncompleteQuery()) {
+    LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedPart";
+    if (!active_cmd_queue_.back()->ProcessUnparsedPart()) {
       Abort();
       return;
     }

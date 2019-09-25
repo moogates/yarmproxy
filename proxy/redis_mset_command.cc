@@ -360,7 +360,7 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
   waiting_subqueries_.clear();
 }
 
-bool RedisMsetCommand::ParseIncompleteQuery() {
+bool RedisMsetCommand::ProcessUnparsedPart() {
   ReadBuffer* buffer = client_conn_->buffer();
   std::vector<redis::Bulk> new_bulks;
   size_t total_parsed = 0;
@@ -381,7 +381,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
       break;
     }
     total_parsed += bulk.total_size();
-    LOG_DEBUG << "ParseIncompleteQuery current bulk parsed_bytes="
+    LOG_DEBUG << "ProcessUnparsedPart current bulk parsed_bytes="
               << bulk.total_size();
   }
 
@@ -389,7 +389,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
     total_parsed -= new_bulks.back().total_size();
     new_bulks.pop_back();
   }
-  LOG_DEBUG << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size()
+  LOG_DEBUG << "ProcessUnparsedPart new_bulks.size=" << new_bulks.size()
             << " total_parsed=" << total_parsed;
 
   if (new_bulks.size() == 0) {
@@ -397,7 +397,7 @@ bool RedisMsetCommand::ParseIncompleteQuery() {
     return true;
   }
 
-  LOG_DEBUG << "ParseIncompleteQuery new_bulks.size=" << new_bulks.size()
+  LOG_DEBUG << "ProcessUnparsedPart new_bulks.size=" << new_bulks.size()
             << " unparsed_bulks_=" << unparsed_bulks_;
 
   size_t to_process_bytes = 0;
