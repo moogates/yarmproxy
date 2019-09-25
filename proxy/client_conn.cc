@@ -176,6 +176,9 @@ bool ClientConnection::ProcessUnparsedQuery() {
 
 void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
+  if (aborted_) {
+    return;
+  }
   is_reading_query_ = false;
 
   if (error) {
@@ -203,6 +206,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
     assert(!active_cmd_queue_.empty());
 
     if (!active_cmd_queue_.back()->ParseUnparsedPart()) {
+      LOG_WARN << "ClientConnection::HandleRead ParseUnparsedPart Abort";
       Abort();
       return;
     }
@@ -223,8 +227,8 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   // process the big bulk arrays in redis query
   if (!active_cmd_queue_.empty() &&
       !active_cmd_queue_.back()->query_parsing_complete()) {
-    LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedPart";
     if (!active_cmd_queue_.back()->ProcessUnparsedPart()) {
+      LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedPart Abort";
       Abort();
       return;
     }
@@ -239,7 +243,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 
 void ClientConnection::Abort() {
   LOG_WARN << "ClientConnection::Abort client=" << this;
-  // aborted_ = true; // TODO : add aborted_ flag to disable HandleRead callback?
+  aborted_ = true;
   timer_.cancel();
   active_cmd_queue_.clear();
   socket_.close();
