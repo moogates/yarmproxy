@@ -81,6 +81,11 @@ void ClientConnection::AsyncRead() {
     LOG_DEBUG << "ClientConnection::AsyncRead do nothing";
     return;
   }
+  if (buffer_->free_space_size() < 512) {
+    return;
+  }
+  LOG_WARN << "ClientConnection::TryReadMoreQuery begin locked=" << buffer_->recycle_lock_count();
+
   is_reading_query_ = true;
   buffer_->inc_recycle_lock();
 
@@ -105,13 +110,14 @@ void ClientConnection::RotateReplyingCommand() {
     // active_cmd_queue_.front()->StartWriteReply();
     auto& next = active_cmd_queue_.front();
     next->StartWriteReply();
-    if (!next->query_recv_complete()) {
+
+    if (!active_cmd_queue_.back()->query_recv_complete()) {
       // TODO : reading next query might be interruptted by previous lock,
       // so try to restart the reading here
-      // TryReadMoreQuery();
+      TryReadMoreQuery();
+    } else {
+      ProcessUnparsedQuery();
     }
-
-    ProcessUnparsedQuery();
   }
 }
 
@@ -124,9 +130,11 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
       client_conn->WriteReply(data + bytes_transferred,
                               bytes - bytes_transferred, callback);
     } else {
+      LOG_WARN << "ClientConnection::WriteReply callback, ec=" << error.message();
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
     }
   };
+  LOG_WARN << "ClientConnection::WriteReply bytes=" << bytes;
 
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
@@ -153,7 +161,8 @@ bool ClientConnection::ProcessUnparsedQuery() {
       LOG_DEBUG << "ProcessUnparsedQuery waiting for more data";
       return true;
     } else {
-      LOG_DEBUG << "ProcessUnparsedQuery parsed_bytes=" << parsed_bytes;
+      LOG_WARN << "ProcessUnparsedQuery parsed_bytes=" << parsed_bytes
+               << " new_command=" << command;
       buffer_->update_parsed_bytes(parsed_bytes);
 
       active_cmd_queue_.push_back(command);
@@ -162,7 +171,10 @@ bool ClientConnection::ProcessUnparsedQuery() {
 
       // TODO : check the precondition very carefully
       // if (!command->query_parsing_complete()) {
-      if (buffer_->parsed_unreceived_bytes() > 0) {
+    //if (buffer_->parsed_unreceived_bytes() > 0 ||
+    //    !command->query_parsing_complete()) {
+      if (buffer_->parsed_unreceived_bytes() > 0
+          || !command->query_parsing_complete()) {
         if (no_callback) {
           TryReadMoreQuery();
         }
@@ -229,6 +241,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
       return;
     }
   }
+
 
   if (active_cmd_queue_.empty() ||
       active_cmd_queue_.back()->query_parsing_complete()) {
