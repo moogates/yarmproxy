@@ -26,7 +26,6 @@ private:
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
 
   bool ParseUnparsedPart() override;
-  bool ProcessUnparsedPart() override;
 
   bool WriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;

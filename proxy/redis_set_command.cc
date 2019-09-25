@@ -35,10 +35,10 @@ RedisSetCommand::~RedisSetCommand() {
 bool RedisSetCommand::WriteQuery() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0 &&
       unparsed_bulks_ == 0) {
-    LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is true";
+    LOG_DEBUG << "RedisSetCommand WriteQuery query_recv_complete_ true";
     query_recv_complete_ = true;
   } else {
-    LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is false, need read more from client conn";
+    LOG_DEBUG << "RedisSetCommand WriteQuery query_recv_complete_ false";
   }
 
   if (connect_error_) {
@@ -123,7 +123,6 @@ void RedisSetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend
 
 bool RedisSetCommand::ParseUnparsedPart() {
   ReadBuffer* buffer = client_conn_->buffer();
-  LOG_WARN << "ParseUnparsedPart unprocessed_bytes=" << buffer->unprocessed_bytes();
   while(unparsed_bulks_ > 0 && buffer->unparsed_received_bytes() > 0) {
     size_t unparsed_bytes = buffer->unparsed_received_bytes();
     const char * entry = buffer->unparsed_data();
@@ -136,27 +135,6 @@ bool RedisSetCommand::ParseUnparsedPart() {
       break;
     }
     LOG_WARN << "ParseUnparsedPart parsed_bytes=" << bulk.total_size();
-    buffer->update_parsed_bytes(bulk.total_size());
-    --unparsed_bulks_;
-  }
-  return true;
-}
-
-bool RedisSetCommand::ProcessUnparsedPart() {
-  return true;
-  ReadBuffer* buffer = client_conn_->buffer();
-  while(unparsed_bulks_ > 0 && buffer->unparsed_received_bytes() > 0) {
-    size_t unparsed_bytes = buffer->unparsed_received_bytes();
-    const char * entry = buffer->unparsed_data();
-
-    redis::Bulk bulk(entry, unparsed_bytes);
-    if (bulk.present_size() < 0) {
-      return false;
-    }
-    if (bulk.present_size() == 0) {
-      return true;
-    }
-    LOG_WARN << "ProcessUnparsedPart parsed_bytes=" << bulk.total_size();
     buffer->update_parsed_bytes(bulk.total_size());
     --unparsed_bulks_;
   }

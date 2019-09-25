@@ -179,10 +179,10 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
 
   if (backend->finished()) {
     assert(!backend->buffer()->recycle_locked());
-    LOG_DEBUG << "OnWriteReplyFinished backend->finished ok, backend=" << backend;
+    LOG_DEBUG << "OnWriteReplyFinished backend=" << backend << " finished";
     RotateReplyingBackend(backend->recyclable());
   } else {
-    LOG_DEBUG << "OnWriteReplyFinished backend unfinished, backend=" << backend;
+    LOG_DEBUG << "OnWriteReplyFinished backend=" << backend << " unfinished";
     backend->TryReadMoreReply(); // 这里必须继续try
     TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }

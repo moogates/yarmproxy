@@ -36,17 +36,38 @@ bool RedisGetCommand::WriteQuery() {
   backend_conn_->WriteQuery(cmd_data_, cmd_bytes_);
   return false;
 }
+static const std::string& ErrorReply(ErrorCode ec) {
+  static const std::string kErrorConnect("-Backend Connect Error\r\n");
+  static const std::string kErrorWriteQuery("-Backend Write Error\r\n");
+  static const std::string kErrorReadReply("-Backend Read Error\r\n");
+  static const std::string kErrorProtocol("-Backend Protocol Error\r\n");
+  static const std::string kErrorDefault("-Backend Unknown Error\r\n");
+  switch(ec) {
+  case ErrorCode::E_CONNECT:
+    return kErrorConnect;
+  case ErrorCode::E_WRITE_QUERY:
+    return kErrorWriteQuery;
+  case ErrorCode::E_READ_REPLY:
+    return kErrorReadReply;
+  case ErrorCode::E_PROTOCOL:
+    return kErrorProtocol;
+  default:
+    return kErrorDefault;
+  }
+}
 
-void RedisGetCommand::OnBackendError(std::shared_ptr<BackendConn> backend, const char* err_reply) {
+void RedisGetCommand::OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (has_read_some_reply_) {
     client_conn_->Abort();
     return;
   }
-  backend->SetReplyData(err_reply, strlen(err_reply));
+  auto& err_reply(ErrorReply(ec));
+  backend->SetReplyData(err_reply.data(), err_reply.size());
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
   if (client_conn_->IsFirstCommand(shared_from_this())) {
+    LOG_WARN << "RedisGetCommand::OnBackendError TryWriteReply, backend=" << backend;
     TryWriteReply(backend);
   }
 }
@@ -55,14 +76,14 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
         ErrorCode ec) {
   assert(backend == backend_conn_);
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_WARN << "RedisGetCommand::OnBackendReplyReceived read error, backend=" << backend;
-    OnBackendError(backend, "-Backend Read Error\r\n");
+    LOG_WARN << "RedisGetCommand backend read error, backend=" << backend;
+    OnBackendError(backend, ec);
     return;
   }
 
   if (ParseReply(backend) == false) {
-    LOG_WARN << "RedisGetCommand::OnBackendReplyReceived protocol error, backend=" << backend;
-    OnBackendError(backend, "-Backend Protocol Error\r\n");
+    LOG_WARN << "RedisGetCommand backend protocol error, backend=" << backend;
+    OnBackendError(backend, ErrorCode::E_PROTOCOL);
     return;
   }
 
@@ -79,7 +100,7 @@ void RedisGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend
   assert(backend == backend_conn_);
   LOG_WARN << "RedisGetCommand::OnBackendConnectError endpoint="
           << backend->remote_endpoint() << " backend=" << backend;
-  OnBackendError(backend, "-Backend Connect Error\r\n");
+  OnBackendError(backend, ErrorCode::E_CONNECT);
 }
 
 void RedisGetCommand::RotateReplyingBackend(bool) {

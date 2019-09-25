@@ -42,8 +42,8 @@ public:
     return true;
   }
 
-  virtual bool PreProcessIncompleteQuery() { return true; }
-  virtual bool ParseIncompleteQuery() { return true; }
+  virtual bool ParseUnparsedPart() { return true; }
+  virtual bool ProcessUnparsedPart() { return true; }
 
 protected:
   BackendConnPool* backend_pool();

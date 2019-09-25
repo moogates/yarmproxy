@@ -20,7 +20,8 @@ namespace yarmproxy {
 
 ClientConnection::ClientConnection(WorkerContext& context)
   : socket_(context.io_service_)
-  , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
+  , buffer_(new ReadBuffer(context.allocator_->Alloc(),
+                    context.allocator_->slab_size()))
   , context_(context)
   , timer_(context.io_service_)
 {
@@ -169,7 +170,6 @@ bool ClientConnection::ProcessUnparsedQuery() {
       }
     }
   }
-  LOG_WARN << "ProcessUnparsedQuery end";
   // TryReadMoreQuery();
   return true;
 }
@@ -198,7 +198,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   LOG_DEBUG << "HandleRead bytes_transferred=" << bytes_transferred
             << " buffer=" << buffer_
             << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes();
-            // << " unparsed_data=" << std::string(buffer_->unparsed_data(), buffer_->unparsed_received_bytes());
 
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(!active_cmd_queue_.empty());
@@ -233,7 +232,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 
   if (active_cmd_queue_.empty() ||
       active_cmd_queue_.back()->query_parsing_complete()) {
-    LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedQuery unparsed_received_bytes=" << buffer_->unparsed_received_bytes() ;
     ProcessUnparsedQuery();
   }
   return;
