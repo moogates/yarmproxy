@@ -132,9 +132,7 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
 
       // TODO : no duplicate code
       if (query_data_zero_copy()) {
-        // client buffer is still valid when backend CONNECT error
         client_conn_->buffer()->dec_recycle_lock();
-        // if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
         if (!query_recv_complete()) {
           client_conn_->TryReadMoreQuery();
         }
@@ -146,17 +144,17 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
     }
     return;
   }
+
   LOG_DEBUG << "OnWriteQueryFinished ok, backend=" << backend;
+
   if (query_data_zero_copy()) {
     client_conn_->buffer()->dec_recycle_lock();
-    // TODO : 从这里来看，应该是在write query完成之前，禁止client conn进一步的读取
-    // if (client_conn_->buffer()->parsed_unreceived_bytes() > 0) {
     if (!query_recv_complete()) {
-      LOG_DEBUG << "OnWriteQueryFinished ok, begin to read more query, backend=" << backend;
       client_conn_->TryReadMoreQuery();
       return;
     }
   }
+
   if (query_recv_complete()) {
     LOG_DEBUG << "OnWriteQueryFinished ok, begin read reply, backend=" << backend;
     backend->ReadReply();
