@@ -105,7 +105,7 @@ void ClientConnection::RotateReplyingCommand() {
     auto& next = active_cmd_queue_.front();
     next->StartWriteReply();
     if (!next->query_recv_complete()) {
-      // reading next query might be interruptted by previous lock,
+      // TODO : reading next query might be interruptted by previous lock,
       // so try to restart the reading here
       // TryReadMoreQuery();
     }
@@ -169,6 +169,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       }
     }
   }
+  LOG_WARN << "ProcessUnparsedQuery end";
   // TryReadMoreQuery();
   return true;
 }
@@ -202,6 +203,11 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(!active_cmd_queue_.empty());
 
+    if (!active_cmd_queue_.back()->PreProcessIncompleteQuery()) {
+      Abort();
+      return;
+    }
+
     bool no_callback = active_cmd_queue_.back()->WriteQuery(); // TODO : WriteQuery is finished
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
@@ -218,12 +224,16 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   // process the big bulk arrays in redis query
   if (!active_cmd_queue_.empty() &&
       !active_cmd_queue_.back()->query_parsing_complete()) {
-    LOG_DEBUG << "ClientConnection::HandleRead ParseIncompleteQuery";
-    active_cmd_queue_.back()->ParseIncompleteQuery();
+    LOG_WARN << "ClientConnection::HandleRead ParseIncompleteQuery";
+    if (!active_cmd_queue_.back()->ParseIncompleteQuery()) {
+      Abort();
+      return;
+    }
   }
 
   if (active_cmd_queue_.empty() ||
       active_cmd_queue_.back()->query_parsing_complete()) {
+    LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedQuery unparsed_received_bytes=" << buffer_->unparsed_received_bytes() ;
     ProcessUnparsedQuery();
   }
   return;

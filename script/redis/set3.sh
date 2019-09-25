@@ -1,11 +1,17 @@
-cat ./set3.data | nc 127.0.0.1 11311
-exit
+gunzip -c ./set3.data.gz | nc 127.0.0.1 11311 > set3.tmp
 
-for key in key2019; do
-  key_len=${#key}
-  echo $key $key_len
-  query="*2\r\n\$3\r\nget\r\n\$${key_len}\r\n${key}\r\n"
-  echo "------ $query --------"
-  printf "$query" | nc 127.0.0.1 11311
-  echo
-done
+cat set3.tmp
+
+expected_count=$(gunzip -c set3.data.gz | grep "^*" | wc -l | awk '{print $1}')
+count=$(cat set3.tmp | wc -l | awk '{print $1}')
+printf "Total lines $count/$expected_count\r\n"
+
+if [ $count -ne $expected_count ]; then
+  echo -e "\033[33mFail \033[0m"
+  exit 1
+else
+  echo -e "\033[32mSuccess \033[0m"
+  exit 100
+fi
+echo
+
