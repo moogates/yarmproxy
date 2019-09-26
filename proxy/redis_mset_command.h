@@ -55,6 +55,7 @@ private:
     std::list<std::pair<const char*, size_t>> segments_;
   };
 
+  size_t total_bulks_; // TODO : for debug only
   size_t unparsed_bulks_;
   bool init_write_query_ = true;
   std::map<ip::tcp::endpoint, std::shared_ptr<Subquery>> waiting_subqueries_;

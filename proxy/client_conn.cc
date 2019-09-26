@@ -71,8 +71,10 @@ void ClientConnection::StartRead() {
   }
 }
 
-void ClientConnection::TryReadMoreQuery() {
+void ClientConnection::TryReadMoreQuery(const char* caller) {
   // TODO : checking preconditions
+  LOG_WARN << "ClientConnection::TryReadMoreQuery caller=" << caller
+           << " buffer_lock=" << buffer_->recycle_lock_count();
   AsyncRead();
 }
 
@@ -81,6 +83,7 @@ void ClientConnection::AsyncRead() {
     LOG_DEBUG << "ClientConnection::AsyncRead busy, do nothing";
     return;
   }
+  LOG_INFO << "ClientConnection::AsyncRead begin locked=" << buffer_->recycle_lock_count();
   if (buffer_->free_space_size() < 512) {
     LOG_DEBUG << "ClientConnection::AsyncRead no free space, do nothing";
     return;
@@ -111,13 +114,13 @@ void ClientConnection::RotateReplyingCommand() {
     auto& next = active_cmd_queue_.front();
     next->StartWriteReply();
 
-    auto& back = active_cmd_queue_.back();
-    if (!back->query_recv_complete()) {
-      // reading back query might be interruptted by previous command buffer lock,
-      // so try to restart the reading here
-      TryReadMoreQuery();
+    if (!active_cmd_queue_.back()->query_recv_complete()) {
+      if (!buffer_->recycle_locked()) {
+        // TODO : reading next query might be interruptted by previous lock,
+        // so try to restart the reading here
+        TryReadMoreQuery("ClientConnection::RotateReplyingCommand 1");
+      }
     } else {
-      LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedQuery 2, active_cmd_queue_.size=" << active_cmd_queue_.size();
       ProcessUnparsedQuery();
     }
   }
@@ -132,9 +135,11 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
       client_conn->WriteReply(data + bytes_transferred,
                               bytes - bytes_transferred, callback);
     } else {
+      LOG_WARN << "ClientConnection::WriteReply callback, ec=" << error.message();
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
     }
   };
+  LOG_WARN << "ClientConnection::WriteReply bytes=" << bytes;
 
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
@@ -158,7 +163,6 @@ bool ClientConnection::ProcessUnparsedQuery() {
         return false;
       }
       TryReadMoreQuery();
-      LOG_DEBUG << "waiting for more data";
       return true;
     } else {
       buffer_->update_parsed_bytes(parsed_bytes);
@@ -168,10 +172,13 @@ bool ClientConnection::ProcessUnparsedQuery() {
       buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
       // TODO : check the precondition very carefully
+      // if (!command->query_parsing_complete()) {
+      // if (buffer_->parsed_unreceived_bytes() > 0 ||
+      //     !command->query_parsing_complete()) {
       if (buffer_->parsed_unreceived_bytes() > 0 ||
           !command->query_parsing_complete()) {
         if (no_callback) {
-          TryReadMoreQuery();
+          TryReadMoreQuery("ClientConnection::ProcessUnparsedQuery 2");
         }
         LOG_DEBUG << "ProcessUnparsedQuery break. parsed_bytes=" << parsed_bytes;
         break;
@@ -187,6 +194,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
 void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
   if (aborted_) {
+    assert(false);
     return;
   }
   is_reading_query_ = false;
@@ -232,7 +240,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
       // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
       // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
       if (no_callback) {
-        TryReadMoreQuery();
+        TryReadMoreQuery("ClientConnection::HandleRead 1");
       }
       return;
     }
@@ -251,6 +259,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   //LOG_WARN << "ClientConnection::HandleRead no ProcessUnparsedPart "
   //         << " active_cmd_queue_.empty=" << active_cmd_queue_.empty();
   }
+
 
   if (active_cmd_queue_.empty() ||
       active_cmd_queue_.back()->query_parsing_complete()) {
