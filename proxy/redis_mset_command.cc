@@ -449,8 +449,10 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
             << " total_parsed=" << total_parsed;
 
   if (new_bulks.size() == 0) {
-    assert(client_conn_->buffer()->recycle_lock_count() == 0);
-    client_conn_->TryReadMoreQuery("mset_call_5");
+    // assert(client_conn_->buffer()->recycle_lock_count() == 0);
+    if (!client_conn_->buffer()->recycle_locked()) {
+      client_conn_->TryReadMoreQuery("mset_call_5");
+    }
     return true;
   }
 
