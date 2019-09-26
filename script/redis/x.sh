@@ -1,8 +1,9 @@
-# cat ./x.data | nc 127.0.0.1 11311 
+#gunzip -c ./x.data.gz | nc 127.0.0.1 11311
+#exit
 gunzip -c ./x.data.gz | nc 127.0.0.1 11311 > x.tmp
 cat x.tmp
 
-expected=$(gunzip -c x.data.gz |  grep "^*" | wc -l)
+expected=$(gunzip -c x.data.gz |  grep "^*" | wc -l | awk '{print $1}')
 count=$(cat x.tmp | wc -l | awk '{print $1}')
 if [ $count -eq $expected ];
 then

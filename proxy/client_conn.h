@@ -51,6 +51,9 @@ public:
   ReadBuffer* buffer() {
     return buffer_;
   }
+  bool aborted() const { // TODO : for debug only
+    return aborted_;
+  }
 
 private:
   ip::tcp::socket socket_;
@@ -62,7 +65,7 @@ protected:
 private:
   std::list<std::shared_ptr<Command>> active_cmd_queue_;
   bool is_reading_query_ = false;
-  // bool aborted_ = false; // TODO : requeired?
+  bool aborted_ = false;
 
   void AsyncRead();
 

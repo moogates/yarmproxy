@@ -80,13 +80,14 @@ void ClientConnection::TryReadMoreQuery(const char* caller) {
 
 void ClientConnection::AsyncRead() {
   if (is_reading_query_) {
-    LOG_DEBUG << "ClientConnection::AsyncRead do nothing";
-    return;
-  }
-  if (buffer_->free_space_size() < 512) {
+    LOG_DEBUG << "ClientConnection::AsyncRead busy, do nothing";
     return;
   }
   LOG_INFO << "ClientConnection::AsyncRead begin locked=" << buffer_->recycle_lock_count();
+  if (buffer_->free_space_size() < 512) {
+    LOG_DEBUG << "ClientConnection::AsyncRead no free space, do nothing";
+    return;
+  }
 
   is_reading_query_ = true;
   buffer_->inc_recycle_lock();
@@ -161,12 +162,9 @@ bool ClientConnection::ProcessUnparsedQuery() {
         LOG_WARN << "Too long unparsable command line";
         return false;
       }
-      TryReadMoreQuery("ClientConnection::ProcessUnparsedQuery 1");
-      LOG_DEBUG << "ProcessUnparsedQuery waiting for more data";
+      TryReadMoreQuery();
       return true;
     } else {
-      LOG_WARN << "ProcessUnparsedQuery parsed_bytes=" << parsed_bytes
-               << " new_command=" << command;
       buffer_->update_parsed_bytes(parsed_bytes);
 
       active_cmd_queue_.push_back(command);
@@ -175,14 +173,17 @@ bool ClientConnection::ProcessUnparsedQuery() {
 
       // TODO : check the precondition very carefully
       // if (!command->query_parsing_complete()) {
-    //if (buffer_->parsed_unreceived_bytes() > 0 ||
-    //    !command->query_parsing_complete()) {
-      if (buffer_->parsed_unreceived_bytes() > 0
-          || !command->query_parsing_complete()) {
+      // if (buffer_->parsed_unreceived_bytes() > 0 ||
+      //     !command->query_parsing_complete()) {
+      if (buffer_->parsed_unreceived_bytes() > 0 ||
+          !command->query_parsing_complete()) {
         if (no_callback) {
           TryReadMoreQuery("ClientConnection::ProcessUnparsedQuery 2");
         }
+        LOG_DEBUG << "ProcessUnparsedQuery break. parsed_bytes=" << parsed_bytes;
         break;
+      } else {
+        LOG_DEBUG << "ProcessUnparsedQuery continue. parsed_bytes=" << parsed_bytes;
       }
     }
   }
@@ -192,6 +193,10 @@ bool ClientConnection::ProcessUnparsedQuery() {
 
 void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
+  if (aborted_) {
+    assert(false);
+    return;
+  }
   is_reading_query_ = false;
 
   if (error) {
@@ -215,10 +220,13 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
             << " buffer=" << buffer_
             << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes();
 
+  // TODO :  add var back_cmd
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(!active_cmd_queue_.empty());
 
+    LOG_DEBUG << "ClientConnection::HandleRead ParseUnparsedPart";
     if (!active_cmd_queue_.back()->ParseUnparsedPart()) {
+      LOG_WARN << "ClientConnection::HandleRead ParseUnparsedPart Abort";
       Abort();
       return;
     }
@@ -226,7 +234,9 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
     bool no_callback = active_cmd_queue_.back()->WriteQuery();
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
-    if (buffer_->parsed_unreceived_bytes() > 0) {
+    if (buffer_->parsed_unreceived_bytes() > 0
+        // || !active_cmd_queue_.back()->query_parsing_complete() // TODO : check this condition
+       ) {
       // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
       // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
       if (no_callback) {
@@ -241,14 +251,19 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
       !active_cmd_queue_.back()->query_parsing_complete()) {
     LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedPart";
     if (!active_cmd_queue_.back()->ProcessUnparsedPart()) {
+      LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedPart Abort";
       Abort();
       return;
     }
+  } else {
+  //LOG_WARN << "ClientConnection::HandleRead no ProcessUnparsedPart "
+  //         << " active_cmd_queue_.empty=" << active_cmd_queue_.empty();
   }
 
 
   if (active_cmd_queue_.empty() ||
       active_cmd_queue_.back()->query_parsing_complete()) {
+    LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedQuery 1";
     ProcessUnparsedQuery();
   }
   return;
@@ -256,7 +271,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 
 void ClientConnection::Abort() {
   LOG_WARN << "ClientConnection::Abort client=" << this;
-  // aborted_ = true; // TODO : add aborted_ flag to disable HandleRead callback?
+  aborted_ = true;
   timer_.cancel();
   active_cmd_queue_.clear();
   socket_.close();
