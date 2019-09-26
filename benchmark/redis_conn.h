@@ -70,6 +70,9 @@ private:
     ST_SUBSCRIBING = 5,
     ST_SUBSCRIBE_OK = 6,
   };
+
+  std::string query_data_;
+  size_t query_sent_counter_ = 0;
   
   std::set<std::string> subscribed_topics_;
   

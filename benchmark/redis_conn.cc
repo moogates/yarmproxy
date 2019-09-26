@@ -35,6 +35,7 @@ RedisConnection::RedisConnection(boost::asio::io_service& io_service,
   , timer_(io_service, boost::posix_time::seconds(3))
   , upstream_endpoint_(boost::asio::ip::address::from_string(host), port)
 {
+  query_data_ = "*3\r\n$4\r\nmget\r\n$4\r\nkeyx\r\n$4\r\nkeyy\r\n";
 }
 
 RedisConnection::~RedisConnection() {
@@ -90,11 +91,7 @@ void RedisConnection::OnConnected(const boost::system::error_code& error) {
 
   //////////
 
-  // const char MSET_PREFIX[] = "*3\r\n$4\r\nmget\r\n$4\r\nkeyx\r\n$4\r\nkey1\r\n";
-  const char MSET_PREFIX[] = "*3\r\n$4\r\nmget\r\n$4\r\nkeyx\r\n$4\r\nkeyy\r\n";
-  LOG_INFO << "RedisConnection::OnConnected conn=" << this << " upstream=" << upstream_endpoint_
-           << ", write MSET_PREFIX=[" << MSET_PREFIX << "] size=" << sizeof(MSET_PREFIX) - 1;
-  Write(MSET_PREFIX, sizeof(MSET_PREFIX) - 1);
+  Write(query_data_.data(), query_data_.size());
   AsyncRead(); // 等待auth结果
 }
 
@@ -177,7 +174,7 @@ void RedisConnection::Write(const char* data, size_t bytes) {
 
   write_buf_end_ += memcpy_len;
   if (!is_writing_) {
-    LOG_WARN << "Write begin";
+    // LOG_WARN << "Write begin";
     is_writing_ = true;
     AsyncWrite();
   } else {
@@ -208,14 +205,21 @@ void RedisConnection::HandleWrite(const boost::system::error_code& error,
       write_buf_end_ = 0;
       is_writing_ = false;
 
-      boost::system::error_code ec;
-      socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
-      if (ec) {
-        LOG_INFO << "HandleWrite shutdown_send error, conn=" << this;
+      if (++query_sent_counter_ < 100) {
+       LOG_INFO << "HandleWrite write more " << query_sent_counter_ << " , conn=" << this;
+        Write(query_data_.data(), query_data_.size());
       } else {
-        LOG_DEBUG << "HandleWrite shutdown_send ok, conn=" << this;
+        boost::system::error_code ec;
+        socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
+        if (ec) {
+          LOG_INFO << "HandleWrite shutdown_send error, conn=" << this;
+        } else {
+          LOG_DEBUG << "HandleWrite shutdown_send ok, conn=" << this;
+        }
       }
     } else {
+      LOG_INFO << "HandleWrite write ext buf, conn=" << this;
+
       write_buf_begin_ = 0;
       write_buf_end_ = std::min(extended_write_buf_.size(), (size_t)kWriteBufLength);
       // TODO : less copy
