@@ -1,4 +1,4 @@
-cat ./mget_pipeline_3.data | nc 127.0.0.1 11311 | grep "^\\$\|^*" > mget_pipeline_3.tmp
+gunzip -c ./mget_pipeline_3.data.gz | nc 127.0.0.1 11311 | grep "^\\$\|^*" > mget_pipeline_3.tmp
 
 count=$(cat mget_pipeline_3.tmp | wc -l)
 printf "Total lines $count/1460\r\n"
