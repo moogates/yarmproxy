@@ -52,8 +52,8 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   if (strncmp(buf, "*", 1) == 0) {
     redis::BulkArray ba(buf, size);
     if (ba.total_bulks() == 0) {
-      LOG_WARN << "CreateCommand data_size=" << size << " bad_data=[" << std::string(buf, size) << "]";
-      abort();
+      LOG_WARN << "CreateCommand data_size=" << size
+               << " bad_data=[" << std::string(buf, size) << "]";
       return -1;
     }
     if (ba.present_bulks() == 0 || ba[0].absent_size() > 0) {
