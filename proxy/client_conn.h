@@ -47,7 +47,7 @@ public:
   }
   void RotateReplyingCommand();
 
-  void TryReadMoreQuery();
+  void TryReadMoreQuery(const char* caller = ""); // TODO : call param for debug only
   ReadBuffer* buffer() {
     return buffer_;
   }

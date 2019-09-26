@@ -71,8 +71,10 @@ void ClientConnection::StartRead() {
   }
 }
 
-void ClientConnection::TryReadMoreQuery() {
+void ClientConnection::TryReadMoreQuery(const char* caller) {
   // TODO : checking preconditions
+  LOG_WARN << "ClientConnection::TryReadMoreQuery caller=" << caller
+           << " buffer_lock=" << buffer_->recycle_lock_count();
   AsyncRead();
 }
 
@@ -84,7 +86,7 @@ void ClientConnection::AsyncRead() {
   if (buffer_->free_space_size() < 512) {
     return;
   }
-  LOG_WARN << "ClientConnection::TryReadMoreQuery begin locked=" << buffer_->recycle_lock_count();
+  LOG_INFO << "ClientConnection::AsyncRead begin locked=" << buffer_->recycle_lock_count();
 
   is_reading_query_ = true;
   buffer_->inc_recycle_lock();
@@ -112,9 +114,11 @@ void ClientConnection::RotateReplyingCommand() {
     next->StartWriteReply();
 
     if (!active_cmd_queue_.back()->query_recv_complete()) {
-      // TODO : reading next query might be interruptted by previous lock,
-      // so try to restart the reading here
-      TryReadMoreQuery();
+      if (!buffer_->recycle_locked()) {
+        // TODO : reading next query might be interruptted by previous lock,
+        // so try to restart the reading here
+        TryReadMoreQuery("ClientConnection::RotateReplyingCommand 1");
+      }
     } else {
       ProcessUnparsedQuery();
     }
@@ -157,7 +161,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
         LOG_WARN << "Too long unparsable command line";
         return false;
       }
-      TryReadMoreQuery();
+      TryReadMoreQuery("ClientConnection::ProcessUnparsedQuery 1");
       LOG_DEBUG << "ProcessUnparsedQuery waiting for more data";
       return true;
     } else {
@@ -176,7 +180,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       if (buffer_->parsed_unreceived_bytes() > 0
           || !command->query_parsing_complete()) {
         if (no_callback) {
-          TryReadMoreQuery();
+          TryReadMoreQuery("ClientConnection::ProcessUnparsedQuery 2");
         }
         break;
       }
@@ -226,7 +230,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
       // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
       // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
       if (no_callback) {
-        TryReadMoreQuery();
+        TryReadMoreQuery("ClientConnection::HandleRead 1");
       }
       return;
     }
