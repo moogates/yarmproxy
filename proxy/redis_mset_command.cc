@@ -133,14 +133,14 @@ bool RedisMsetCommand::WriteQuery() {
     }
 
   //tail_query_->phase_ = 3;
-    if (tail_query_->phase_ == 2) {
-      tail_query_->phase_ = 3;
-    }
     LOG_WARN << "WriteQuery tail_query_ phase " << tail_query_->phase_
             << " backend=" << tail_query_->backend_
             << " query=" << tail_query_
             << " cmd=" << this
             << " bytes=" << client_conn_->buffer()->unprocessed_bytes();
+    if (tail_query_->phase_ == 2) {
+      tail_query_->phase_ = 3;
+    }
     // }
     // assert(tail_query_->phase_ == 3);
     client_conn_->buffer()->inc_recycle_lock();
@@ -225,7 +225,8 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
     backend_pool()->Release(backend);
 
     if (pending_subqueries_.empty()) {
-      client_conn_->TryReadMoreQuery();
+      // TODO : newly added
+      // client_conn_->TryReadMoreQuery();
     }
 
     LOG_WARN << "OnBackendReplyReceived command=" << this
@@ -299,12 +300,12 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
       if (query == tail_query_) {
         if (query->query_recv_complete_) {
           LOG_WARN << "OnWriteQueryFinished tail write all, no more data, read reply. conn=" << client_conn_ << " cmd=" << this
-                  << " query=" << query << "@" << query->backend_endpoint_;
+                  << " backend=" << backend << " query=" << query << "@" << query->backend_endpoint_;
           query->phase_ = 4; // read reply
           backend->ReadReply();
         } else {
           LOG_WARN << "OnWriteQueryFinished tail write all, need more data. conn=" << client_conn_ << "cmd=" << this
-                  << " query=" << query << "@" << query->backend_endpoint_;
+                  << " backend=" << backend << " query=" << query << "@" << query->backend_endpoint_;
           if (!client_conn_->buffer()->recycle_locked()) {
             LOG_WARN << "XXX set tail_query phase_ = 3, query=" << query;
             query->phase_ = 3; // waiting for read-more-query reply
@@ -369,9 +370,9 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
     return;
   } else {
     // TODO
-    // assert(false);
     LOG_WARN << "OnWriteQueryFinished bad phase " << query->phase_ << " , backend=" << backend;
     client_conn_->Abort();
+    assert(false);
   }
 }
 
@@ -438,6 +439,7 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
             << " unparsed_bulks_=" << unparsed_bulks_;
 
   size_t to_process_bytes = 0;
+  auto& prev_tail_query = tail_query_;
   for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) {
     ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
                                 new_bulks[i].payload_data(),
@@ -447,6 +449,10 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
     to_process_bytes += new_bulks[i + 1].present_size();
     PushSubquery(ep, new_bulks[i].raw_data(),
         new_bulks[i].present_size() + new_bulks[i+1].present_size());
+  }
+
+  if (prev_tail_query != tail_query_) {
+    LOG_WARN << "ProcessUnparsedPart tail_query_ changed, prev=" << prev_tail_query << " new=" << tail_query_;
   }
 
   assert(total_parsed >= to_process_bytes);
@@ -472,6 +478,7 @@ bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   }
 
   backend->buffer()->update_parsed_bytes(p - entry + 1);
+  assert(unparsed == p - entry + 1);
 
   assert(backend->buffer()->unparsed_bytes() == 0);
   backend->set_reply_recv_complete();
