@@ -89,9 +89,9 @@ void ClientConnection::AsyncRead() {
                << " received_bytes=" << buffer_->received_bytes();
     return;
   }
-  LOG_INFO << "ClientConnection::AsyncRead begin "
+  LOG_INFO << "ClientConnection::AsyncRead begin,"
                << " lock=" << buffer_->recycle_lock_count()
-               << " received_bytes=" << buffer_->received_bytes();
+               << " received_unprocess_bytes=" << buffer_->received_bytes();
 
   is_reading_query_ = true;
   buffer_->inc_recycle_lock();
@@ -122,7 +122,7 @@ void ClientConnection::RotateReplyingCommand() {
       if (!buffer_->recycle_locked()) {
         // TODO : reading next query might be interruptted by previous lock,
         // so try to restart the reading here
-        TryReadMoreQuery("ClientConnection::RotateReplyingCommand 1");
+        TryReadMoreQuery("client_conn_1");
       }
     } else {
       ProcessUnparsedQuery();
@@ -144,24 +144,19 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
     assert(false);
   }
   std::shared_ptr<ClientConnection> client_conn(shared_from_this());
-  size_t seq = ++write_reply_seq_;
-  auto cb_wrap = [seq, client_conn, data, bytes, callback](
+  auto cb_wrap = [client_conn, data, bytes, callback](
       const boost::system::error_code& error, size_t bytes_transferred) {
     if (!error && bytes_transferred < bytes) {
-      assert(false);
-      LOG_WARN << "ClientConnection::WriteReply callback to write more, ec=" << error.message();
+      // LOG_WARN << "ClientConnection::WriteReply callback to write more, ec=" << error.message();
       client_conn->WriteReply(data + bytes_transferred,
                               bytes - bytes_transferred, callback);
     } else {
-      LOG_WARN << "ClientConnection::WriteReply callback seq=" << seq
-               << " data=[..." << BufferTail(data, bytes) << "] written all, ec=" << error.message();
       client_conn->is_writing_reply_ = false;
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
     }
   };
 
   is_writing_reply_ = true;
-  LOG_WARN << "ClientConnection::WriteReply init seq=" << seq << " data=[..." << BufferTail(data, bytes) << "] bytes=" << bytes;
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
@@ -183,7 +178,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
         LOG_WARN << "Too long unparsable command line";
         return false;
       }
-      TryReadMoreQuery();
+      TryReadMoreQuery("client_conn_2");
       return true;
     } else {
       buffer_->update_parsed_bytes(parsed_bytes);
@@ -199,7 +194,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       if (buffer_->parsed_unreceived_bytes() > 0 ||
           !command->query_parsing_complete()) {
         if (no_callback) {
-          TryReadMoreQuery("ClientConnection::ProcessUnparsedQuery 2");
+          TryReadMoreQuery("client_conn_3");
         }
         LOG_DEBUG << "ProcessUnparsedQuery break. parsed_bytes=" << parsed_bytes;
         break;
@@ -237,20 +232,22 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   buffer_->update_received_bytes(bytes_transferred);
   buffer_->dec_recycle_lock();
 
-  LOG_DEBUG << "HandleRead bytes_transferred=" << bytes_transferred
+  LOG_WARN << "HandleRead bytes_transferred=" << bytes_transferred
             << " buffer=" << buffer_
             << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes();
 
-  // TODO :  add var back_cmd
-  if (buffer_->parsed_unprocessed_bytes() > 0) {
-    assert(!active_cmd_queue_.empty());
-
+  if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->query_recv_complete()) {
     LOG_DEBUG << "ClientConnection::HandleRead ParseUnparsedPart";
     if (!active_cmd_queue_.back()->ParseUnparsedPart()) {
       LOG_WARN << "ClientConnection::HandleRead ParseUnparsedPart Abort";
       Abort();
       return;
     }
+  }
+
+  // TODO :  add var back_cmd
+  if (buffer_->parsed_unprocessed_bytes() > 0) {
+    assert(!active_cmd_queue_.empty());
 
     bool no_callback = active_cmd_queue_.back()->WriteQuery();
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
@@ -261,7 +258,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
       // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
       // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
       if (no_callback) {
-        TryReadMoreQuery("ClientConnection::HandleRead 1");
+        TryReadMoreQuery("client_conn_4");
       }
       return;
     }
@@ -276,6 +273,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
       Abort();
       return;
     }
+    LOG_WARN << "ProcessUnparsedPart done";
   } else {
   //LOG_WARN << "ClientConnection::HandleRead no ProcessUnparsedPart "
   //         << " active_cmd_queue_.empty=" << active_cmd_queue_.empty();
