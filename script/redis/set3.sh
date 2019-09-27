@@ -1,4 +1,6 @@
-gunzip -c ./set3.data.gz | nc 127.0.0.1 11311 > set3.tmp
+driver=nc
+driver=../yarmnc
+gunzip -c ./set3.data.gz | $driver 127.0.0.1 11311 > set3.tmp
 
 cat set3.tmp
 

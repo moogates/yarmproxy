@@ -1,6 +1,9 @@
-#gunzip -c ./x.data.gz | nc 127.0.0.1 11311
+driver=nc
+driver=../yarmnc
+
+#gunzip -c ./x.data.gz | $driver 127.0.0.1 11311
 #exit
-gunzip -c ./mset_pipeline_6.data.gz | nc 127.0.0.1 11311 > mset_pipeline_6.tmp
+gunzip -c ./mset_pipeline_6.data.gz | $driver 127.0.0.1 11311 > mset_pipeline_6.tmp
 cat mset_pipeline_6.tmp
 
 expected=$(gunzip -c mset_pipeline_6.data.gz |  grep "^*" | wc -l | awk '{print $1}')

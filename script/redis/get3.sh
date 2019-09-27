@@ -1,4 +1,6 @@
-gunzip -c get3.data.gz | nc 127.0.0.1 11311 | grep "^\\$\|^*\|^-"  > get3.tmp
+driver=nc
+driver=../yarmnc
+gunzip -c get3.data.gz | $driver 127.0.0.1 11311 | grep "^\\$\|^*\|^-"  > get3.tmp
 
 # cat get3.tmp
 
