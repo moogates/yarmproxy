@@ -206,14 +206,8 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
 
     backend->buffer()->inc_recycle_lock();
 
-    // TODO : weak or shared?
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
                                   WeakBind(&Command::OnWriteReplyFinished, backend));
-  //std::shared_ptr<Command> cmd_ptr = shared_from_this();
-  //client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
-  //                              [cmd_ptr, backend](ErrorCode ec) {
-  //                                cmd_ptr->OnWriteReplyFinished(backend, ec);
-  //                              });
 
     LOG_DEBUG << "Command::TryWriteReply backend=" << backend
               << " unprocessed=" << unprocessed;

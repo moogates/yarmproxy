@@ -333,10 +333,9 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
 
         if (!client_conn_->buffer()->recycle_locked()) {
           if (!tail_query_->query_recv_complete_) {
-            assert(tail_query_->phase_ == 2);
+            // assert(tail_query_->phase_ == 2);
             LOG_WARN << "XXX TryReadMoreQuery 1";
             tail_query_->phase_ = 3; // waiting for read-more-query reply
-            assert(client_conn_->buffer()->recycle_lock_count() == 0);
             client_conn_->TryReadMoreQuery("mset_call_3");
           }
         }
@@ -449,8 +448,9 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
             << " total_parsed=" << total_parsed;
 
   if (new_bulks.size() == 0) {
-    assert(client_conn_->buffer()->recycle_lock_count() == 0);
-    client_conn_->TryReadMoreQuery("mset_call_5");
+    if (!client_conn_->buffer()->recycle_locked()) {
+      client_conn_->TryReadMoreQuery("mset_call_5");
+    }
     return true;
   }
 

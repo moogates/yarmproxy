@@ -194,7 +194,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
 void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
   if (aborted_) {
-    assert(false);
+    // backend interrrupted
     return;
   }
   is_reading_query_ = false;
