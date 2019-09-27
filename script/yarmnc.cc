@@ -238,7 +238,14 @@ void Print(const char* data, size_t bytes) {
 }
 
 int main(int argc, char *argv[]) {
-  base::YarmClient yc("127.0.0.1", 11311, Print);
+  const char* host = "127.0.0.1";
+  int port = 11311;
+
+  if (argc >= 3) {
+    host = argv[1];
+    port = std::stoi(argv[2]);
+  }
+  base::YarmClient yc(host, port, Print);
   yc.Run();
   return 0;
 }
