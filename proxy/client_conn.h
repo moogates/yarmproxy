@@ -54,6 +54,9 @@ public:
   bool aborted() const { // TODO : for debug only
     return aborted_;
   }
+  bool is_writing_reply() const {
+    return is_writing_reply_;
+  }
 
 private:
   ip::tcp::socket socket_;
@@ -65,6 +68,8 @@ protected:
 private:
   std::list<std::shared_ptr<Command>> active_cmd_queue_;
   bool is_reading_query_ = false;
+  bool is_writing_reply_ = false;
+  size_t write_reply_seq_ = 0;
   bool aborted_ = false;
 
   void AsyncRead();

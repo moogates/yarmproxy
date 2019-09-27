@@ -83,11 +83,15 @@ void ClientConnection::AsyncRead() {
     LOG_DEBUG << "ClientConnection::AsyncRead busy, do nothing";
     return;
   }
-  LOG_INFO << "ClientConnection::AsyncRead begin locked=" << buffer_->recycle_lock_count();
   if (buffer_->free_space_size() < 512) {
-    LOG_DEBUG << "ClientConnection::AsyncRead no free space, do nothing";
+    LOG_INFO << "ClientConnection::AsyncRead no free space, do nothing"
+               << " lock=" << buffer_->recycle_lock_count()
+               << " received_bytes=" << buffer_->received_bytes();
     return;
   }
+  LOG_INFO << "ClientConnection::AsyncRead begin "
+               << " lock=" << buffer_->recycle_lock_count()
+               << " received_bytes=" << buffer_->received_bytes();
 
   is_reading_query_ = true;
   buffer_->inc_recycle_lock();
@@ -126,21 +130,38 @@ void ClientConnection::RotateReplyingCommand() {
   }
 }
 
+std::string BufferTail(const char* data, size_t bytes) {
+  size_t len = 8;
+  if (len > bytes) {
+    len = bytes;
+  }
+  return std::string(data + (bytes - len), len);
+}
+
 void ClientConnection::WriteReply(const char* data, size_t bytes,
                                   const WriteReplyCallback& callback) {
+  if (is_writing_reply_) {
+    assert(false);
+  }
   std::shared_ptr<ClientConnection> client_conn(shared_from_this());
-  auto cb_wrap = [client_conn, data, bytes, callback](
+  size_t seq = ++write_reply_seq_;
+  auto cb_wrap = [seq, client_conn, data, bytes, callback](
       const boost::system::error_code& error, size_t bytes_transferred) {
     if (!error && bytes_transferred < bytes) {
+      assert(false);
+      LOG_WARN << "ClientConnection::WriteReply callback to write more, ec=" << error.message();
       client_conn->WriteReply(data + bytes_transferred,
                               bytes - bytes_transferred, callback);
     } else {
-      LOG_WARN << "ClientConnection::WriteReply callback, ec=" << error.message();
+      LOG_WARN << "ClientConnection::WriteReply callback seq=" << seq
+               << " data=[..." << BufferTail(data, bytes) << "] written all, ec=" << error.message();
+      client_conn->is_writing_reply_ = false;
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
     }
   };
-  LOG_WARN << "ClientConnection::WriteReply bytes=" << bytes;
 
+  is_writing_reply_ = true;
+  LOG_WARN << "ClientConnection::WriteReply init seq=" << seq << " data=[..." << BufferTail(data, bytes) << "] bytes=" << bytes;
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
