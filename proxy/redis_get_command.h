@@ -39,7 +39,7 @@ private:
   }
 
 private:
-  bool has_read_some_reply_ = false;
+  bool has_read_some_reply_ = false; // TODO : Error Handling : fast fail vs. best effort?
   const char* cmd_data_;
   size_t cmd_bytes_;
   ip::tcp::endpoint backend_endpoint_;

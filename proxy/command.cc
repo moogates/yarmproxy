@@ -21,6 +21,7 @@
 #include "redis_mset_command.h"
 #include "redis_get_command.h"
 #include "redis_mget_command.h"
+#include "redis_del_command.h"
 
 namespace yarmproxy {
 
@@ -87,6 +88,16 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
         return ba.parsed_size() - ba.back().total_size();    // TODO : 测试有k没v的情况, 是否会解析错误?
       } else {
         return ba.parsed_size();
+      }
+    } else if (ba[0].equals("del", sizeof("del") - 1)) {
+      if (ba.present_bulks() < 2 || !ba[1].completed()) {
+        return 0;
+      }
+      command->reset(new RedisDelCommand(client, ba));
+      if (ba.back().completed()) {
+        return ba.parsed_size();
+      } else {
+        return ba.parsed_size() - ba.back().total_size();
       }
     }
 
