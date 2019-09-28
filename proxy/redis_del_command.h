@@ -50,15 +50,13 @@ private:
 
     size_t keys_count_;
     size_t phase_ = 0;
-    bool query_recv_complete_ = false;
     bool connect_error_ = false;
     std::list<std::pair<const char*, size_t>> segments_;
   };
   size_t unparsed_bulks_;
-  bool init_write_query_ = true;
+  bool init_write_query_ = true; // TODO : remove it
   std::map<ip::tcp::endpoint, std::shared_ptr<DelSubquery>> waiting_subqueries_;
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<DelSubquery>> pending_subqueries_;
-  std::shared_ptr<DelSubquery> tail_query_;
   std::shared_ptr<BackendConn> replying_backend_;
 
   int total_del_count_ = 0;

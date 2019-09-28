@@ -42,11 +42,9 @@ void RedisDelCommand::PushSubquery(const ip::tcp::endpoint& ep, const char* data
               << " , key=" << redis::Bulk(data, bytes).to_string();
     client_conn_->buffer()->inc_recycle_lock();
     std::shared_ptr<DelSubquery> query(new DelSubquery(ep, data, bytes));
-    auto res = waiting_subqueries_.emplace(ep, query);
-    tail_query_ = res.first->second;
+    waiting_subqueries_.emplace(ep, query);
     return;
   }
-  tail_query_ = it->second;
   ++(it->second->keys_count_);
 
   auto& segment = it->second->segments_.back();
@@ -93,7 +91,6 @@ bool RedisDelCommand::query_recv_complete() {
 }
 
 bool RedisDelCommand::WriteQuery() {
-  assert(tail_query_);
   if (!init_write_query_) {
     assert(false);
   }
@@ -127,7 +124,6 @@ void RedisDelCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend
     } else {
       LOG_DEBUG << "RedisDelCommand OnBackendConnectError need not reply, ep="
                 << subquery->backend_endpoint_
-                << " is_tail=" << (subquery == tail_query_)
                 << " pending_subqueries_.size=" << pending_subqueries_.size();
       pending_subqueries_.erase(backend);
       backend_pool()->Release(backend);
@@ -218,26 +214,17 @@ void RedisDelCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
   }
 
   auto& query = pending_subqueries_[backend];
-  LOG_DEBUG << "OnWriteQueryFinished enter. query=" << query->backend_endpoint_ << " phase=" << query->phase_;
   if (query->phase_ == 0) {
     query->phase_ = 1; // SendingQueryData
     assert(!query->segments_.empty());
     query->backend_->WriteQuery(query->segments_.front().first, query->segments_.front().second);
-    LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_
-              << " backend=" << query->backend_
-              << " phase 1 finished, phase 2 launched";
   } else if (query->phase_ == 1) {
     query->segments_.pop_front();
     if (query->segments_.empty()) {
       client_conn_->buffer()->dec_recycle_lock();
       query->phase_ = 2; // read reply
-      LOG_WARN << "OnWriteQueryFinished subquery write all read reply. query=" << query << "@" << query->backend_endpoint_
-                << " key_count=" << query->keys_count_
-                << " backend=" << backend
-                << " conn=" << client_conn_ << " cmd=" << this;
       backend->ReadReply();
     } else {
-      // phase_ is still 1
       query->backend_->WriteQuery(query->segments_.front().first, query->segments_.front().second);
     }
   } else {
@@ -272,6 +259,7 @@ bool RedisDelCommand::ProcessUnparsedPart() {
   std::vector<redis::Bulk> new_bulks;
   size_t total_parsed = 0;
 
+  // TODO : duplicate code cleaning up
   while(new_bulks.size() < unparsed_bulks_ &&
         total_parsed < buffer->unparsed_received_bytes()) {
     const char * entry = buffer->unparsed_data() + total_parsed;
@@ -306,7 +294,6 @@ bool RedisDelCommand::ProcessUnparsedPart() {
             << " unparsed_bulks_=" << unparsed_bulks_;
   unparsed_bulks_ -= new_bulks.size();
 
-  auto& prev_tail_query = tail_query_;
   for(size_t i = 0; i < new_bulks.size(); ++i) {
     assert(new_bulks[i].completed());
   //if (i == new_bulks.size() - 1 && !new_bulks[i].completed()) {
