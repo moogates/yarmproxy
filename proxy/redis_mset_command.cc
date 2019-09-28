@@ -223,7 +223,8 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
     // TODO : prepare for recycling, a bit tedious
     assert(backend->buffer()->unparsed_bytes() == 0);
     backend->buffer()->update_processed_bytes(backend->buffer()->unprocessed_bytes());
-    backend->set_reply_recv_complete();
+    // backend->set_reply_recv_complete();
+    assert(backend->reply_recv_complete());
     pending_subqueries_.erase(backend);
     backend_pool()->Release(backend);
 

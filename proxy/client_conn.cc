@@ -161,7 +161,7 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
 }
 
 bool ClientConnection::ProcessUnparsedQuery() {
-  static const size_t PIPELINE_ACTIVE_LIMIT = 4;
+  static const size_t PIPELINE_ACTIVE_LIMIT = 4; // TODO :  pipeline中多个请求的时序问题: 后面的command先被执行. 参考 del_pipeline_1.sh
   while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
         && buffer_->unparsed_received_bytes() > 0) {
     // TODO : close the conn if command line is  too long
@@ -249,12 +249,10 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(!active_cmd_queue_.empty());
 
-    bool no_callback = active_cmd_queue_.back()->WriteQuery();
+    bool no_callback = active_cmd_queue_.back()->WriteQuery(); // TODO : split to WriteNewParsedQuery()/WriteEarlierParsedQuery()
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
-    if (buffer_->parsed_unreceived_bytes() > 0
-        // || !active_cmd_queue_.back()->query_parsing_complete() // TODO : check this condition
-       ) {
+    if (buffer_->parsed_unreceived_bytes() > 0) {
       // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
       // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
       if (no_callback) {
