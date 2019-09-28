@@ -4,5 +4,6 @@ while true; do
    ./del${id}.sh
    sleep 0.01
  done
+ ./del_pipeline_1.sh
  sleep 0.02
 done
