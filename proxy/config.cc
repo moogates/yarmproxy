@@ -34,13 +34,12 @@ bool Config::ApplyTokens(const std::vector<std::string>& tokens) {
   if (context_.empty()) {
     return ApplyGlobalTokens(tokens);
   }
-  if (strncmp(context_.c_str(), "/cluster", 8) == 0) {
-    std::cout << "=============================" << context_ << std::endl;
+  if (strncmp(context_.c_str(), "/cluster", sizeof("/cluster") - 1) == 0) {
     return ApplyClusterTokens(tokens);
   }
-  if (context_ == "/log") {
-    return ApplyLogTokens(tokens);
-  }
+//if (context_ == "/log") {
+//  return ApplyLogTokens(tokens);
+//}
   error_msg_ = "unknown context ";
   error_msg_.append(context_);
   return false;
@@ -54,16 +53,29 @@ void Config::PushSubcontext(const std::string& subcontext) {
 }
 void Config::PopSubcontext() {
   auto const pos = context_.find_last_of('/');
-  if (pos == std::string::npos) {
-    // TODO : return error on empty
-  }
   context_ = context_.substr(0, pos);
   std::cout << "PopSubcontext. context_=" << context_ << std::endl;
 }
 
 bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
+  if (tokens.size() == 2 && tokens[0] == "listen") {
+    listen_ = tokens[1];
+    return true;
+  }
+
   if (tokens.size() == 2 && tokens[0] == "daemonize") {
-    set_daemonize(tokens[1] == "true" || tokens[1] == "yes" || tokens[1] == "1");
+    daemonize_ = tokens[1] == "true" || tokens[1] == "yes" ||
+                 tokens[1] == "1";
+    return true;
+  }
+
+  if (tokens.size() == 2 && tokens[0] == "log_file") {
+    log_file_ = tokens[1];
+    return true;
+  }
+
+  if (tokens.size() == 2 && tokens[0] == "log_level") {
+    log_level_ = tokens[1];
     return true;
   }
 
@@ -73,11 +85,11 @@ bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
     return true;
   }
 
-  if (tokens.size() == 2 && tokens[1] == "{") {
-    PushSubcontext(tokens[0]);
-    return true;
-  }
-  error_msg_ = "unknown token ";
+//if (tokens.size() == 2 && tokens[1] == "{") {
+//  PushSubcontext(tokens[0]);
+//  return true;
+//}
+  error_msg_ = "unknown directive ";
   error_msg_.append(tokens[0]);
   return false;
 }
@@ -141,35 +153,30 @@ bool Config::ApplyLogTokens(const std::vector<std::string>& tokens) {
 }
 
 bool Config::Reload() {
-  std::string file_name("../proxy/yarmproxy.conf");
-  std::ifstream conf_file(file_name);
-  if (!conf_file) {
-    std::cout << "Open conf file " << file_name << " error." << std::endl;
+  std::ifstream conf_fs(config_file_);
+  if (!conf_fs) {
+    std::cerr << "Open conf file " << config_file_ << " error." << std::endl;
     return false;
   }
 
   std::string line;
   size_t line_count = 0;
   std::string context;
-  while(std::getline(conf_file, line)) {
+  while(std::getline(conf_fs, line)) {
     std::vector<std::string> tokens;
     TokenizeLine(line, &tokens);
-    std::cout << line_count++ << " ";
+    line_count++;
     if (tokens.empty()) {
       continue;
     }
-
-    std::copy(tokens.begin(), tokens.end(),
-        std::ostream_iterator<std::string>(std::cout, " / "));
-    std::cout << std::endl;
-
+  //std::copy(tokens.begin(), tokens.end(),
+  //    std::ostream_iterator<std::string>(std::cout, " / "));
+  //std::cout << std::endl;
     if (!ApplyTokens(tokens)) {
-      std::cout << "Config " << file_name << " line " << line_count << " error:" << error_msg_ << std::endl;
+      std::cout << "Config " << config_file_ << " line " << line_count << " error:" << error_msg_ << std::endl;
       return false;
     }
   }
-
-  conf_file.close();
   return true;
 }
 

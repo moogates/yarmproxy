@@ -40,9 +40,9 @@ void InitLogging(const char *path, const char *loglevel) {
     loguru::g_preamble_file    = false; // The file from which the log originates from
     // loguru::g_preamble_verbose = true; // The verbosity field
     // loguru::g_preamble_pipe    = true; // The pipe symbol right before the message
-  } else {
-    loguru::g_stderr_verbosity = verbosity;
   }
+  loguru::g_stderr_verbosity = verbosity;
+
   int argc = 1;
   char* argv[] = {const_cast<char*>("loguru"), nullptr};
   loguru::init(argc, argv);
