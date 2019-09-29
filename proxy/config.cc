@@ -9,6 +9,8 @@
 
 namespace yarmproxy {
 
+size_t kMaxNamespaceLength = 4;
+
 void TokenizeLine(const std::string& line, std::vector<std::string>* tokens) {
   int status = 0;
   for(char ch : line) {
@@ -113,10 +115,20 @@ bool Config::ApplyClusterTokens(const std::vector<std::string>& tokens) {
       } else if (tokens[1] == "memcached") {
         clusters_.back().protocol_ = ProtocolType::MEMCACHED;
         return true;
+      } else {
+        error_msg_ = "unsupported protocol type";
+        return false;
       }
     }
   } else if (tokens[0] == "namespace") {
     if (tokens.size() >= 2) {
+      for(size_t i = 1; i < tokens.size(); ++i) {
+        auto& ns = tokens[i];
+        if (ns.size() > kMaxNamespaceLength) {
+          error_msg_ = "too long namespace length";
+          return false;
+        }
+      }
       std::copy(tokens.begin() + 1, tokens.end(),
           std::back_inserter(clusters_.back().namespaces_));
       return true;
@@ -196,7 +208,8 @@ bool Config::Reload() {
   //    std::ostream_iterator<std::string>(std::cout, " / "));
   //std::cout << std::endl;
     if (!ApplyTokens(tokens)) {
-      std::cout << "Config " << config_file_ << " line " << line_count << " error:" << error_msg_ << std::endl;
+      std::cout << "Config " << config_file_ << " line " << line_count
+                << " error:" << error_msg_ << std::endl;
       return false;
     }
   }
