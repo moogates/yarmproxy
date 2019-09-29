@@ -291,7 +291,7 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
 
   auto& query = pending_subqueries_[backend];
   LOG_DEBUG << "OnWriteQueryFinished enter. query=" << query->backend_endpoint_ << " phase=" << query->phase_;
-  if (query->phase_ == 0) {
+  if (query->phase_ == 0) { // TODO : use switch & state machine
     query->phase_ = 1; // SendingQueryData
     assert(!query->segments_.empty());
     query->backend_->WriteQuery(query->segments_.front().first, query->segments_.front().second);

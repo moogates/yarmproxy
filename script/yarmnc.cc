@@ -161,8 +161,8 @@ void YarmClient::PrepareSlect() {
     }
     FD_SET(sock_, &error_set_);
 
-    timeval_.tv_sec = 0;
-    timeval_.tv_usec = 100000;
+    timeval_.tv_sec = 1;
+    timeval_.tv_usec = 0;
 }
 
 int YarmClient::Run() {

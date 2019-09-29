@@ -7,7 +7,6 @@
 namespace yarmproxy {
 
 class Continuum;
-extern const char DEFAULT_GROUP[];
 enum class ProtocolType {
   REDIS     = 0,
   MEMCACHED = 1,
@@ -25,11 +24,6 @@ public:
   }
   bool Initialize();
   bool Initialize2();
-
-  static std::string KeyNamespace(const char * key, size_t len, ProtocolType protocol);
-
-//ip::tcp::endpoint Locate(const char * key, size_t len, const char* group = DEFAULT_GROUP);
-//ip::tcp::endpoint Locate(const std::string& key, const char* group = DEFAULT_GROUP);
 
   ip::tcp::endpoint Locate(const char * key, size_t len, ProtocolType protocol);
 private:
