@@ -34,11 +34,6 @@ int main(int argc, char* argv[]) {
   }
   base::InitLogging(conf.log_file().c_str(),
                     conf.log_level().c_str());
-  // loguru::g_stderr_verbosity = -8;
-  // loguru::g_stderr_verbosity = 8;
-  // loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
-  // loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
-  // loguru::g_stderr_verbosity = loguru::Verbosity_ERROR;
 
   if (conf.daemonize()) {
     Daemonize();

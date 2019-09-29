@@ -7,6 +7,8 @@
 
 namespace yarmproxy {
 
+enum class ProtocolType;
+
 class Config {
 public:
   static Config& Instance() {
@@ -20,14 +22,20 @@ public:
   size_t buffer_size() const {
     return buffer_size_;
   }
-  enum class ProtocolType {
-    REDIS     = 0,
-    MEMCACHED = 1,
+  struct Backend {
+    Backend(std::string&& host, int port, size_t weight)
+      : host_(host)
+      , port_(port)
+      , weight_(weight) {
+    }
+    std::string host_;
+    int port_;
+    size_t weight_;
   };
   struct Cluster {
     ProtocolType protocol_;
     std::vector<std::string> namespaces_;
-    std::vector<std::pair<std::string, int>> weighted_backends_;
+    std::vector<Backend>     backends_;
   };
 
   const std::string& config_file() const {
@@ -58,6 +66,9 @@ private:
 
   size_t buffer_size_ = 4096;
 public:
+  const std::vector<Cluster>& clusters() const {
+    return clusters_;
+  }
   std::vector<Cluster> clusters_;
 private:
   Config() {}

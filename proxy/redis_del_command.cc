@@ -66,7 +66,8 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client, const
       ++unparsed_bulks_;// don't parse the last key if it's not complete
       break;
     }
-    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(ba[i].payload_data(), ba[i].payload_size(), "REDIS_bj");
+    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
+        ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size());
   }
   LOG_WARN << "RedisDelCommand ctor " << ++redis_del_cmd_count;
@@ -303,7 +304,7 @@ bool RedisDelCommand::ProcessUnparsedPart() {
     ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
                                 new_bulks[i].payload_data(),
                                 new_bulks[i].payload_size(),
-                                "REDIS_bj");
+                                ProtocolType::REDIS);
     PushSubquery(ep, new_bulks[i].raw_data(), new_bulks[i].present_size());
   }
 

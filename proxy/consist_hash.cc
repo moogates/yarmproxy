@@ -6,8 +6,21 @@
 
 namespace yarmproxy {
 
+Continuum::Continuum(const std::vector<Config::Backend>& backends) {
+  for(auto& backend : backends) {
+    LOG_DEBUG << "Continuum ctor host=" << backend.host_
+              << " port=" << backend.port_
+              << " weight=" << backend.weight_;
+    auto ep = ip::tcp::endpoint(ip::address_v4::from_string(backend.host_),
+                                backend.port_);
+    cache_nodes_.emplace(ep, backend.weight_);
+  }
+  RebuildCachePoints();
+}
+
+
 bool Continuum::RebuildCachePoints() {
-  if(cache_nodes_.empty()) {
+  if (cache_nodes_.empty()) {
     LOG_WARN << "Continuum::RebuildCachePoints empty node list!";
     return false;
   }
@@ -52,7 +65,7 @@ ip::tcp::endpoint Continuum::LocateCacheNode(const char * key, size_t len) const
 }
 
 // TODO : test ParseNodesConfig
-bool Continuum::ParseNodesConfig(const std::string & config, CacheNodeMap * parsed) const {
+bool Continuum::ParseNodesConfig(const std::string& config, CacheNodeMap * parsed) const {
   size_t pos = 0, prev_pos = 0;
   while(pos < config.size()) {
     pos = config.find(':', prev_pos);

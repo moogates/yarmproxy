@@ -4,6 +4,9 @@
 #include <fstream>
 #include <vector>
 
+#include <arpa/inet.h>
+#include "backend_locator.h"
+
 namespace yarmproxy {
 
 void TokenizeLine(const std::string& line, std::vector<std::string>* tokens) {
@@ -127,13 +130,33 @@ bool Config::ApplyClusterTokens(const std::vector<std::string>& tokens) {
     std::cout << "backend directive in context " << context_ << std::endl;
     if (context_ == "/cluster/backends") {
       if (tokens.size() == 3) {
+        size_t pos = tokens[1].find_first_of(':');
+        if (pos == std::string::npos) {
+          error_msg_ = "endpoint bad format";
+          return false;
+        }
+        std::string host = tokens[1].substr(0, pos);
+        int port = 0;
         int weight = 0;
+        try {
+          boost::asio::ip::make_address_v4(host);
+          port = std::stoi(tokens[1].substr(pos + 1));
+        } catch (...) {
+          error_msg_ = "bad endpoint";
+          return false;
+        }
         try {
           weight = std::stoi(tokens[2]);
         } catch (...) {
+          error_msg_ = "bad weight";
           return false;
         }
-        clusters_.back().weighted_backends_.emplace_back(tokens[1], weight);
+        if (port <= 0 || weight <= 0) {
+          error_msg_ = "illegal value";
+          return false;
+        }
+        clusters_.back().backends_.emplace_back(
+            std::move(host), port, weight);
         return true;
       }
     } else {
