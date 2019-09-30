@@ -48,6 +48,23 @@ bool MemcachedSetCommand::WriteQuery() {
     query_recv_complete_ = true;
   }
 
+  if (connect_error_) {
+    assert(backend_conn_);
+    // LOG_WARN << "RedisSetCommand WriteQuery connect_error_ is true, query_recv_complete_=" << query_recv_complete_;
+    if (query_recv_complete_) {
+      if (client_conn_->IsFirstCommand(shared_from_this())) {
+        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ write reply";
+        TryWriteReply(backend_conn_);
+      } else {
+        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ wait to write reply";
+      }
+    } else {
+      LOG_WARN << "RedisSetCommand WriteQuery connect_error_ read more query";
+      return true; // no callback, try read more query directly
+    }
+    return false;
+  }
+
   if (!backend_conn_) {
     backend_conn_ = AllocateBackend(backend_endpoint_);
     LOG_DEBUG << "MemcachedSetCommand::WriteQuery backend=" << backend_conn_;
@@ -58,6 +75,26 @@ bool MemcachedSetCommand::WriteQuery() {
   backend_conn_->WriteQuery(buffer->unprocessed_data(),
                             buffer->unprocessed_bytes());
   return false;
+}
+
+void MemcachedSetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+  static const char BACKEND_ERROR[] = "BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
+  backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+  backend->set_reply_recv_complete();
+  backend->set_no_recycle();
+
+  connect_error_ = true;
+
+  if (query_recv_complete_) {
+    if (client_conn_->IsFirstCommand(shared_from_this())) {
+      LOG_WARN << "RedisSetCommand OnBackendConnectError write reply";
+      TryWriteReply(backend);
+    } else {
+      LOG_WARN << "RedisSetCommand OnBackendConnectError waiting to write reply";
+    }
+  } else {
+    LOG_WARN << "RedisSetCommand OnBackendConnectError waiting for more query data";
+  }
 }
 
 void MemcachedSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
