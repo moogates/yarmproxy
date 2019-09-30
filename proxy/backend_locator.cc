@@ -12,7 +12,7 @@ bool BackendLoactor::Initialize() {
     Continuum * continuum = new Continuum(cluster.backends_);
     for(auto& ns : cluster.namespaces_) {
       std::ostringstream oss;
-      oss << int(cluster.protocol_) << "_" << (ns == "_default" ? "" : ns.c_str());
+      oss << int(cluster.protocol_) << "/" << (ns == "_" ? "" : ns.c_str());
       clusters_continum_.emplace(oss.str(), continuum);
       LOG_DEBUG << "BackendLoactor ns=" << oss.str() << " continium=" << continuum;
     }
@@ -21,8 +21,8 @@ bool BackendLoactor::Initialize() {
 }
 
 static const std::string& DefaultNamespace(ProtocolType protocol) {
-  static std::string REDIS_NS_DEFAULT = "0_";
-  static std::string MEMCACHED_NS_DEFAULT = "1_";
+  static std::string REDIS_NS_DEFAULT = "0/";
+  static std::string MEMCACHED_NS_DEFAULT = "1/";
   switch(protocol) {
   case ProtocolType::REDIS:
     return REDIS_NS_DEFAULT;
@@ -37,7 +37,7 @@ static const std::string& DefaultNamespace(ProtocolType protocol) {
 extern size_t kMaxNamespaceLength;
 static std::string KeyNamespace(const char * key, size_t len, ProtocolType protocol) {
   std::ostringstream oss;
-  oss << int(protocol) << "_";
+  oss << int(protocol) << "/";
   const char * p = static_cast<const char *>(memchr(key, '#', std::min(len, kMaxNamespaceLength + 1)));
   if (p != nullptr) {
     oss << std::string(key, p - key);

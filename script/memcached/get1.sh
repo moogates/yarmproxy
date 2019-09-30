@@ -5,7 +5,7 @@ query="get key1\r\n"
 printf "$query" | nc 127.0.0.1 11311 | grep "VALUE\|END" > get1.tmp
 
 cat get1.tmp
-value_lines=$(cat get1.tmp | grep $body_size | wc -l | awk '{print $1}')
+value_lines=$(cat get1.tmp | grep -c $body_size)
 if [ $value_lines -ne 1 ]; then
   echo -e "\033[33mFail: Response values error.$value_lines.\033[0m"
   exit 1

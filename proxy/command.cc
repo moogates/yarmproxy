@@ -13,6 +13,8 @@
 #include "backend_pool.h"
 #include "read_buffer.h"
 
+#include "error_command.h"
+
 #include "memcached_get_command.h"
 #include "memcached_set_command.h"
 
@@ -101,8 +103,10 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       }
     }
 
+    command->reset(new ErrorCommand(client, std::string("-Unknown redis directive:") + ba[0].to_string() + "\r\n"));
+
     LOG_DEBUG << "CreateCommand unknown redis command=" << ba[0].to_string();
-    return -1;
+    return size;
   }
 
   {
@@ -121,9 +125,11 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     return cmd_line_bytes + body_bytes;
   }
 
+  command->reset(new ErrorCommand(client, std::string("Unsupported Request\r\n")));
+
   LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
            << ") len=" << cmd_line_bytes << " client_conn=" << client;
-  return -1;
+  return size;
 }
 
 std::shared_ptr<BackendConn> Command::AllocateBackend(const ip::tcp::endpoint& ep) {

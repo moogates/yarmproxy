@@ -9,7 +9,7 @@ while true; do
 
   sleep 1.6
 
-  memcached -d -umuyuwei -t4 -p$port
+  memcached -d -umuyuwei -t4 -m128 -p$port
 
   sleep 0.5
 
