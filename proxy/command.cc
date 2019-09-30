@@ -103,9 +103,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       }
     }
 
-    command->reset(new ErrorCommand(client, std::string("-Unknown redis directive:") + ba[0].to_string() + "\r\n"));
-
-    LOG_DEBUG << "CreateCommand unknown redis command=" << ba[0].to_string();
+    command->reset(new ErrorCommand(client, std::string("-YarmProxy unknown redis directive:") + ba[0].to_string() + "\r\n"));
     return size;
   }
 
@@ -125,9 +123,8 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     return cmd_line_bytes + body_bytes;
   }
 
-  command->reset(new ErrorCommand(client, std::string("Unsupported Request\r\n")));
-
-  LOG_WARN << "CreateCommand unknown command(" << std::string(buf, cmd_line_bytes - 2)
+  command->reset(new ErrorCommand(client, std::string("YarmProxy Unsupported Request\r\n")));
+  LOG_WARN << "ErrorCommand(" << std::string(buf, cmd_line_bytes - 2)
            << ") len=" << cmd_line_bytes << " client_conn=" << client;
   return size;
 }

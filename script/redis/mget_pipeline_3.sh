@@ -1,4 +1,10 @@
-gunzip -c ./mget_pipeline_3.data.gz | nc 127.0.0.1 11311 | grep "^\\$\|^*" > mget_pipeline_3.tmp
+driver=nc
+driver=../yarmnc
+
+body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
+./set_100.sh $body_size > /dev/null
+
+gunzip -c ./mget_pipeline_3.data.gz | $driver 127.0.0.1 11311 | grep "^\\$\|^*" > mget_pipeline_3.tmp
 
 count=$(cat mget_pipeline_3.tmp | wc -l)
 printf "Total lines $count/1460\r\n"
