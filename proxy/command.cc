@@ -17,6 +17,7 @@
 
 #include "memcached_get_command.h"
 #include "memcached_set_command.h"
+#include "mc_simple_command.h"
 
 #include "redis_protocol.h"
 #include "redis_set_command.h"
@@ -111,16 +112,31 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     // TODO : memcached binary
   }
 
+  // TODO : 支持 memcached noreply 字段, 顺带加上严格的语法检查
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
-  if (strncmp(buf, "get ", 4) == 0) {
+  if (strncmp(buf, "get ", sizeof("get ") - 1) == 0 ||
+      strncmp(buf, "gets ", sizeof("gets ") - 1) == 0) {
     // TODO : strict protocol check
     command->reset(new MemcachedGetCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;
-  } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0
-             || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
+  } else if (strncmp(buf, "set ", sizeof("set ") - 1) == 0 ||
+             strncmp(buf, "add ", sizeof("add ") - 1) == 0 ||
+             strncmp(buf, "replace ", sizeof("replace ") - 1) == 0 ||
+             strncmp(buf, "append ", sizeof("append ") - 1) == 0 ||
+             strncmp(buf, "prepend ", sizeof("prepend ") - 1) == 0 ||
+             strncmp(buf, "cas", sizeof("cas ") - 1) == 0) {
     size_t body_bytes;
     command->reset(new MemcachedSetCommand(client, buf, cmd_line_bytes, &body_bytes));
     return cmd_line_bytes + body_bytes;
+  } else if (strncmp(buf, "delete ", sizeof("delete ") - 1) == 0 ||
+      strncmp(buf, "incr ", sizeof("incr ") - 1) == 0 ||
+      strncmp(buf, "decr ", sizeof("decr ") - 1) == 0 ||
+      strncmp(buf, "incr ", sizeof("incr ") - 1) == 0 ||
+      strncmp(buf, "touch ", sizeof("touch ") - 1) == 0
+      ) {
+    // TODO : strict protocol check
+    command->reset(new MemcachedSimpleCommand(client, buf, cmd_line_bytes));
+    return cmd_line_bytes;
   }
 
   command->reset(new ErrorCommand(client, std::string("YarmProxy Unsupported Request\r\n")));
