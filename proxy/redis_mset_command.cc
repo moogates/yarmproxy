@@ -69,7 +69,8 @@ RedisMsetCommand::RedisMsetCommand(std::shared_ptr<ClientConnection> client, con
 {
   unparsed_bulks_ += unparsed_bulks_ % 2;  // don't parse the 'key' now if 'value' absent
   for(size_t i = 1; (i + 1) < ba.present_bulks(); i += 2) { // only 'key' is inadequate, 'value' field must be present
-    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(ba[i].payload_data(), ba[i].payload_size(), "REDIS_bj");
+    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
+        ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size() + ba[i+1].present_size());
   }
   LOG_WARN << "RedisMsetCommand ctor " << ++redis_mset_cmd_count;
@@ -290,7 +291,7 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
 
   auto& query = pending_subqueries_[backend];
   LOG_DEBUG << "OnWriteQueryFinished enter. query=" << query->backend_endpoint_ << " phase=" << query->phase_;
-  if (query->phase_ == 0) {
+  if (query->phase_ == 0) { // TODO : use switch & state machine
     query->phase_ = 1; // SendingQueryData
     assert(!query->segments_.empty());
     query->backend_->WriteQuery(query->segments_.front().first, query->segments_.front().second);
@@ -465,7 +466,7 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
     ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
                                 new_bulks[i].payload_data(),
                                 new_bulks[i].payload_size(),
-                                "REDIS_bj");
+                                ProtocolType::REDIS);
     to_process_bytes += new_bulks[i].present_size();
     to_process_bytes += new_bulks[i + 1].present_size();
     PushSubquery(ep, new_bulks[i].raw_data(),

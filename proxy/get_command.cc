@@ -37,7 +37,8 @@ void ParallelGetCommand::ParseQuery(const char* cmd_data,
     while(*q != ' ' && *q != '\r') {
       ++q;
     }
-    auto ep = BackendLoactor::Instance().Locate(p, q - p);
+    auto ep = BackendLoactor::Instance().Locate(p, q - p,
+                  ProtocolType::MEMCACHED);
     auto it = ep_keys.find(ep);
     if (it == ep_keys.end()) {
       it = ep_keys.emplace(ep, "get").first; // TODO : don't use insert anymore

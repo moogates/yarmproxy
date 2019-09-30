@@ -1,6 +1,7 @@
-#include "proxy_server.h"
-
 #include "base/logging.h"
+
+#include "proxy_server.h"
+#include "config.h"
 
 // TODO : argv / config file
 // TODO : idle client-conn timeout & heartbeat ?
@@ -18,26 +19,29 @@
 // TODO : memcached key_len_limit=250, body_size_limit=1M
 // TODO : 9.27 跑了一晚上，redis返回错误提示：-ERR max number of clients reached
 // TODO : 超时处理, backend_conn / client_conn 的读写，都要处理超时
+// TODO : IPv6 support
 
 int Daemonize();
 int MaximizeFdLimit();
 
-int main() {
-  // base::InitLogging("proxy.log", "DEBUG");
-  // base::InitLogging("proxy.log", "INFO");
-  // base::InitLogging("proxy.log", "WARN");
-  loguru::g_stderr_verbosity = -8;
-  // loguru::g_stderr_verbosity = 8;
-  // loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
-  // loguru::g_stderr_verbosity = loguru::Verbosity_INFO;
-  // loguru::g_stderr_verbosity = loguru::Verbosity_ERROR;
+int main(int argc, char* argv[]) {
+  auto& conf = yarmproxy::Config::Instance();
+  if (argc > 1) {
+    conf.set_config_file(argv[1]);
+  }
+  if (!conf.Reload()) {
+    return 1;
+  }
+  base::InitLogging(conf.log_file().c_str(),
+                    conf.log_level().c_str());
 
-  // Daemonize();
+  if (conf.daemonize()) {
+    Daemonize();
+  }
   MaximizeFdLimit();
 
-  std::string endpoint("127.0.0.1:11311");
-  LOG_INFO << "Service listening on " << endpoint;
-  yarmproxy::ProxyServer server(endpoint); // TODO : concurrency
+  LOG_INFO << "Service listening on " << conf.listen();
+  yarmproxy::ProxyServer server(conf.listen()); // TODO : concurrency
   server.Run();
   return 0;
 }

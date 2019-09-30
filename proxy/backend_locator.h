@@ -7,8 +7,12 @@
 namespace yarmproxy {
 
 class Continuum;
+enum class ProtocolType {
+  REDIS     = 0,
+  MEMCACHED = 1,
+};
 
-extern const char DEFAULT_GROUP[];
+using namespace boost::asio;
 
 class BackendLoactor {
 private:
@@ -19,8 +23,8 @@ public:
     return locator;
   }
   bool Initialize();
-  boost::asio::ip::tcp::endpoint Locate(const char * key, size_t len, const char* group = DEFAULT_GROUP);
-  boost::asio::ip::tcp::endpoint Locate(const std::string& key, const char* group = DEFAULT_GROUP);
+
+  ip::tcp::endpoint Locate(const char * key, size_t len, ProtocolType protocol);
 private:
   std::map<std::string, Continuum *> clusters_continum_;
 };
