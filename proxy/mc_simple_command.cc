@@ -24,7 +24,7 @@ size_t MemcachedSimpleCommand::ParseQuery(const char* cmd_data, size_t cmd_len) 
   while(*(p++) != ' ');
 
   const char *q = p;
-  while(*(++q) != ' ');
+  while(*(++q) != ' ' && *q != '\r');
 
   backend_endpoint_ = BackendLoactor::Instance().Locate(p, q - p,
                           ProtocolType::MEMCACHED);
