@@ -23,7 +23,6 @@ public:
     return locator;
   }
   bool Initialize();
-  bool Initialize2();
 
   ip::tcp::endpoint Locate(const char * key, size_t len, ProtocolType protocol);
 private:

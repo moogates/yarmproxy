@@ -56,9 +56,6 @@ ip::tcp::endpoint BackendLoactor::Locate(const char * key, size_t len, ProtocolT
   }
   
   ip::tcp::endpoint ep = continuum->LocateCacheNode(key, len);
-  LOG_DEBUG << "BackendLoactor::Locate key=" << std::string(key, len)
-            << " continuum=" << continuum
-            << " cache_node=" << ep;
   return ep;
 }
 
