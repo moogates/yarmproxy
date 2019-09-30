@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_SET_COMMAND_H_
-#define _YARMPROXY_SET_COMMAND_H_
+#ifndef _YARMPROXY_MEMCACHED_SET_COMMAND_H_
+#define _YARMPROXY_MEMCACHED_SET_COMMAND_H_
 
 #include <boost/asio.hpp>
 
@@ -9,14 +9,14 @@ namespace yarmproxy {
 
 using namespace boost::asio;
 
-class SetCommand : public Command {
+class MemcachedSetCommand : public Command {
 public:
-  SetCommand(std::shared_ptr<ClientConnection> client,
+  MemcachedSetCommand(std::shared_ptr<ClientConnection> client,
             const char* buf,
             size_t cmd_len,
             size_t* body_bytes);
 
-  virtual ~SetCommand();
+  virtual ~MemcachedSetCommand();
 
 private:
   void StartWriteReply() override;
@@ -41,4 +41,4 @@ private:
 
 }
 
-#endif // _YARMPROXY_SET_COMMAND_H_
+#endif // _YARMPROXY_MEMCACHED_SET_COMMAND_H_

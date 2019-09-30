@@ -1,4 +1,4 @@
-#include "set_command.h"
+#include "memcached_set_command.h"
 
 #include "base/logging.h"
 
@@ -12,13 +12,13 @@
 
 namespace yarmproxy {
 
-SetCommand::SetCommand(std::shared_ptr<ClientConnection> client,
+MemcachedSetCommand::MemcachedSetCommand(std::shared_ptr<ClientConnection> client,
           const char* buf, size_t cmd_len, size_t* body_bytes) 
     : Command(client) {
   *body_bytes = ParseQuery(buf, cmd_len);
 }
 
-size_t SetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
+size_t MemcachedSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   // <command name> <key> <flags> <exptime> <bytes>\r\n
   const char *p = cmd_data;
   while(*(p++) != ' ');
@@ -36,13 +36,13 @@ size_t SetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   return std::atoi(p) + 2; // 2 is lenght of the ending "\r\n"
 }
 
-SetCommand::~SetCommand() {
+MemcachedSetCommand::~MemcachedSetCommand() {
   if (backend_conn_) {
     backend_pool()->Release(backend_conn_);
   }
 }
 
-bool SetCommand::WriteQuery() {
+bool MemcachedSetCommand::WriteQuery() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
     // LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is true";
     query_recv_complete_ = true;
@@ -50,7 +50,7 @@ bool SetCommand::WriteQuery() {
 
   if (!backend_conn_) {
     backend_conn_ = AllocateBackend(backend_endpoint_);
-    LOG_DEBUG << "SetCommand::WriteQuery backend=" << backend_conn_;
+    LOG_DEBUG << "MemcachedSetCommand::WriteQuery backend=" << backend_conn_;
   }
 
   auto buffer = client_conn_->buffer();
@@ -60,10 +60,10 @@ bool SetCommand::WriteQuery() {
   return false;
 }
 
-void SetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
+void MemcachedSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
-    LOG_WARN << "SetCommand::OnBackendReplyReceived err, backend=" << backend;
+    LOG_WARN << "MemcachedSetCommand::OnBackendReplyReceived err, backend=" << backend;
     client_conn_->Abort();
     return;
   }
@@ -74,20 +74,20 @@ void SetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
   backend->TryReadMoreReply();
 }
 
-void SetCommand::StartWriteReply() {
+void MemcachedSetCommand::StartWriteReply() {
   // TODO : report error & rotate if connection refused
   TryWriteReply(backend_conn_);
 }
 
-void SetCommand::RotateReplyingBackend(bool) {
+void MemcachedSetCommand::RotateReplyingBackend(bool) {
   client_conn_->RotateReplyingCommand();
 }
 
-bool SetCommand::query_recv_complete() {
+bool MemcachedSetCommand::query_recv_complete() {
   return query_recv_complete_;
 }
 
-bool SetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
+bool MemcachedSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(backend_conn_ == backend);
   const char * entry = backend_conn_->buffer()->unparsed_data();
   const char * p = static_cast<const char *>(memchr(entry, '\n',

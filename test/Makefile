@@ -13,7 +13,7 @@ targets : redis_protocol_test config_test
 	$(CXX) $<  ../base/loguru.cc ../base/logging.cc $(CXXFLAGS) $(LDFLAGS) -o $@
 
 config_test : config_test.cc ../proxy/config.cc
-	$(CXX) $<  ../proxy/config.cc -I../proxy $(CXXFLAGS) $(LDFLAGS) -o $@
+	$(CXX) $<  ../proxy/config.cc -I../proxy $(CXXFLAGS) $(LDFLAGS) -lboost_system -o $@
 
 clean:
 	rm -fv $(EXES)

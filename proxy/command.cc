@@ -13,8 +13,8 @@
 #include "backend_pool.h"
 #include "read_buffer.h"
 
-#include "get_command.h"
-#include "set_command.h"
+#include "memcached_get_command.h"
+#include "memcached_set_command.h"
 
 #include "redis_protocol.h"
 #include "redis_set_command.h"
@@ -112,12 +112,12 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
   if (strncmp(buf, "get ", 4) == 0) {
     // TODO : strict protocol check
-    command->reset(new ParallelGetCommand(client, buf, cmd_line_bytes));
+    command->reset(new MemcachedGetCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;
   } else if (strncmp(buf, "set ", 4) == 0 || strncmp(buf, "add ", 4) == 0
              || strncmp(buf, "replace ", sizeof("replace ") - 1) == 0) {
     size_t body_bytes;
-    command->reset(new SetCommand(client, buf, cmd_line_bytes, &body_bytes));
+    command->reset(new MemcachedSetCommand(client, buf, cmd_line_bytes, &body_bytes));
     return cmd_line_bytes + body_bytes;
   }
 

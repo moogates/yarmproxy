@@ -1,4 +1,4 @@
-#include "get_command.h"
+#include "memcached_get_command.h"
 
 #include "base/logging.h"
 
@@ -13,14 +13,14 @@
 
 namespace yarmproxy {
 
-ParallelGetCommand::ParallelGetCommand(std::shared_ptr<ClientConnection> client,
+MemcachedGetCommand::MemcachedGetCommand(std::shared_ptr<ClientConnection> client,
                      const char* cmd_data, size_t cmd_size)
     : Command(client)
 {
   ParseQuery(cmd_data, cmd_size);
 }
 
-ParallelGetCommand::~ParallelGetCommand() {
+MemcachedGetCommand::~MemcachedGetCommand() {
   for(auto& query : subqueries_) {
     if (query->backend_conn_) {
       backend_pool()->Release(query->backend_conn_);
@@ -28,7 +28,7 @@ ParallelGetCommand::~ParallelGetCommand() {
   }
 }
 
-void ParallelGetCommand::ParseQuery(const char* cmd_data,
+void MemcachedGetCommand::ParseQuery(const char* cmd_data,
         size_t cmd_size) {
   std::map<ip::tcp::endpoint, std::string> ep_keys;
   for(const char* p = cmd_data + 4/*strlen("get ")*/;
@@ -53,7 +53,7 @@ void ParallelGetCommand::ParseQuery(const char* cmd_data,
   }
 }
 
-bool ParallelGetCommand::WriteQuery() {
+bool MemcachedGetCommand::WriteQuery() {
   for(auto& query : subqueries_) {
     if (!query->backend_conn_) {
       query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
@@ -64,7 +64,7 @@ bool ParallelGetCommand::WriteQuery() {
   return false;
 }
 
-void ParallelGetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
+void MemcachedGetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
   if (received_reply_backends_.insert(backend).second) {
     if (received_reply_backends_.size() == subqueries_.size()) {
       last_backend_ = backend;
@@ -72,7 +72,7 @@ void ParallelGetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend
   }
 }
 
-bool ParallelGetCommand::TryActivateReplyingBackend(
+bool MemcachedGetCommand::TryActivateReplyingBackend(
         std::shared_ptr<BackendConn> backend) {
   if (replying_backend_ == nullptr) {
     replying_backend_ = backend;
@@ -81,7 +81,7 @@ bool ParallelGetCommand::TryActivateReplyingBackend(
   return backend == replying_backend_;
 }
 
-void ParallelGetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend) {
+void MemcachedGetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend) {
   if (client_conn_->IsFirstCommand(shared_from_this())
       && TryActivateReplyingBackend(backend)) {
     if (backend->finished()) {
@@ -98,7 +98,7 @@ void ParallelGetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backen
   }
 }
 
-void ParallelGetCommand::OnBackendReplyReceived(
+void MemcachedGetCommand::OnBackendReplyReceived(
         std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   TryMarkLastBackend(backend);
   if (ec != ErrorCode::E_SUCCESS
@@ -113,8 +113,8 @@ void ParallelGetCommand::OnBackendReplyReceived(
 }
 
 
-void ParallelGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
-  LOG_DEBUG << "ParallelGetCommand::OnBackendConnectError endpoint="
+void MemcachedGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+  LOG_DEBUG << "MemcachedGetCommand::OnBackendConnectError endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   ++unreachable_backends_;
   TryMarkLastBackend(backend);
@@ -122,10 +122,10 @@ void ParallelGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> back
   if (backend == last_backend_) {
     static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
     backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
-    LOG_WARN << "ParallelGetCommand::OnBackendConnectError last, endpoint="
+    LOG_WARN << "MemcachedGetCommand::OnBackendConnectError last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   } else {
-    LOG_WARN << "ParallelGetCommand::OnBackendConnectError not last, endpoint="
+    LOG_WARN << "MemcachedGetCommand::OnBackendConnectError not last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   }
   backend->set_reply_recv_complete();
@@ -134,11 +134,11 @@ void ParallelGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> back
   BackendReadyToReply(backend);
 }
 
-void ParallelGetCommand::StartWriteReply() {
+void MemcachedGetCommand::StartWriteReply() {
   NextBackendStartReply();
 }
 
-void ParallelGetCommand::NextBackendStartReply() {
+void MemcachedGetCommand::NextBackendStartReply() {
   LOG_DEBUG << "NextBackendStartReply cmd=" << this
             << " last replying_backend_=" << replying_backend_;
   if (waiting_reply_queue_.size() > 0) {
@@ -158,24 +158,24 @@ void ParallelGetCommand::NextBackendStartReply() {
   }
 }
 
-bool ParallelGetCommand::HasUnfinishedBanckends() const {
+bool MemcachedGetCommand::HasUnfinishedBanckends() const {
   return unreachable_backends_ + completed_backends_ < subqueries_.size();
 }
 
-void ParallelGetCommand::RotateReplyingBackend(bool success) {
+void MemcachedGetCommand::RotateReplyingBackend(bool success) {
   if (success) {
     ++completed_backends_;
   }
   if (HasUnfinishedBanckends()) {
-    LOG_DEBUG << "ParallelGetCommand::Rotate to next backend";
+    LOG_DEBUG << "MemcachedGetCommand::Rotate to next backend";
     NextBackendStartReply();
   } else {
-    LOG_DEBUG << "ParallelGetCommand::Rotate to next COMMAND";
+    LOG_DEBUG << "MemcachedGetCommand::Rotate to next COMMAND";
     client_conn_->RotateReplyingCommand();
   }
 }
 
-size_t ParallelGetCommand::ParseReplyBodyBytes(const char * data, const char * end) {
+size_t MemcachedGetCommand::ParseReplyBodyBytes(const char * data, const char * end) {
   // "VALUE <key> <flag> <bytes>\r\n"
   const char * p = data + sizeof("VALUE ");
   int count = 0;
@@ -190,7 +190,7 @@ size_t ParallelGetCommand::ParseReplyBodyBytes(const char * data, const char * e
   return 0;
 }
 
-bool ParallelGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
+bool MemcachedGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   while(backend->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend->buffer()->unparsed_data();
     size_t unparsed_bytes = backend->buffer()->unparsed_bytes();

@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_PARALLEL_GET_COMMAND_H_
-#define _YARMPROXY_PARALLEL_GET_COMMAND_H_
+#ifndef _YARMPROXY_MEMCACHED_GET_COMMAND_H_
+#define _YARMPROXY_MEMCACHED_GET_COMMAND_H_
 
 #include <map>
 #include <set>
@@ -12,12 +12,12 @@ namespace yarmproxy {
 
 using namespace boost::asio;
 
-class ParallelGetCommand : public Command {
+class MemcachedGetCommand : public Command {
 public:
-  ParallelGetCommand(std::shared_ptr<ClientConnection> client,
+  MemcachedGetCommand(std::shared_ptr<ClientConnection> client,
                      const char* cmd_data, size_t cmd_size);
 
-  virtual ~ParallelGetCommand();
+  virtual ~MemcachedGetCommand();
 
   bool WriteQuery() override;
 
@@ -69,5 +69,5 @@ private:
 
 }
 
-#endif  // _YARMPROXY_PARALLEL_GET_COMMAND_H_
+#endif  // _YARMPROXY_MEMCACHED_GET_COMMAND_H_
 
