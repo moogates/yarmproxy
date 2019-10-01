@@ -109,9 +109,15 @@ void ClientConnection::AsyncRead() {
 void ClientConnection::RotateReplyingCommand() {
   if (active_cmd_queue_.size() == 1) {
     LOG_DEBUG << "RotateReplyingCommand AsyncRead when all commands processed";
-    AsyncRead();
+    // AsyncRead();
+    TryReadMoreQuery("client_conn_5");
   }
 
+  LOG_DEBUG << "RotateReplyingCommand command=" << active_cmd_queue_.front()
+            << " command.query_recv_complete=" << active_cmd_queue_.front()->query_recv_complete()
+            << " active_cmd_queue_.size=" << active_cmd_queue_.size()
+            << " buffer.parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes()
+            << " buffer.lock_count=" << buffer_->recycle_lock_count();
   active_cmd_queue_.pop_front();
   if (!active_cmd_queue_.empty()) {
     // active_cmd_queue_.front()->StartWriteReply();

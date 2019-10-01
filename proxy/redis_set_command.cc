@@ -95,6 +95,7 @@ void RedisSetCommand::StartWriteReply() {
 }
 
 void RedisSetCommand::RotateReplyingBackend(bool) {
+  assert(query_recv_complete_);
   client_conn_->RotateReplyingCommand();
 }
 

@@ -44,16 +44,19 @@ MemcachedSetCommand::~MemcachedSetCommand() {
 
 bool MemcachedSetCommand::WriteQuery() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
-    // LOG_WARN << "RedisSetCommand WriteQuery query_recv_complete_ is true";
+    LOG_WARN << "WriteQuery query_recv_complete_ is true";
     query_recv_complete_ = true;
   }
 
   if (connect_error_) {
     assert(backend_conn_);
-    // LOG_WARN << "RedisSetCommand WriteQuery connect_error_ is true, query_recv_complete_=" << query_recv_complete_;
+    LOG_WARN << "WriteQuery connect_error_, query_recv_complete_="
+             << query_recv_complete_;
     if (query_recv_complete_) {
       if (client_conn_->IsFirstCommand(shared_from_this())) {
         LOG_WARN << "RedisSetCommand WriteQuery connect_error_ write reply";
+        // query_recv_complete完毕才可以write reply, 因而这里backend一定尚未finished()
+        assert(!backend_conn_->finished());
         TryWriteReply(backend_conn_);
       } else {
         LOG_WARN << "RedisSetCommand WriteQuery connect_error_ wait to write reply";
@@ -113,10 +116,13 @@ void MemcachedSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> ba
 
 void MemcachedSetCommand::StartWriteReply() {
   // TODO : report error & rotate if connection refused
-  TryWriteReply(backend_conn_);
+  if (query_recv_complete_) {
+    TryWriteReply(backend_conn_);
+  }
 }
 
 void MemcachedSetCommand::RotateReplyingBackend(bool) {
+  assert(query_recv_complete_);
   client_conn_->RotateReplyingCommand();
 }
 

@@ -164,7 +164,7 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
       if (query_data_zero_copy()) {
         client_conn_->buffer()->dec_recycle_lock();
         if (!query_recv_complete()) {
-          client_conn_->TryReadMoreQuery();
+          client_conn_->TryReadMoreQuery("command_1");
         }
       }
     } else {
@@ -180,7 +180,7 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
   if (query_data_zero_copy()) {
     client_conn_->buffer()->dec_recycle_lock();
     if (!query_recv_complete()) {
-      client_conn_->TryReadMoreQuery();
+      client_conn_->TryReadMoreQuery("command_2");
       return;
     }
   }
@@ -208,6 +208,7 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
   if (backend->finished()) {
     assert(!backend->buffer()->recycle_locked());
     LOG_DEBUG << "OnWriteReplyFinished backend=" << backend << " finished";
+    assert(query_recv_complete()); // write_reply开始时, 一定recv_query结束, 包括connect error时候，也要遵守这一约定
     RotateReplyingBackend(backend->recyclable());
   } else {
     LOG_DEBUG << "OnWriteReplyFinished backend=" << backend << " unfinished";
