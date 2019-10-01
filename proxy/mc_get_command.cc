@@ -116,20 +116,20 @@ void MemcachedGetCommand::OnBackendReplyReceived(
 void MemcachedGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
   LOG_DEBUG << "MemcachedGetCommand::OnBackendConnectError endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
-  ++unreachable_backends_;
   TryMarkLastBackend(backend);
 
   if (backend == last_backend_) {
-    if (completed_backends_ > 0) {
-    static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
-    backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
+    if (subqueries_.size() > 1) {
+      static const char END_RN[] = "xEND\r\n"; // TODO : 统一放置错误码
+      backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
     } else {
-    static const char CONNECT_ERROR[] = "SERVER_ERROR: Backeend Connect Fail\r\n"; // TODO : 统一放置错误码
-    backend->SetReplyData(CONNECT_ERROR, sizeof(CONNECT_ERROR) - 1);
+      static const char CONNECT_ERROR[] = "SERVER_ERROR: Backend Connect Fail\r\n"; // TODO : 统一放置错误码
+      backend->SetReplyData(CONNECT_ERROR, sizeof(CONNECT_ERROR) - 1);
     }
     LOG_WARN << "MemcachedGetCommand::OnBackendConnectError last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   } else {
+    // ++completed_backends_;
     LOG_WARN << "MemcachedGetCommand::OnBackendConnectError not last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   }
@@ -144,15 +144,14 @@ void MemcachedGetCommand::StartWriteReply() {
 }
 
 void MemcachedGetCommand::NextBackendStartReply() {
-  LOG_DEBUG << "NextBackendStartReply cmd=" << this
+  LOG_WARN << "NextBackendStartReply cmd=" << this
             << " last replying_backend_=" << replying_backend_;
   if (waiting_reply_queue_.size() > 0) {
     auto next_backend = waiting_reply_queue_.front();
     waiting_reply_queue_.pop_front();
 
-    LOG_DEBUG << "NextBackendStartReply activate ready backend,"
+    LOG_WARN << "NextBackendStartReply activate ready backend,"
               << " subqueries_.size=" << subqueries_.size()
-              << " unreachable_backends_=" << unreachable_backends_
               << " completed_backends_=" << completed_backends_
               << " backend=" << next_backend;
     if (next_backend->finished()) {
@@ -167,18 +166,21 @@ void MemcachedGetCommand::NextBackendStartReply() {
 }
 
 bool MemcachedGetCommand::HasUnfinishedBanckends() const {
-  return unreachable_backends_ + completed_backends_ < subqueries_.size();
+  return completed_backends_ < subqueries_.size();
 }
 
-void MemcachedGetCommand::RotateReplyingBackend(bool success) {
-  if (success) {
-    ++completed_backends_;
-  }
+void MemcachedGetCommand::RotateReplyingBackend(bool) {
+  ++completed_backends_;
   if (HasUnfinishedBanckends()) {
-    LOG_DEBUG << "MemcachedGetCommand::Rotate to next backend";
+  // if (HasUnfinishedBanckends() || waiting_reply_queue_.size() > 0) {
+    LOG_DEBUG << "MemcachedGetCommand::Rotate to next backend, HasUnfinishedBanckends="
+              << HasUnfinishedBanckends()
+              << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
     NextBackendStartReply();
   } else {
-    LOG_WARN << "MemcachedGetCommand::Rotate to next COMMAND";
+    LOG_WARN << "MemcachedGetCommand::Rotate to next COMMAND"
+             << " completed_backends_=" << completed_backends_
+             << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
     client_conn_->RotateReplyingCommand();
   }
 }
