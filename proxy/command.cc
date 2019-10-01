@@ -15,9 +15,9 @@
 
 #include "error_command.h"
 
-#include "memcached_get_command.h"
-#include "memcached_set_command.h"
-#include "mc_simple_command.h"
+#include "mc_basic_command.h"
+#include "mc_get_command.h"
+#include "mc_set_command.h"
 
 #include "redis_protocol.h"
 #include "redis_set_command.h"
@@ -135,7 +135,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       strncmp(buf, "touch ", sizeof("touch ") - 1) == 0
       ) {
     // TODO : strict protocol check
-    command->reset(new MemcachedSimpleCommand(client, buf, cmd_line_bytes));
+    command->reset(new MemcachedBasicCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;
   }
 

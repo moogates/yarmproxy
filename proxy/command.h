@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include "base/logging.h"
 
 #include <boost/asio.hpp>
 using namespace boost::asio; // TODO : minimize endpoint dependency
@@ -59,6 +60,7 @@ protected:
     return [cmd_wptr, mem_func, backend_wptr](ErrorCode ec) {
           if (auto cmd_ptr = cmd_wptr.lock()) {
             auto backend = backend_wptr.lock();
+            LOG_ERROR << "in WeakBind callback, backend=" << backend;
             ((*cmd_ptr).*mem_func)(backend, ec);
           }
         };

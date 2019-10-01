@@ -1,4 +1,4 @@
-#include "mc_simple_command.h"
+#include "mc_basic_command.h"
 
 #include "base/logging.h"
 
@@ -12,13 +12,13 @@
 
 namespace yarmproxy {
 
-MemcachedSimpleCommand::MemcachedSimpleCommand(
+MemcachedBasicCommand::MemcachedBasicCommand(
     std::shared_ptr<ClientConnection> client, const char* buf, size_t cmd_len) 
     : Command(client) {
   ParseQuery(buf, cmd_len);
 }
 
-size_t MemcachedSimpleCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
+size_t MemcachedBasicCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   // <command> <key> [noreply]\r\n
   const char *p = cmd_data;
   while(*(p++) != ' ');
@@ -31,17 +31,17 @@ size_t MemcachedSimpleCommand::ParseQuery(const char* cmd_data, size_t cmd_len) 
   return 0; // 2 is lenght of the ending "\r\n"
 }
 
-MemcachedSimpleCommand::~MemcachedSimpleCommand() {
+MemcachedBasicCommand::~MemcachedBasicCommand() {
   if (backend_conn_) {
     backend_pool()->Release(backend_conn_);
   }
 }
 
-bool MemcachedSimpleCommand::WriteQuery() {
+bool MemcachedBasicCommand::WriteQuery() {
   assert(backend_conn_ == nullptr);
   if (!backend_conn_) {
     backend_conn_ = AllocateBackend(backend_endpoint_);
-    LOG_DEBUG << "MemcachedSimpleCommand::WriteQuery backend=" << backend_conn_;
+    LOG_DEBUG << "MemcachedBasicCommand::WriteQuery backend=" << backend_conn_;
   }
 
   auto buffer = client_conn_->buffer();
@@ -51,10 +51,10 @@ bool MemcachedSimpleCommand::WriteQuery() {
   return false;
 }
 
-void MemcachedSimpleCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
+void MemcachedBasicCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
-    LOG_WARN << "MemcachedSimpleCommand::OnBackendReplyReceived err, backend=" << backend;
+    LOG_WARN << "MemcachedBasicCommand::OnBackendReplyReceived err, backend=" << backend;
     client_conn_->Abort();
     return;
   }
@@ -65,16 +65,16 @@ void MemcachedSimpleCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn>
   backend->TryReadMoreReply();
 }
 
-void MemcachedSimpleCommand::StartWriteReply() {
+void MemcachedBasicCommand::StartWriteReply() {
   // TODO : report error & rotate if connection refused
   TryWriteReply(backend_conn_);
 }
 
-void MemcachedSimpleCommand::RotateReplyingBackend(bool) {
+void MemcachedBasicCommand::RotateReplyingBackend(bool) {
   client_conn_->RotateReplyingCommand();
 }
 
-bool MemcachedSimpleCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
+bool MemcachedBasicCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(backend_conn_ == backend);
   const char * entry = backend_conn_->buffer()->unparsed_data();
   const char * p = static_cast<const char *>(memchr(entry, '\n',

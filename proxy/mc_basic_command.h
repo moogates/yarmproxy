@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_MC_SIMPLE_COMMAND_H_
-#define _YARMPROXY_MC_SIMPLE_COMMAND_H_
+#ifndef _YARMPROXY_MC_BASIC_COMMAND_H_
+#define _YARMPROXY_MC_BASIC_COMMAND_H_
 
 #include <boost/asio.hpp>
 
@@ -9,13 +9,13 @@ namespace yarmproxy {
 
 using namespace boost::asio;
 
-class MemcachedSimpleCommand: public Command {
+class MemcachedBasicCommand: public Command {
 public:
-  MemcachedSimpleCommand(std::shared_ptr<ClientConnection> client,
+  MemcachedBasicCommand(std::shared_ptr<ClientConnection> client,
             const char* buf,
             size_t cmd_len);
 
-  virtual ~MemcachedSimpleCommand();
+  virtual ~MemcachedBasicCommand();
 
 private:
   void StartWriteReply() override;
@@ -40,4 +40,4 @@ private:
 
 }
 
-#endif // _YARMPROXY_MC_SIMPLE_COMMAND_H_
+#endif // _YARMPROXY_MC_BASIC_COMMAND_H_

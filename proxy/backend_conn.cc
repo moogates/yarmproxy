@@ -23,7 +23,7 @@ BackendConn::BackendConn(WorkerContext& context,
 }
 
 BackendConn::~BackendConn() {
-  LOG_DEBUG << "BackendConn dtor, count=" << --backend_conn_count;
+  LOG_DEBUG << "BackendConn " << this << " dtor, count=" << --backend_conn_count;
   socket_.close();
 
   context_.allocator_->Release(buffer_->data());

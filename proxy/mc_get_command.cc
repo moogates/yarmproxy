@@ -1,4 +1,4 @@
-#include "memcached_get_command.h"
+#include "mc_get_command.h"
 
 #include "base/logging.h"
 
@@ -120,8 +120,13 @@ void MemcachedGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> bac
   TryMarkLastBackend(backend);
 
   if (backend == last_backend_) {
+    if (completed_backends_ > 0) {
     static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
     backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
+    } else {
+    static const char CONNECT_ERROR[] = "SERVER_ERROR: Backeend Connect Fail\r\n"; // TODO : 统一放置错误码
+    backend->SetReplyData(CONNECT_ERROR, sizeof(CONNECT_ERROR) - 1);
+    }
     LOG_WARN << "MemcachedGetCommand::OnBackendConnectError last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   } else {
@@ -146,6 +151,9 @@ void MemcachedGetCommand::NextBackendStartReply() {
     waiting_reply_queue_.pop_front();
 
     LOG_DEBUG << "NextBackendStartReply activate ready backend,"
+              << " subqueries_.size=" << subqueries_.size()
+              << " unreachable_backends_=" << unreachable_backends_
+              << " completed_backends_=" << completed_backends_
               << " backend=" << next_backend;
     if (next_backend->finished()) {
       RotateReplyingBackend(next_backend->recyclable());
@@ -170,7 +178,7 @@ void MemcachedGetCommand::RotateReplyingBackend(bool success) {
     LOG_DEBUG << "MemcachedGetCommand::Rotate to next backend";
     NextBackendStartReply();
   } else {
-    LOG_DEBUG << "MemcachedGetCommand::Rotate to next COMMAND";
+    LOG_WARN << "MemcachedGetCommand::Rotate to next COMMAND";
     client_conn_->RotateReplyingCommand();
   }
 }
