@@ -1,5 +1,5 @@
-#ifndef _CONSIST_HASH_H_
-#define _CONSIST_HASH_H_
+#ifndef _YARMPROXY_CONSIST_HASH_H_
+#define _YARMPROXY_CONSIST_HASH_H_
 
 #include <string>
 #include <map>
@@ -9,15 +9,20 @@
 #include <boost/asio.hpp>
 #include <boost/thread/shared_mutex.hpp>
 
+#include "config.h"
+
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 using CacheNodeMap = std::map<ip::tcp::endpoint, size_t>;
+
 
 class Continuum
 {
 public:
+  Continuum(){}
+  Continuum(const std::vector<Config::Backend>& backends);
   // 传入配置的格式 : "10.3.17.127:11211 2000;10.3.17.127:11212 3000;10.3.17.127:11213 4000"
   // 端口后面, 是内存大小, 以M为单位
   bool SetCacheNodes(const std::string & cache_nodes);
@@ -50,5 +55,5 @@ private:
 
 }
 
-#endif // _CONSIST_HASH_H_
+#endif // _YARMPROXY_CONSIST_HASH_H_
 

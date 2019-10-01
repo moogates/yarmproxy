@@ -1,12 +1,18 @@
-#ifndef _BACKEND_LOCATOR_H_
-#define _BACKEND_LOCATOR_H_
+#ifndef _YARMPROXY_BACKEND_LOCATOR_H_
+#define _YARMPROXY_BACKEND_LOCATOR_H_
 
 #include <string>
 #include <boost/asio.hpp>
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class Continuum;
+enum class ProtocolType {
+  REDIS     = 0,
+  MEMCACHED = 1,
+};
+
+using namespace boost::asio;
 
 class BackendLoactor {
 private:
@@ -17,12 +23,12 @@ public:
     return locator;
   }
   bool Initialize();
-  boost::asio::ip::tcp::endpoint GetEndpointByKey(const char * key, size_t len);
-  boost::asio::ip::tcp::endpoint GetEndpointByKey(const std::string& key);
+
+  ip::tcp::endpoint Locate(const char * key, size_t len, ProtocolType protocol);
 private:
   std::map<std::string, Continuum *> clusters_continum_;
 };
 
 }
 
-#endif // _BACKEND_LOCATOR_H_
+#endif // _YARMPROXY_BACKEND_LOCATOR_H_

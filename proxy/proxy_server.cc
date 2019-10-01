@@ -1,15 +1,15 @@
 #include "proxy_server.h"
 
-// #include <thread>
-// #include <functional>
+#include <iostream>
 
 #include "base/logging.h"
 
 #include "client_conn.h"
 #include "worker_pool.h"
 #include "backend_locator.h"
+#include "signal_watcher.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
   size_t pos = ep.find(':');
@@ -18,43 +18,89 @@ static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
   return ip::tcp::endpoint(ip::address::from_string(host), port);
 }
 
-ProxyServer::ProxyServer(const std::string & addr, size_t worker_concurrency)
-  : work_(io_service_)
-  , acceptor_(io_service_, ParseEndpoint(addr))
-  , worker_pool_(new WorkerPool(worker_concurrency)) {
+static size_t DefaultConcurrency() {
+  size_t hd_concurrency = std::thread::hardware_concurrency();
+  LOG_INFO << "ProxyServer hardware_concurrency " << hd_concurrency;
+  return hd_concurrency == 0 ? 4 : hd_concurrency;
+}
+
+ProxyServer::ProxyServer(const std::string & addr, size_t concurrency)
+    : work_(io_service_)
+    , acceptor_(io_service_)
+    , listen_addr_(addr)
+    , stopped_(false)
+    , worker_pool_(new WorkerPool(concurrency > 0 ? concurrency : DefaultConcurrency())) {
 }
 
 ProxyServer::~ProxyServer() {
-  io_service_.stop();
-  worker_pool_->StopDispatching();
+  if (!stopped_) {
+    Stop();
+  }
 }
 
 void ProxyServer::Run() {
   if (!BackendLoactor::Instance().Initialize()) {
-    LOG_ERROR << "BackendLoactor initialization error ...";
+    LOG_ERROR << "ProxyServer BackendLoactor init error ...";
     return;
   }
+
+  auto endpoint = ParseEndpoint(listen_addr_);
+  acceptor_.open(endpoint.protocol());
+  acceptor_.set_option(ip::tcp::acceptor::reuse_address(true));
+  acceptor_.bind(endpoint);
+
+  boost::system::error_code ec;
+  static const int BACKLOG = 1024; // TODO : config
+  acceptor_.listen(BACKLOG, ec);
+  if (ec) {
+    LOG_ERROR << "BackendLoactor listen error " << ec.message();
+    return;
+  }
+
+  // SignalWatcher::Instance().RegisterHandler(SIGHUP, [this](int) { ReloadBackends(); });
+  SignalWatcher::Instance().RegisterHandler(SIGINT,
+      [this](int) {
+        LOG_ERROR << "SIGINT Received.";
+        Stop();
+      });
+  SignalWatcher::Instance().RegisterHandler(SIGTERM,
+      [this](int) {
+        LOG_ERROR << "SIGTERM Received.";
+        Stop();
+      });
 
   worker_pool_->StartDispatching();
   StartAccept();
 
-  try {
-    io_service_.run();
-  } catch (std::exception& e) {
-    LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
+  while(!stopped_) {
+  // try { // TODO : don't try for test
+      io_service_.run();
+      LOG_WARN << "ProxyServer io_service stopped.";
+  //} catch (std::exception& e) {
+  //  LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
+  //}
   }
+}
+
+void ProxyServer::Stop() {
+  LOG_WARN << "ProxyServer Stop";
+  stopped_ = true;
+  io_service_.stop();
+  worker_pool_->StopDispatching();
 }
 
 void ProxyServer::StartAccept() {
   WorkerContext& worker = worker_pool_->NextWorker();
   std::shared_ptr<ClientConnection> client_conn(new ClientConnection(worker));
+  LOG_DEBUG << "ProxyServer create new conn, client=" << client_conn;
 
   acceptor_.async_accept(client_conn->socket(),
       std::bind(&ProxyServer::HandleAccept, this, client_conn,
-        std::placeholders::_1));
+                std::placeholders::_1));
 }
 
-void ProxyServer::HandleAccept(std::shared_ptr<ClientConnection> client_conn, const boost::system::error_code& error) {
+void ProxyServer::HandleAccept(std::shared_ptr<ClientConnection> client_conn,
+                               const boost::system::error_code& error) {
   if (!error) {
     client_conn->StartRead();
     StartAccept();

@@ -1,5 +1,5 @@
-#ifndef _CLIENT_CONNECTION_H_
-#define _CLIENT_CONNECTION_H_
+#ifndef _YARMPROXY_CLIENT_CONNECTION_H_
+#define _YARMPROXY_CLIENT_CONNECTION_H_
 
 #include <list>
 #include <queue>
@@ -11,14 +11,16 @@
 
 using namespace boost::asio;
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class BackendConnPool;
 class Command;
 class WorkerContext;
 class ReadBuffer;
 
-typedef std::function<void(const boost::system::error_code& error)> ForwardReplyCallback;
+enum class ErrorCode;
+
+typedef std::function<void(ErrorCode ec)> WriteReplyCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
 public:
@@ -33,48 +35,53 @@ public:
     return socket_;
   }
   void StartRead();
-  void OnCommandError(std::shared_ptr<Command> cmd, const boost::system::error_code& error);
 
 public:
-  void ForwardReply(const char* data, size_t bytes, const ForwardReplyCallback& cb);
+  void Abort();
+
+public:
+  void WriteReply(const char* data, size_t bytes, const WriteReplyCallback& cb);
   bool IsFirstCommand(std::shared_ptr<Command> cmd) {
     // TODO : 能否作为一个标记，放在command里面？
     return cmd == active_cmd_queue_.front();
   }
   void RotateReplyingCommand();
 
-  void TryReadMoreQuery();
+  void TryReadMoreQuery(const char* caller = ""); // TODO : call param for debug only
   ReadBuffer* buffer() {
-    return read_buffer_;
+    return buffer_;
+  }
+  bool aborted() const { // TODO : for debug only
+    return aborted_;
+  }
+  bool is_writing_reply() const {
+    return is_writing_reply_;
   }
 
-  // boost::asio::io_service& io_service_;
 private:
   ip::tcp::socket socket_;
-public:
-  ReadBuffer* read_buffer_;
+  ReadBuffer* buffer_;
 
 protected:
   WorkerContext& context_;
 
 private:
   std::list<std::shared_ptr<Command>> active_cmd_queue_;
-
-  ForwardReplyCallback forward_resp_callback_;
-
-  size_t timeout_;
-  boost::asio::deadline_timer timer_;
+  bool is_reading_query_ = false;
+  bool is_writing_reply_ = false;
+  bool aborted_ = false;
 
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   bool ProcessUnparsedQuery();
 
-  void HandleMemcCommandTimeout(const boost::system::error_code& error);
-  void HandleTimeoutWrite(const boost::system::error_code& error);
+  void IdleTimeout(const boost::system::error_code& error);
+  void UpdateTimer();
+  boost::asio::steady_timer timer_; // TODO : system_timer or steady_timer?
 };
 
 }
 
-#endif // _CLIENT_CONNECTION_H_
+#endif // _YARMPROXY_CLIENT_CONNECTION_H_
 

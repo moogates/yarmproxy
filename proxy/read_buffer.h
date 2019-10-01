@@ -1,9 +1,11 @@
-#ifndef _READ_BUFFER_H_
-#define _READ_BUFFER_H_
+#ifndef _YARMPROXY_READ_BUFFER_H_
+#define _YARMPROXY_READ_BUFFER_H_
 
 #include <algorithm>
+#include <cassert>
+#include "base/logging.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class ReadBuffer {
 private:
@@ -20,7 +22,7 @@ public:
                , buffer_size_(buffer_size)
                , processed_offset_(0)
                , received_offset_(0)
-               , parsed_offset_(0) 
+               , parsed_offset_(0)
                , recycle_lock_count_(0) {
   }
   ~ReadBuffer();
@@ -29,7 +31,7 @@ public:
   }
 
   void Reset() {
-    received_offset_ = processed_offset_ = parsed_offset_ = 0; // TODO : 这里需要吗？
+    received_offset_ = processed_offset_ = parsed_offset_ = 0;
     recycle_lock_count_ = 0;
   }
 
@@ -56,6 +58,10 @@ public:
     parsed_offset_ += bytes;
   }
 
+  size_t recycle_lock_count() const { // TODO : for debug only
+    return recycle_lock_count_;
+  }
+  bool recycle_locked() const;
   void inc_recycle_lock();
   void dec_recycle_lock();
 
@@ -64,8 +70,10 @@ public:
   }
   size_t unprocessed_bytes() const;  // 已经接收，且已经解析，但尚未处理的数据
 
+  void update_processed_offset(size_t processed);
   void update_processed_bytes(size_t processes_bytes);
   void update_received_bytes(size_t received_bytes);
+  void push_reply_data(const char* data, size_t bytes);
 
   void update_parsed_bytes(size_t parsed_bytes) {
     parsed_offset_ += parsed_bytes;
@@ -76,6 +84,7 @@ public:
   size_t unparsed_bytes() const;  // 尚未解析的数据
 
   size_t parsed_unprocessed_bytes() const {
+    assert(parsed_offset_ >= processed_offset_);
     if (parsed_offset_ > processed_offset_) {
       return parsed_offset_ - processed_offset_;
     }
@@ -99,5 +108,5 @@ private:
 
 }
 
-#endif // _READ_BUFFER_H_
+#endif // _YARMPROXY_READ_BUFFER_H_
 

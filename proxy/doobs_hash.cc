@@ -1,6 +1,6 @@
 #include "doobs_hash.h"
 
-namespace mcproxy {
+namespace yarmproxy {
 
 typedef  uint32_t ub4;   /* unsigned 4-byte quantities */
 typedef  unsigned char ub1;   /* unsigned 1-byte quantities */

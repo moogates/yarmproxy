@@ -3,7 +3,7 @@
 
 #include <set>
 
-namespace mcproxy {
+namespace yarmproxy {
 
 class Allocator {
 public:

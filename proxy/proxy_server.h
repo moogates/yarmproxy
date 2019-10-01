@@ -1,11 +1,11 @@
-#ifndef _PROXY_SERVER_H_
-#define _PROXY_SERVER_H_
+#ifndef _YARMPROXY_PROXY_SERVER_H_
+#define _YARMPROXY_PROXY_SERVER_H_
 
 #include <memory>
 #include <vector>
 #include <boost/asio.hpp>
 
-namespace mcproxy {
+namespace yarmproxy {
 
 using namespace boost::asio;
 
@@ -14,10 +14,11 @@ class WorkerPool;
 
 class ProxyServer {
 public:
-  ProxyServer(const std::string & addr, size_t worker_concurrency);
+  explicit ProxyServer(const std::string & addr, size_t worker_concurrency = 0);
   ~ProxyServer();
 
   void Run();
+  void Stop();
 
 private:
   ProxyServer(ProxyServer&) = delete;
@@ -30,11 +31,13 @@ private:
   io_service io_service_;
   io_service::work work_;
   ip::tcp::acceptor acceptor_;
+  std::string listen_addr_;
+  bool stopped_;
 
-  std::unique_ptr<WorkerPool> worker_pool_; 
+  std::unique_ptr<WorkerPool> worker_pool_;
 };
 
 }
 
-#endif // _PROXY_SERVER_H_
+#endif // _YARMPROXY_PROXY_SERVER_H_
 
