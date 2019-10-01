@@ -2,7 +2,7 @@ driver=nc
 driver=../yarmnc
 port=11311
 body_size=$(echo "($RANDOM*23+2027)%302144" | bc)
-body_size=200000
+#body_size=200000
 printf "Setting up(body_size=$body_size)..."
 rm -f get8.init.tmp
 for id in `seq 1 100`; do

@@ -139,7 +139,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
   if (connect_ec || option_ec) {
     socket_.close();
-    LOG_DEBUG << "HandleConnect error, connect_ec=" << connect_ec.message()
+    LOG_WARN << "HandleConnect error, connect_ec=" << connect_ec.message()
              << " option_ec=" << option_ec.message()
              << " endpoint=" << remote_endpoint_
              << " backend=" << this;

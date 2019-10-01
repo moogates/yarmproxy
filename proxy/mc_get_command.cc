@@ -28,8 +28,7 @@ MemcachedGetCommand::~MemcachedGetCommand() {
   }
 }
 
-void MemcachedGetCommand::ParseQuery(const char* cmd_data,
-        size_t cmd_size) {
+void MemcachedGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
   std::map<ip::tcp::endpoint, std::string> ep_keys;
   for(const char* p = cmd_data + 4/*strlen("get ")*/;
       p < cmd_data + cmd_size - 2/*strlen("\r\n")*/; ++p) {
@@ -120,17 +119,17 @@ void MemcachedGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> bac
 
   if (backend == last_backend_) {
     if (subqueries_.size() > 1) {
-      static const char END_RN[] = "xEND\r\n"; // TODO : 统一放置错误码
+      static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
       backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
     } else {
       static const char CONNECT_ERROR[] = "SERVER_ERROR: Backend Connect Fail\r\n"; // TODO : 统一放置错误码
       backend->SetReplyData(CONNECT_ERROR, sizeof(CONNECT_ERROR) - 1);
     }
-    LOG_WARN << "MemcachedGetCommand::OnBackendConnectError last, endpoint="
+    LOG_DEBUG << "MemcachedGetCommand::OnBackendConnectError last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   } else {
     // ++completed_backends_;
-    LOG_WARN << "MemcachedGetCommand::OnBackendConnectError not last, endpoint="
+    LOG_DEBUG << "MemcachedGetCommand::OnBackendConnectError not last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   }
   backend->set_reply_recv_complete();

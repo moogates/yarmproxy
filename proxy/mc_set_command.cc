@@ -44,25 +44,24 @@ MemcachedSetCommand::~MemcachedSetCommand() {
 
 bool MemcachedSetCommand::WriteQuery() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
-    LOG_WARN << "WriteQuery query_recv_complete_ is true";
     query_recv_complete_ = true;
   }
 
   if (connect_error_) {
     assert(backend_conn_);
-    LOG_WARN << "WriteQuery connect_error_, query_recv_complete_="
+    LOG_DEBUG << "WriteQuery connect_error_, query_recv_complete_="
              << query_recv_complete_;
     if (query_recv_complete_) {
       if (client_conn_->IsFirstCommand(shared_from_this())) {
-        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ write reply";
+        LOG_DEBUG << "RedisSetCommand WriteQuery connect_error_ write reply";
         // query_recv_complete完毕才可以write reply, 因而这里backend一定尚未finished()
         assert(!backend_conn_->finished());
         TryWriteReply(backend_conn_);
       } else {
-        LOG_WARN << "RedisSetCommand WriteQuery connect_error_ wait to write reply";
+        LOG_DEBUG << "RedisSetCommand WriteQuery connect_error_ wait to write reply";
       }
     } else {
-      LOG_WARN << "RedisSetCommand WriteQuery connect_error_ read more query";
+      LOG_DEBUG << "RedisSetCommand WriteQuery connect_error_ read more query";
       return true; // no callback, try read more query directly
     }
     return false;
@@ -90,20 +89,20 @@ void MemcachedSetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> bac
 
   if (query_recv_complete_) {
     if (client_conn_->IsFirstCommand(shared_from_this())) {
-      LOG_WARN << "RedisSetCommand OnBackendConnectError write reply";
+      LOG_DEBUG << "RedisSetCommand OnBackendConnectError write reply";
       TryWriteReply(backend);
     } else {
-      LOG_WARN << "RedisSetCommand OnBackendConnectError waiting to write reply";
+      LOG_DEBUG << "RedisSetCommand OnBackendConnectError waiting to write reply";
     }
   } else {
-    LOG_WARN << "RedisSetCommand OnBackendConnectError waiting for more query data";
+    LOG_DEBUG << "RedisSetCommand OnBackendConnectError waiting for more query data";
   }
 }
 
 void MemcachedSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
-    LOG_WARN << "MemcachedSetCommand::OnBackendReplyReceived err, backend=" << backend;
+    LOG_DEBUG << "MemcachedSetCommand::OnBackendReplyReceived err, backend=" << backend;
     client_conn_->Abort();
     return;
   }
