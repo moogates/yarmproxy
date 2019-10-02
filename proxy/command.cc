@@ -20,6 +20,7 @@
 #include "mc_set_command.h"
 
 #include "redis_protocol.h"
+#include "redis_basic_command.h"
 #include "redis_set_command.h"
 #include "redis_mset_command.h"
 #include "redis_get_command.h"
@@ -93,7 +94,8 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
         return ba.parsed_size();
       }
     } else if (ba[0].equals("del", sizeof("del") - 1) ||
-               ba[0].iequals("exists", sizeof("exists") - 1)) {
+               ba[0].iequals("exists", sizeof("exists") - 1) ||
+               ba[0].iequals("touch", sizeof("touch") - 1)) {
       if (ba.present_bulks() < 2 || !ba[1].completed()) {
         return 0;
       }
@@ -103,6 +105,18 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       } else {
         return ba.parsed_size() - ba.back().total_size();
       }
+    } else if (ba[0].equals("ttl", sizeof("ttl") - 1) ||
+        ba[0].equals("incr", sizeof("incr") - 1) ||
+        ba[0].equals("incrby", sizeof("incrby") - 1) ||
+        ba[0].equals("incrbyfloat", sizeof("incrbyfloat") - 1) ||
+        ba[0].equals("decr", sizeof("decr") - 1) ||
+        ba[0].equals("decrby", sizeof("decrby") - 1) ||
+        false) {
+      if (!ba.completed()) {
+        return 0;
+      }
+      command->reset(new RedisBasicCommand(client, ba));
+      return ba.total_size();
     }
 
     command->reset(new ErrorCommand(client, std::string("-YarmProxy unknown redis directive:") + ba[0].to_string() + "\r\n"));

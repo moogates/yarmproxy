@@ -21,18 +21,16 @@ static const std::string& ComposePrefix(const std::string& cmd_name, size_t keys
         {3, "*4\r\n$3\r\ndel\r\n"},
         {4, "*5\r\n$3\r\ndel\r\n"}
       };
+  static std::map<size_t, std::string> exists_prefix_cache;
+  static std::map<size_t, std::string> touch_prefix_cache;
 
-  static std::map<size_t, std::string> exists_prefix_cache {
-        {1, "*2\r\n$6\r\nexists\r\n"},
-        {2, "*3\r\n$6\r\nexists\r\n"},
-        {3, "*4\r\n$6\r\nexists\r\n"},
-        {4, "*5\r\n$6\r\nexists\r\n"}
-      };
   std::map<size_t, std::string>* prefix_cache = nullptr;
   if (cmd_name == "del") {
     prefix_cache = &del_prefix_cache;
   } else if (cmd_name == "exists") {
     prefix_cache = &exists_prefix_cache;
+  } else if (cmd_name == "touch") {
+    prefix_cache = &touch_prefix_cache;
   } else {
     assert(false);
   }
