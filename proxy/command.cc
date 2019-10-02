@@ -92,7 +92,8 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       } else {
         return ba.parsed_size();
       }
-    } else if (ba[0].equals("del", sizeof("del") - 1)) {
+    } else if (ba[0].equals("del", sizeof("del") - 1) ||
+               ba[0].iequals("exists", sizeof("exists") - 1)) {
       if (ba.present_bulks() < 2 || !ba[1].completed()) {
         return 0;
       }
