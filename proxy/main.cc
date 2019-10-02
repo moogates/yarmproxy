@@ -20,6 +20,8 @@
 // TODO : 9.27 跑了一晚上，redis返回错误提示：-ERR max number of clients reached
 // TODO : 超时处理, backend_conn / client_conn 的读写，都要处理超时
 // TODO : IPv6 support
+// TODO : get8.sh, 为啥memcached在mac上比ubuntu上慢这么多？
+// TODO : size limit :  Redis Strings are limited to 512 megabytes.
 
 int Daemonize();
 int MaximizeFdLimit();

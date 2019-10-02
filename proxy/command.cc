@@ -20,6 +20,7 @@
 #include "mc_set_command.h"
 
 #include "redis_protocol.h"
+#include "redis_basic_command.h"
 #include "redis_set_command.h"
 #include "redis_mset_command.h"
 #include "redis_get_command.h"
@@ -63,7 +64,9 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     if (ba.present_bulks() == 0 || ba[0].absent_size() > 0) {
       return 0;
     }
-    if (ba[0].equals("get", sizeof("get") - 1)) {
+    if (ba[0].equals("get", sizeof("get") - 1) ||
+        ba[0].equals("getset", sizeof("getset") - 1) ||
+        ba[0].equals("getrange", sizeof("getrange") - 1)) {
       if (!ba.completed()) {
         return 0;
       }
@@ -75,7 +78,12 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       }
       command->reset(new RedisMgetCommand(client, ba));
       return ba.total_size();
-    } else if (ba[0].equals("set", sizeof("set") - 1)) {
+    } else if (ba[0].equals("set", sizeof("set") - 1) ||
+        ba[0].equals("append", sizeof("append") - 1) ||
+        ba[0].equals("setrange", sizeof("setrange") - 1) ||
+        ba[0].equals("setnx", sizeof("setnx") - 1) ||
+        ba[0].equals("psetex", sizeof("psetex") - 1) ||
+        ba[0].equals("setex", sizeof("setex") - 1)) {
       if (ba.present_bulks() < 2 || !ba[1].completed()) {
         return 0;
       }
@@ -92,7 +100,9 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       } else {
         return ba.parsed_size();
       }
-    } else if (ba[0].equals("del", sizeof("del") - 1)) {
+    } else if (ba[0].equals("del", sizeof("del") - 1) ||
+               ba[0].iequals("exists", sizeof("exists") - 1) ||
+               ba[0].iequals("touch", sizeof("touch") - 1)) {
       if (ba.present_bulks() < 2 || !ba[1].completed()) {
         return 0;
       }
@@ -102,6 +112,19 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       } else {
         return ba.parsed_size() - ba.back().total_size();
       }
+    } else if (ba[0].equals("ttl", sizeof("ttl") - 1) ||
+        ba[0].equals("incr", sizeof("incr") - 1) ||
+        ba[0].equals("incrby", sizeof("incrby") - 1) ||
+        ba[0].equals("incrbyfloat", sizeof("incrbyfloat") - 1) ||
+        ba[0].equals("decr", sizeof("decr") - 1) ||
+        ba[0].equals("decrby", sizeof("decrby") - 1) ||
+        ba[0].equals("strlen", sizeof("strlen") - 1) ||
+        false) {
+      if (!ba.completed()) {
+        return 0;
+      }
+      command->reset(new RedisBasicCommand(client, ba));
+      return ba.total_size();
     }
 
     command->reset(new ErrorCommand(client, std::string("-YarmProxy unknown redis directive:") + ba[0].to_string() + "\r\n"));
@@ -132,8 +155,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       strncmp(buf, "incr ", sizeof("incr ") - 1) == 0 ||
       strncmp(buf, "decr ", sizeof("decr ") - 1) == 0 ||
       strncmp(buf, "incr ", sizeof("incr ") - 1) == 0 ||
-      strncmp(buf, "touch ", sizeof("touch ") - 1) == 0
-      ) {
+      strncmp(buf, "touch ", sizeof("touch ") - 1) == 0) {
     // TODO : strict protocol check
     command->reset(new MemcachedBasicCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;

@@ -37,6 +37,7 @@ private:
   bool query_recv_complete() override;
 
 private:
+  std::string cmd_name_;
   struct DelSubquery {
     DelSubquery(const ip::tcp::endpoint& ep, const char* data, size_t present_bytes)
         : backend_endpoint_(ep)

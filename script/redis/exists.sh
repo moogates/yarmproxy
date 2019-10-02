@@ -1,9 +1,6 @@
-query="*2\r\n\$3\r\nget\r\n\$4\r\nkey7\r\n"
-query="*2\r\n\$3\r\nget\r\n\$4\r\nkey1\r\n"
-echo "--------- $query -----------"
+query="*10\r\n\$6\r\nEXISTS\r\n\$4\r\nkey9\r\n\$4\r\nkey8\r\n\$4\r\nkey7\r\n\$4\r\nkey6\r\n\$4\r\nkey5\r\n\$4\r\nkey4\r\n\$4\r\nkey3\r\n\$4\r\nkey2\r\n\$4\r\nkey1\r\n"
 #printf "$query" | nc 127.0.0.1 6379
 printf "$query" | nc 127.0.0.1 11311
-echo
 exit
 
 query="*2\r\n\$3\r\nget\r\n\$4\r\nkey1\r\n*2\r\n\$3\r\nget\r\n\$4\r\nkey2\r\n"

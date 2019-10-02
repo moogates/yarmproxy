@@ -14,21 +14,36 @@
 
 namespace yarmproxy {
 
-static const std::string& DelPrefix(size_t keys_count) {
-  static std::map<size_t, std::string> prefix_cache {
+static const std::string& ComposePrefix(const std::string& cmd_name, size_t keys_count) {
+  static std::map<size_t, std::string> del_prefix_cache {
         {1, "*2\r\n$3\r\ndel\r\n"},
         {2, "*3\r\n$3\r\ndel\r\n"},
         {3, "*4\r\n$3\r\ndel\r\n"},
         {4, "*5\r\n$3\r\ndel\r\n"}
       };
-  const auto& it = prefix_cache.find(keys_count);
-  if (it != prefix_cache.end()) {
+  static std::map<size_t, std::string> exists_prefix_cache;
+  static std::map<size_t, std::string> touch_prefix_cache;
+
+  std::map<size_t, std::string>* prefix_cache = nullptr;
+  if (cmd_name == "del") {
+    prefix_cache = &del_prefix_cache;
+  } else if (cmd_name == "exists") {
+    prefix_cache = &exists_prefix_cache;
+  } else if (cmd_name == "touch") {
+    prefix_cache = &touch_prefix_cache;
+  } else {
+    assert(false);
+  }
+
+  const auto& it = prefix_cache->find(keys_count);
+  if (it != prefix_cache->end()) {
     return it->second;
   }
 
   std::ostringstream oss;
-  oss << '*' << (keys_count + 1) << "\r\n$3\r\ndel\r\n";
-  const auto& new_it = prefix_cache.emplace(keys_count, oss.str()).first;
+  oss << '*' << (keys_count + 1) << "\r\n$" << cmd_name.size()
+      << "\r\n" << cmd_name << "\r\n";
+  const auto& new_it = prefix_cache->emplace(keys_count, oss.str()).first;
   return new_it->second;
 }
 
@@ -61,6 +76,11 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client, const
     : Command(client)
     , unparsed_bulks_(ba.absent_bulks())
 {
+  for(const char* p = ba[0].payload_data();
+      p - ba[0].payload_data() < ba[0].payload_size();
+      ++p) {
+    cmd_name_.push_back(std::tolower(*p));
+  }
   for(size_t i = 1; i < ba.present_bulks(); ++i) {
     if (i == ba.present_bulks() - 1 && !ba[i].completed()) {
       ++unparsed_bulks_;// don't parse the last key if it's not complete
@@ -249,7 +269,7 @@ void RedisDelCommand::ActivateWaitingSubquery() {
 
     LOG_WARN << "ActivateWaitingSubquery client=" << client_conn_ << " cmd=" << this << " query=" << query
              << " phase=" << query->phase_ << " backend=" << query->backend_;
-    const std::string& mset_prefix = DelPrefix(query->keys_count_);
+    const std::string& mset_prefix = ComposePrefix(cmd_name_, query->keys_count_);
     query->backend_->WriteQuery(mset_prefix.data(), mset_prefix.size());
   }
   waiting_subqueries_.clear();
@@ -319,7 +339,7 @@ bool RedisDelCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(unparsed > 0);
   const char * entry = backend->buffer()->unparsed_data();
   if (entry[0] != ':') {
-    LOG_DEBUG << "RedisDelCommand ParseReply bad format";
+    LOG_WARN << "RedisDelCommand ParseReply error [" << std::string(entry, unparsed) << "]";
     return false;
   }
 

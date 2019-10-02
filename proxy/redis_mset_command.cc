@@ -456,7 +456,6 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
             << " unparsed_bulks_=" << unparsed_bulks_;
 
   size_t to_process_bytes = 0;
-  auto& prev_tail_query = tail_query_;
   for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) {
     ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
                                 new_bulks[i].payload_data(),
