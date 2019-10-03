@@ -25,5 +25,10 @@ message(${BASE_SOURCES})
 
 add_executable(yarmproxy ${BASE_SOURCES} ${SOURCES})
 
-target_link_libraries(yarmproxy boost_system boost_thread pthread atomic dl)
+target_link_libraries(yarmproxy boost_system boost_thread pthread dl)
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+  MESSAGE(STATUS "this is Linux")
+  target_link_libraries(yarmproxy atomic)
+endif (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 
