@@ -25,5 +25,5 @@ message(${BASE_SOURCES})
 
 add_executable(yarmproxy ${BASE_SOURCES} ${SOURCES})
 
-target_link_libraries(yarmproxy boost_system boost_thread pthread dl)
+target_link_libraries(yarmproxy boost_system boost_thread pthread atomic dl)
 

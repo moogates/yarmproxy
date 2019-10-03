@@ -13,13 +13,13 @@ struct Stats {
   Stats() : start_since_(time(nullptr)) {
   }
   time_t start_since_;
-  std::atomic_int32_t client_conns_;
-  std::atomic_int32_t backend_conns_;
+  std::atomic_int client_conns_;
+  std::atomic_int backend_conns_;
 
-  std::atomic_int64_t bytes_from_clients_;
-  std::atomic_int64_t bytes_to_clients_;
-  std::atomic_int64_t bytes_from_backends_;
-  std::atomic_int64_t bytes_to_backends_;
+  std::atomic_llong bytes_from_clients_;
+  std::atomic_llong bytes_to_clients_;
+  std::atomic_llong bytes_from_backends_;
+  std::atomic_llong bytes_to_backends_;
 };
 
 }
