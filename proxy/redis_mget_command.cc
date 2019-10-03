@@ -35,19 +35,12 @@ bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
     if (current_endpoint == last_endpoint) {
       ++current_bulks_count;
       current_bulks_bytes += bulk.total_size();
-      LOG_DEBUG << "ParseQuery subquery=[" << std::string(bulk.raw_data(), bulk.total_size()) << "]";
     } else {
       if (current_bulks_data != nullptr) {
         std::string subquery(redis::BulkArray::SerializePrefix(current_bulks_count + 1));
         subquery.append("$4\r\nmget\r\n"); // (ba[0].raw_data(), ba[0].total_size())
         subquery.append(current_bulks_data, current_bulks_bytes);
 
-        LOG_DEBUG << "ParseQuery create subquery ep=" << last_endpoint
-              << " bulks_count=" << current_bulks_count
-              << " query=(" << subquery
-              << ") current_key=" << bulk.to_string() << "(not included)";
-
-        // endpoint_keys_list->emplace_back(last_endpoint, std::move(subquery));
         subqueries_.emplace_back(new BackendQuery(last_endpoint, std::move(subquery), current_bulks_count));
 
         current_bulks_data = nullptr;
@@ -56,7 +49,6 @@ bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
       current_bulks_data = bulk.raw_data();
       current_bulks_count = 1;
       current_bulks_bytes = bulk.total_size();
-      LOG_DEBUG << "ParseQuery subquery=[" << std::string(bulk.raw_data(), bulk.total_size()) << "]";
     }
   }
 

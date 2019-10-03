@@ -3,15 +3,14 @@
 #include "base/logging.h"
 
 #include "allocator.h"
-#include "read_buffer.h"
-#include "worker_pool.h"
 #include "error_code.h"
+#include "read_buffer.h"
+#include "stats.h"
+#include "worker_pool.h"
 
 namespace yarmproxy {
 // TODO: 更好的容错，以及错误返回信息, 例如
 //   客户端格式错误时候，memcached返回错误信息: "CLIENT_ERROR bad data chunk\r\n"
-
-std::atomic_int backend_conn_count;
 
 BackendConn::BackendConn(WorkerContext& context,
     const ip::tcp::endpoint& endpoint)
@@ -19,11 +18,13 @@ BackendConn::BackendConn(WorkerContext& context,
   , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , remote_endpoint_(endpoint)
   , socket_(context.io_service_) {
-  LOG_DEBUG << "BackendConn ctor, count=" << ++backend_conn_count;
+  ++g_stats_.backend_conns_;
+  LOG_DEBUG << "BackendConn ctor, count=" << g_stats_.backend_conns_;
 }
 
 BackendConn::~BackendConn() {
-  LOG_DEBUG << "BackendConn " << this << " dtor, count=" << --backend_conn_count;
+  --g_stats_.backend_conns_;
+  LOG_DEBUG << "BackendConn " << this << " dtor, count=" << g_stats_.backend_conns_;
   socket_.close();
 
   context_.allocator_->Release(buffer_->data());
@@ -87,6 +88,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes,
     return;
   }
 
+  g_stats_.bytes_to_backends_ += bytes_transferred;
   if (bytes_transferred < bytes) {
     LOG_DEBUG << "HandleWrite 向 backend 没写完, 继续写. backend=" << this;
     boost::asio::async_write(socket_,
@@ -109,6 +111,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error,
     socket_.close();
     reply_received_callback_(ErrorCode::E_READ_REPLY);
   } else {
+    g_stats_.bytes_from_backends_ += bytes_transferred;
     LOG_DEBUG << "HandleRead read ok, bytes_transferred="
               << bytes_transferred << " backend=" << this;
 

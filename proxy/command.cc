@@ -6,6 +6,8 @@
 #include "base/logging.h"
 
 #include "error_code.h"
+#include "backend_locator.h"
+
 #include "worker_pool.h"
 #include "client_conn.h"
 // #include "backend_locator.h"
@@ -14,6 +16,7 @@
 #include "read_buffer.h"
 
 #include "error_command.h"
+#include "stats_command.h"
 
 #include "mc_basic_command.h"
 #include "mc_get_command.h"
@@ -125,6 +128,12 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       }
       command->reset(new RedisBasicCommand(client, ba));
       return ba.total_size();
+    } else if (ba[0].equals("ymstats", sizeof("ymstats") - 1)) {
+      if (!ba.completed()) {
+        return 0;
+      }
+      command->reset(new StatsCommand(client, ProtocolType::REDIS));
+      return ba.total_size();
     }
 
     command->reset(new ErrorCommand(client, std::string("-YarmProxy unknown redis directive:") + ba[0].to_string() + "\r\n"));
@@ -162,7 +171,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   }
 
   command->reset(new ErrorCommand(client, std::string("YarmProxy Unsupported Request\r\n")));
-  LOG_WARN << "ErrorCommand(" << std::string(buf, cmd_line_bytes - 2)
+  LOG_WARN << "ErrorCommand(" << std::string(buf, cmd_line_bytes < 2 ? cmd_line_bytes : cmd_line_bytes - 2)
            << ") len=" << cmd_line_bytes << " client_conn=" << client;
   return size;
 }

@@ -7,9 +7,10 @@
 #include "base/logging.h"
 
 #include "allocator.h"
-#include "command.h"
 #include "error_code.h"
+#include "command.h"
 #include "read_buffer.h"
+#include "stats.h"
 #include "worker_pool.h"
 
 using namespace boost::asio;
@@ -19,12 +20,12 @@ namespace yarmproxy {
 // TODO : gracefully close connections
 
 ClientConnection::ClientConnection(WorkerContext& context)
-  : socket_(context.io_service_)
-  , buffer_(new ReadBuffer(context.allocator_->Alloc(),
-                    context.allocator_->slab_size()))
-  , context_(context)
-  , timer_(context.io_service_)
-{
+    : socket_(context.io_service_)
+    , buffer_(new ReadBuffer(context.allocator_->Alloc(),
+                      context.allocator_->slab_size()))
+    , context_(context)
+    , timer_(context.io_service_) {
+  ++g_stats_.client_conns_;
 }
 
 ClientConnection::~ClientConnection() {
@@ -34,6 +35,7 @@ ClientConnection::~ClientConnection() {
   }
   context_.allocator_->Release(buffer_->data());
   delete buffer_;
+  --g_stats_.client_conns_;
 }
 
 void ClientConnection::IdleTimeout(const boost::system::error_code& ec) {
@@ -152,6 +154,9 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
   std::shared_ptr<ClientConnection> client_conn(shared_from_this());
   auto cb_wrap = [client_conn, data, bytes, callback](
       const boost::system::error_code& error, size_t bytes_transferred) {
+    if (!error) {
+      g_stats_.bytes_to_clients_ += bytes_transferred;
+    }
     if (!error && bytes_transferred < bytes) {
       // LOG_WARN << "ClientConnection::WriteReply callback to write more, ec=" << error.message();
       client_conn->WriteReply(data + bytes_transferred,
@@ -234,7 +239,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   }
 
   UpdateTimer();
-
+  g_stats_.bytes_from_clients_ += bytes_transferred;
   buffer_->update_received_bytes(bytes_transferred);
   buffer_->dec_recycle_lock();
 
