@@ -4,12 +4,13 @@
 #include <functional>
 #include <memory>
 
-#include <boost/asio.hpp>
-using namespace boost::asio;
+#include <boost/asio/ip/tcp.hpp>
 
 #include "read_buffer.h"
 
 namespace yarmproxy {
+using Endpoint = boost::asio::ip::tcp::endpoint;
+
 class WorkerContext;
 class ReadBuffer;
 
@@ -20,7 +21,7 @@ typedef std::function<void(ErrorCode ec)> BackendQuerySentCallback;
 
 class BackendConn : public std::enable_shared_from_this<BackendConn> {
 public:
-  BackendConn(WorkerContext& context, const ip::tcp::endpoint& endpoint);
+  BackendConn(WorkerContext& context, const Endpoint& endpoint);
   ~BackendConn();
 
   void WriteQuery(const char* data, size_t bytes);
@@ -51,7 +52,7 @@ public:
     return reply_recv_complete_ && buffer_->unprocessed_bytes() == 0;
   }
 
-  const ip::tcp::endpoint& remote_endpoint() const {
+  const Endpoint& remote_endpoint() const {
     return remote_endpoint_;
   }
   void set_reply_recv_complete() {
@@ -69,8 +70,8 @@ public:
 private:
   WorkerContext& context_;
   ReadBuffer* buffer_;
-  ip::tcp::endpoint remote_endpoint_;
-  ip::tcp::socket socket_;
+  Endpoint remote_endpoint_;
+  boost::asio::ip::tcp::socket socket_;
 
   BackendReplyReceivedCallback reply_received_callback_;
   BackendQuerySentCallback query_sent_callback_;

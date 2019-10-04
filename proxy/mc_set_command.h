@@ -1,13 +1,12 @@
 #ifndef _YARMPROXY_MEMCACHED_SET_COMMAND_H_
 #define _YARMPROXY_MEMCACHED_SET_COMMAND_H_
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
 
 #include "command.h"
 
 namespace yarmproxy {
-
-using namespace boost::asio;
+using Endpoint = boost::asio::ip::tcp::endpoint;
 
 class MemcachedSetCommand : public Command {
 public:
@@ -34,7 +33,7 @@ private:
 
   size_t ParseQuery(const char* cmd_line, size_t cmd_len);
 private:
-  ip::tcp::endpoint backend_endpoint_;
+  Endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_conn_;
 
   bool connect_error_ = false;

@@ -13,7 +13,7 @@ namespace yarmproxy {
 //   客户端格式错误时候，memcached返回错误信息: "CLIENT_ERROR bad data chunk\r\n"
 
 BackendConn::BackendConn(WorkerContext& context,
-    const ip::tcp::endpoint& endpoint)
+    const Endpoint& endpoint)
   : context_(context)
   , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , remote_endpoint_(endpoint)
@@ -126,11 +126,11 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
                                 const boost::system::error_code& connect_ec) {
   boost::system::error_code option_ec;
   if (!connect_ec) {
-    ip::tcp::no_delay no_delay(true);
+    boost::asio::ip::tcp::no_delay no_delay(true);
     socket_.set_option(no_delay, option_ec);
 
     if (!option_ec) {
-      socket_base::keep_alive keep_alive(true);
+      boost::asio::socket_base::keep_alive keep_alive(true);
       socket_.set_option(keep_alive, option_ec);
     }
 

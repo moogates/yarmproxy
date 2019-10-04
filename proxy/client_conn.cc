@@ -13,8 +13,6 @@
 #include "stats.h"
 #include "worker_pool.h"
 
-using namespace boost::asio;
-
 namespace yarmproxy {
 
 // TODO : gracefully close connections
@@ -55,7 +53,7 @@ void ClientConnection::UpdateTimer() {
 
 void ClientConnection::StartRead() {
   boost::system::error_code ec;
-  ip::tcp::no_delay nodelay(true);
+  boost::asio::ip::tcp::no_delay nodelay(true);
   socket_.set_option(nodelay, ec);
   LOG_ERROR << "ClientConnection StartRead ===================================";
 

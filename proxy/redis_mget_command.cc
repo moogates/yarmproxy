@@ -18,15 +18,29 @@ namespace yarmproxy {
 
 std::atomic_int redis_mget_cmd_count;
 
+struct RedisMgetCommand::BackendQuery {
+  BackendQuery(const Endpoint& ep, std::string&& query_data, size_t key_count)
+      : backend_endpoint_(ep)
+      , query_data_(query_data)
+      , key_count_(key_count) {
+  }
+  Endpoint backend_endpoint_;
+  std::string query_data_;
+
+  size_t key_count_;
+  size_t reply_absent_bulks_ = 0;
+  std::shared_ptr<BackendConn> backend_conn_;
+};
+
 bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
-  ip::tcp::endpoint last_endpoint;
+  Endpoint last_endpoint;
   const char* current_bulks_data = nullptr;
   size_t current_bulks_count = 0;
   size_t current_bulks_bytes = 0;
 
   for(size_t i = 1; i < ba.total_bulks(); ++i) {
     const redis::Bulk& bulk = ba[i];
-    ip::tcp::endpoint current_endpoint = BackendLoactor::Instance().Locate(
+    Endpoint current_endpoint = BackendLoactor::Instance().Locate(
         bulk.payload_data(), bulk.payload_size(), ProtocolType::REDIS);
 
     LOG_DEBUG << "ParseQuery key=" << bulk.to_string() << " ep=" << current_endpoint

@@ -4,14 +4,14 @@
 #include <map>
 #include <set>
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
 
 #include "command.h"
 #include "redis_protocol.h"
 
 namespace yarmproxy {
 
-using namespace boost::asio;
+using Endpoint = boost::asio::ip::tcp::endpoint;
 
 class RedisGetCommand : public Command {
 public:
@@ -42,7 +42,7 @@ private:
   bool has_read_some_reply_ = false; // TODO : Error Handling : fast fail vs. best effort?
   const char* cmd_data_;
   size_t cmd_bytes_;
-  ip::tcp::endpoint backend_endpoint_;
+  Endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_conn_;
 };
 

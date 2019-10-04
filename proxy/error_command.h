@@ -1,13 +1,9 @@
 #ifndef _YARMPROXY_ERROR_COMMAND_H_
 #define _YARMPROXY_ERROR_COMMAND_H_
 
-#include <boost/asio.hpp>
-
 #include "command.h"
 
 namespace yarmproxy {
-
-using namespace boost::asio;
 
 class ErrorCommand : public Command {
 public:

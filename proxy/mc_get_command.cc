@@ -13,6 +13,16 @@
 
 namespace yarmproxy {
 
+struct MemcachedGetCommand::BackendQuery {
+  BackendQuery(const Endpoint& ep, std::string&& query_data)
+      : query_data_(query_data)
+      , backend_endpoint_(ep) {
+  }
+  std::string query_data_;
+  Endpoint backend_endpoint_;
+  std::shared_ptr<BackendConn> backend_conn_;
+};
+
 MemcachedGetCommand::MemcachedGetCommand(std::shared_ptr<ClientConnection> client,
                      const char* cmd_data, size_t cmd_size)
     : Command(client)
@@ -29,7 +39,7 @@ MemcachedGetCommand::~MemcachedGetCommand() {
 }
 
 void MemcachedGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
-  std::map<ip::tcp::endpoint, std::string> ep_keys;
+  std::map<Endpoint, std::string> ep_keys;
   for(const char* p = cmd_data + 4/*strlen("get ")*/;
       p < cmd_data + cmd_size - 2/*strlen("\r\n")*/; ++p) {
     const char* q = p;

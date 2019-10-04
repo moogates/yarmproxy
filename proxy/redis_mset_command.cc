@@ -16,6 +16,24 @@ namespace yarmproxy {
 
 std::atomic_int redis_mset_cmd_count;
 
+struct RedisMsetCommand::Subquery {
+  Subquery(const Endpoint& ep, size_t keys_count, const char* data, size_t present_bytes)
+      : backend_endpoint_(ep)
+      , keys_count_(keys_count)
+  {
+    segments_.emplace_back(data, present_bytes);
+  }
+
+  Endpoint backend_endpoint_;
+  std::shared_ptr<BackendConn> backend_;
+
+  size_t keys_count_;
+  size_t phase_ = 0;
+  bool query_recv_complete_ = false;
+  bool connect_error_ = false;
+  std::list<std::pair<const char*, size_t>> segments_;
+};
+
 static const std::string& MsetPrefix(size_t keys_count) {
   static std::map<size_t, std::string> prefix_cache {
         {1, "*3\r\n$4\r\nmset\r\n"},
@@ -34,7 +52,8 @@ static const std::string& MsetPrefix(size_t keys_count) {
   return new_it->second;
 }
 
-void RedisMsetCommand::PushSubquery(const ip::tcp::endpoint& ep, const char* data, size_t bytes) {
+void RedisMsetCommand::PushSubquery(const Endpoint& ep, const char* data,
+                                    size_t bytes) {
   const auto& it = waiting_subqueries_.find(ep);
   if (it == waiting_subqueries_.cend()) {
     LOG_DEBUG << "PushSubquery inc_recycle_lock add new endpoint " << ep
@@ -69,7 +88,7 @@ RedisMsetCommand::RedisMsetCommand(std::shared_ptr<ClientConnection> client, con
 {
   unparsed_bulks_ += unparsed_bulks_ % 2;  // don't parse the 'key' now if 'value' absent
   for(size_t i = 1; (i + 1) < ba.present_bulks(); i += 2) { // only 'key' is inadequate, 'value' field must be present
-    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
+    Endpoint ep = BackendLoactor::Instance().Locate(
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size() + ba[i+1].present_size());
   }
@@ -364,21 +383,6 @@ void RedisMsetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
       assert(client_conn_->buffer()->recycle_lock_count() == 0);
       client_conn_->TryReadMoreQuery("mset_call_4");
     }
-
-  //if (query == tail_query_ &&
-  //    !tail_query_->query_recv_complete_) {
-  //  LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3, TryReadMoreQuery"
-  //           << " query_parsed_unreceived_bytes=" << client_conn_->buffer()->parsed_unreceived_bytes()
-  //           << " command=" << this
-  //           << " backend=" << backend;
-  //  client_conn_->TryReadMoreQuery();
-  //} else {
-  //  LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_ << " phase 3 completed"
-  //            << " command=" << this
-  //            << " backend=" << backend;
-  //  query->phase_ = 4;
-  //  backend->ReadReply();
-  //}
     return;
   } else {
     // TODO
@@ -457,7 +461,7 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
 
   size_t to_process_bytes = 0;
   for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) {
-    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
+    Endpoint ep = BackendLoactor::Instance().Locate(
                                 new_bulks[i].payload_data(),
                                 new_bulks[i].payload_size(),
                                 ProtocolType::REDIS);

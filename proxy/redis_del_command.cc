@@ -14,6 +14,23 @@
 
 namespace yarmproxy {
 
+struct RedisDelCommand::DelSubquery {
+  DelSubquery(const Endpoint& ep, const char* data, size_t present_bytes)
+      : backend_endpoint_(ep)
+      , keys_count_(1)
+  {
+    segments_.emplace_back(data, present_bytes);
+  }
+
+  Endpoint backend_endpoint_;
+  std::shared_ptr<BackendConn> backend_;
+
+  size_t keys_count_;
+  size_t phase_ = 0;
+  bool connect_error_ = false;
+  std::list<std::pair<const char*, size_t>> segments_;
+};
+
 static const std::string& ComposePrefix(const std::string& cmd_name, size_t keys_count) {
   static std::map<size_t, std::string> del_prefix_cache {
         {1, "*2\r\n$3\r\ndel\r\n"},
@@ -50,7 +67,7 @@ static const std::string& ComposePrefix(const std::string& cmd_name, size_t keys
 
 std::atomic_int redis_del_cmd_count;
 // TODO : 系统调用 vs. redis_key内存拷贝，哪个代价更大呢？
-void RedisDelCommand::PushSubquery(const ip::tcp::endpoint& ep, const char* data, size_t bytes) {
+void RedisDelCommand::PushSubquery(const Endpoint& ep, const char* data, size_t bytes) {
   const auto& it = waiting_subqueries_.find(ep);
   if (it == waiting_subqueries_.cend()) {
     LOG_DEBUG << "PushSubquery inc_recycle_lock add new endpoint " << ep
@@ -86,7 +103,7 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client, const
       ++unparsed_bulks_;// don't parse the last key if it's not complete
       break;
     }
-    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
+    Endpoint ep = BackendLoactor::Instance().Locate(
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size());
   }
@@ -321,7 +338,7 @@ bool RedisDelCommand::ProcessUnparsedPart() {
   //  ++unparsed_bulks_;// don't parse the last key if it's not complete
   //  break;
   //}
-    ip::tcp::endpoint ep = BackendLoactor::Instance().Locate(
+    Endpoint ep = BackendLoactor::Instance().Locate(
                                 new_bulks[i].payload_data(),
                                 new_bulks[i].payload_size(),
                                 ProtocolType::REDIS);

@@ -4,14 +4,10 @@
 #include <map>
 #include <set>
 
-#include <boost/asio.hpp>
-
 #include "command.h"
 #include "redis_protocol.h"
 
 namespace yarmproxy {
-
-using namespace boost::asio;
 
 class RedisMgetCommand : public Command {
 public:
@@ -48,19 +44,7 @@ private:
   }
   bool ParseQuery(const redis::BulkArray& ba);
 private:
-  struct BackendQuery {
-    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_data, size_t key_count)
-        : backend_endpoint_(ep)
-        , query_data_(query_data)
-        , key_count_(key_count) {
-    }
-    ip::tcp::endpoint backend_endpoint_;
-    std::string query_data_;
-
-    size_t key_count_;
-    size_t reply_absent_bulks_ = 0;
-    std::shared_ptr<BackendConn> backend_conn_;
-  };
+  struct BackendQuery;
   std::string reply_prefix_;
   bool reply_prefix_complete() const {
     return reply_prefix_.empty();

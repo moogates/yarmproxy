@@ -1,12 +1,12 @@
 #ifndef _YARMPROXY_REDIS_SET_COMMAND_H_
 #define _YARMPROXY_REDIS_SET_COMMAND_H_
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
 
 #include "command.h"
 
 namespace yarmproxy {
-using namespace boost::asio;
+using Endpoint = boost::asio::ip::tcp::endpoint;
 
 namespace redis {
 class BulkArray;
@@ -14,7 +14,6 @@ class BulkArray;
 
 class RedisSetCommand : public Command {
 public:
-  RedisSetCommand(const ip::tcp::endpoint & ep, std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba);
   RedisSetCommand(std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba);
   virtual ~RedisSetCommand();
 
@@ -39,7 +38,7 @@ private:
   }
 
 private:
-  ip::tcp::endpoint backend_endpoint_;
+  Endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_conn_;
 
   size_t unparsed_bulks_;

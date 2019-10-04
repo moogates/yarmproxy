@@ -5,7 +5,7 @@
 
 namespace yarmproxy {
 
-std::shared_ptr<BackendConn> BackendConnPool::Allocate(const ip::tcp::endpoint & ep){
+std::shared_ptr<BackendConn> BackendConnPool::Allocate(const Endpoint & ep){
   {
   //std::shared_ptr<BackendConn> backend(new BackendConn(context_, ep));
   //return backend;
@@ -39,7 +39,7 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
     return;
   }
 
-  const ip::tcp::endpoint & ep = ep_it->second;
+  const Endpoint & ep = ep_it->second;
   LOG_DEBUG << "BackendConnPool::Release backend=" << backend << " ep=" << ep;
   active_conns_.erase(ep_it);
 

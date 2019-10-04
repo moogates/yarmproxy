@@ -6,11 +6,11 @@
 #include <string>
 #include <memory>
 
-#include <boost/asio.hpp>
-using namespace boost::asio; // TODO : minimize endpoint dependency
+#include <boost/asio/ip/tcp.hpp>
 
 namespace yarmproxy {
 
+using Endpoint = boost::asio::ip::tcp::endpoint;
 class BackendConn;
 class BackendConnPool;
 class ClientConnection;
@@ -47,7 +47,7 @@ public:
 
 protected:
   BackendConnPool* backend_pool();
-  std::shared_ptr<BackendConn> AllocateBackend(const ip::tcp::endpoint& ep);
+  std::shared_ptr<BackendConn> AllocateBackend(const Endpoint& ep);
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
 
   virtual void OnBackendConnectError(std::shared_ptr<BackendConn> backend);

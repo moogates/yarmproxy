@@ -1,12 +1,12 @@
 #ifndef _YARMPROXY_REDIS_MSET_COMMAND_H_
 #define _YARMPROXY_REDIS_MSET_COMMAND_H_
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
 
 #include "command.h"
 
 namespace yarmproxy {
-using namespace boost::asio;
+using Endpoint = boost::asio::ip::tcp::endpoint;
 
 namespace redis {
 class BulkArray;
@@ -37,34 +37,18 @@ private:
   bool query_recv_complete() override;
 
 private:
-  struct Subquery {
-    Subquery(const ip::tcp::endpoint& ep, size_t keys_count, const char* data, size_t present_bytes)
-        : backend_endpoint_(ep)
-        , keys_count_(keys_count)
-    {
-      segments_.emplace_back(data, present_bytes);
-    }
-
-    ip::tcp::endpoint backend_endpoint_;
-    std::shared_ptr<BackendConn> backend_;
-
-    size_t keys_count_;
-    size_t phase_ = 0;
-    bool query_recv_complete_ = false;
-    bool connect_error_ = false;
-    std::list<std::pair<const char*, size_t>> segments_;
-  };
+  struct Subquery;
 
   size_t total_bulks_; // TODO : for debug only
   size_t unparsed_bulks_;
   bool init_write_query_ = true;
-  std::map<ip::tcp::endpoint, std::shared_ptr<Subquery>> waiting_subqueries_;
+  std::map<Endpoint, std::shared_ptr<Subquery>> waiting_subqueries_;
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> pending_subqueries_;
   std::shared_ptr<Subquery> tail_query_;
   std::shared_ptr<BackendConn> replying_backend_;
 private:
   void ActivateWaitingSubquery();
-  void PushSubquery(const ip::tcp::endpoint& ep, const char* data, size_t bytes);
+  void PushSubquery(const Endpoint& ep, const char* data, size_t bytes);
 };
 
 }

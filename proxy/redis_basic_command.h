@@ -1,14 +1,14 @@
 #ifndef _YARMPROXY_REDIS_BASIC_COMMAND_H_
 #define _YARMPROXY_REDIS_BASIC_COMMAND_H_
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
 
 #include "command.h"
 #include "redis_protocol.h"
 
 namespace yarmproxy {
 
-using namespace boost::asio;
+using Endpoint = boost::asio::ip::tcp::endpoint;
 
 class RedisBasicCommand: public Command {
 public:
@@ -34,7 +34,7 @@ private:
 
   size_t ParseQuery(const char* cmd_line, size_t cmd_len);
 private:
-  ip::tcp::endpoint backend_endpoint_;
+  Endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_conn_;
 };
 

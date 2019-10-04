@@ -176,7 +176,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   return size;
 }
 
-std::shared_ptr<BackendConn> Command::AllocateBackend(const ip::tcp::endpoint& ep) {
+std::shared_ptr<BackendConn> Command::AllocateBackend(const Endpoint& ep) {
   auto backend = backend_pool()->Allocate(ep);
   backend->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend),
                              WeakBind(&Command::OnBackendReplyReceived, backend));

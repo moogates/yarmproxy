@@ -6,7 +6,6 @@
 #include <boost/asio.hpp>
 
 namespace yarmproxy {
-using namespace boost::asio;
 
 class BackendConnPool;
 class Allocator;
@@ -15,8 +14,8 @@ class WorkerContext {
 public:
   WorkerContext();
   std::thread thread_;
-  io_service io_service_;
-  io_service::work work_;
+  boost::asio::io_service io_service_;
+  boost::asio::io_service::work work_;
   BackendConnPool* backend_conn_pool();
 private:
   BackendConnPool* backend_conn_pool_;

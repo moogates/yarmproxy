@@ -4,13 +4,9 @@
 #include <map>
 #include <set>
 
-#include <boost/asio.hpp>
-
 #include "command.h"
 
 namespace yarmproxy {
-
-using namespace boost::asio;
 
 class MemcachedGetCommand : public Command {
 public:
@@ -46,16 +42,7 @@ private:
   static size_t ParseReplyBodyBytes(const char * data, const char * end);
   void ParseQuery(const char* cmd_data, size_t cmd_size);
 
-  struct BackendQuery {
-    BackendQuery(const ip::tcp::endpoint& ep, std::string&& query_data)
-        : query_data_(query_data)
-        , backend_endpoint_(ep) {
-    }
-    std::string query_data_;
-    ip::tcp::endpoint backend_endpoint_;
-    std::shared_ptr<BackendConn> backend_conn_;
-  };
-
+  struct BackendQuery;
   std::vector<std::unique_ptr<BackendQuery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
 

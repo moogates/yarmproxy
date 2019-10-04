@@ -11,11 +11,11 @@
 
 namespace yarmproxy {
 
-static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
+static Endpoint ParseEndpoint(const std::string & ep) {
   size_t pos = ep.find(':');
   std::string host = ep.substr(0, pos);
   int port = std::stoi(ep.substr(pos + 1));
-  return ip::tcp::endpoint(ip::address::from_string(host), port);
+  return Endpoint(boost::asio::ip::address::from_string(host), port);
 }
 
 static size_t DefaultConcurrency() {
@@ -47,7 +47,7 @@ void ProxyServer::Run() {
 
   auto endpoint = ParseEndpoint(listen_addr_);
   acceptor_.open(endpoint.protocol());
-  acceptor_.set_option(ip::tcp::acceptor::reuse_address(true));
+  acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
   acceptor_.bind(endpoint);
 
   boost::system::error_code ec;

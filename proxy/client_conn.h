@@ -9,8 +9,6 @@
 
 #include <boost/asio.hpp>
 
-using namespace boost::asio;
-
 namespace yarmproxy {
 
 class BackendConnPool;
@@ -31,7 +29,7 @@ public:
     return context_;
   }
 
-  ip::tcp::socket& socket() {
+  boost::asio::ip::tcp::socket& socket() {
     return socket_;
   }
   void StartRead();
@@ -59,7 +57,7 @@ public:
   }
 
 private:
-  ip::tcp::socket socket_;
+  boost::asio::ip::tcp::socket socket_;
   ReadBuffer* buffer_;
 
 protected:

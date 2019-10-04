@@ -1,13 +1,10 @@
 #ifndef _YARMPROXY_STATS_COMMAND_H_
 #define _YARMPROXY_STATS_COMMAND_H_
 
-#include <boost/asio.hpp>
-
 #include "command.h"
 
 namespace yarmproxy {
 
-using namespace boost::asio;
 enum class ProtocolType;
 
 class StatsCommand : public Command {

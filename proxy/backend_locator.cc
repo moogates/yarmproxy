@@ -45,7 +45,7 @@ static std::string KeyNamespace(const char * key, size_t len, ProtocolType proto
   return oss.str();
 }
 
-ip::tcp::endpoint BackendLoactor::Locate(const char * key, size_t len, ProtocolType protocol) {
+Endpoint BackendLoactor::Locate(const char * key, size_t len, ProtocolType protocol) {
   Continuum * continuum = nullptr;  // use shared_ptr
   auto it = clusters_continum_.find(KeyNamespace(key, len, protocol));
   if (it == clusters_continum_.end()) {
@@ -55,7 +55,7 @@ ip::tcp::endpoint BackendLoactor::Locate(const char * key, size_t len, ProtocolT
     continuum = it->second;
   }
   
-  ip::tcp::endpoint ep = continuum->LocateCacheNode(key, len);
+  Endpoint ep = continuum->LocateCacheNode(key, len);
   return ep;
 }
 
