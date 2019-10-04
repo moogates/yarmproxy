@@ -263,6 +263,9 @@ void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
 
 void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
+  LOG_DEBUG << "Command::TryWriteReply backend=" << backend
+              << " is_writing_reply_=" << is_writing_reply_
+              << " unprocessed=" << unprocessed;
   if (!is_writing_reply_ && unprocessed > 0) {
     is_writing_reply_ = true;
 
@@ -271,8 +274,6 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
                                   WeakBind(&Command::OnWriteReplyFinished, backend));
 
-    LOG_DEBUG << "Command::TryWriteReply backend=" << backend
-              << " unprocessed=" << unprocessed;
     backend->buffer()->update_processed_bytes(unprocessed);
   }
 }

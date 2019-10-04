@@ -1,6 +1,4 @@
-gunzip -c ./set8.data.gz | nc 127.0.0.1 11311 > set8.tmp
-
-cat set8.tmp
+gunzip -c ./set8.data.gz | nc 127.0.0.1 11311 | tee set8.tmp
 
 expected_count=$(gunzip -c set8.data.gz | grep "^*" | wc -l | awk '{print $1}')
 count=$(cat set8.tmp | wc -l | awk '{print $1}')

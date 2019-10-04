@@ -148,6 +148,10 @@ bool RedisSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   size_t unparsed = backend_conn_->buffer()->unparsed_bytes();
   assert(unparsed > 0);
   const char * entry = backend_conn_->buffer()->unparsed_data();
+
+  LOG_DEBUG << "RedisSetCommand ParseReply begin, unparsed=" << unparsed
+            << " data=[" << std::string(entry, unparsed)
+            << "] backend=" << backend;
   if (entry[0] != ':' && entry[0] != '+' && entry[0] != '-' &&
       entry[0] != '$') { // TODO : fix the $ reply (aka. bulk)
     LOG_DEBUG << "RedisSetCommand ParseReply unknown format["
@@ -159,7 +163,7 @@ bool RedisSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   if (p == nullptr) {
     return true;
   }
-  if (entry[0] == '$') {
+  if (entry[0] == '$' && entry[1] != '-') {
     p = static_cast<const char *>(memchr(p + 1, '\n', entry + unparsed - p));
     if (p == nullptr) {
       return true;

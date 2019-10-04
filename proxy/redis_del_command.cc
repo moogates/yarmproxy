@@ -159,7 +159,7 @@ void RedisDelCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
     return;
   }
 
-  LOG_WARN << "Command::OnBackendReplyReceived ok, backend=" << backend << " cmd=" << this;
+  LOG_DEBUG << "Command::OnBackendReplyReceived ok, backend=" << backend << " cmd=" << this;
   if (!backend->reply_recv_complete()) {
     backend->TryReadMoreReply();
     return;
@@ -169,12 +169,12 @@ void RedisDelCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
   if (unparsed_bulks_ == 0 && pending_subqueries_.size() == 1) {
     SetBackendReplyCount(backend, total_del_count_);
     if (client_conn_->IsFirstCommand(shared_from_this())) {
-      LOG_WARN << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+      LOG_DEBUG << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
                << " command=" << this
                << " write reply, backend=" << backend;
       TryWriteReply(backend);
     } else {
-      LOG_WARN << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
+      LOG_DEBUG << "OnBackendReplyReceived query=" << pending_subqueries_[backend]->backend_endpoint_
                << " command=" << this
                << " waiting to write reply, backend=" << backend;
       replying_backend_ = backend;
@@ -267,7 +267,7 @@ void RedisDelCommand::ActivateWaitingSubquery() {
     query->backend_ = AllocateBackend(query->backend_endpoint_);
     pending_subqueries_[query->backend_] = query;
 
-    LOG_WARN << "ActivateWaitingSubquery client=" << client_conn_ << " cmd=" << this << " query=" << query
+    LOG_DEBUG << "ActivateWaitingSubquery client=" << client_conn_ << " cmd=" << this << " query=" << query
              << " phase=" << query->phase_ << " backend=" << query->backend_;
     const std::string& mset_prefix = ComposePrefix(cmd_name_, query->keys_count_);
     query->backend_->WriteQuery(mset_prefix.data(), mset_prefix.size());

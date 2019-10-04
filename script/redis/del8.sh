@@ -1,9 +1,9 @@
-echo "Setup begin ..."
+printf "Setup begin ..."
 for id in `seq 1 100`; do
   key=key$id
   ./data_gen $key 2027 | nc 127.0.0.1 11311 > /dev/null
 done
-echo "Setup done."
+echo "Done."
 gunzip -c del8.data.gz | nc 127.0.0.1 11311 > del8.tmp
 
 cat del8.tmp

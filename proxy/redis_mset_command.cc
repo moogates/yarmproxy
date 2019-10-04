@@ -485,8 +485,13 @@ bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
 
   const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed));
   if (p == nullptr) {
-    LOG_DEBUG << "RedisMsetCommand ParseReply need more data";
     return true;
+  }
+  if (entry[0] == '$' && entry[1] != '-') {
+    p = static_cast<const char *>(memchr(p + 1, '\n', entry + unparsed - p));
+    if (p == nullptr) {
+      return true;
+    }
   }
 
   backend->buffer()->update_parsed_bytes(p - entry + 1);

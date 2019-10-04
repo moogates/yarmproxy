@@ -77,7 +77,7 @@ bool RedisBasicCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   if (p == nullptr) {
     return true;
   }
-  if (entry[0] == '$') {
+  if (entry[0] == '$' && entry[1] != '-') {
     p = static_cast<const char *>(memchr(p + 1, '\n', entry + unparsed - p));
     if (p == nullptr) {
       return true;
