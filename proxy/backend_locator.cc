@@ -34,11 +34,11 @@ static const std::string& DefaultNamespace(ProtocolType protocol) {
   }
 }
 
-extern size_t kMaxNamespaceLength;
 static std::string KeyNamespace(const char * key, size_t len, ProtocolType protocol) {
   std::ostringstream oss;
   oss << int(protocol) << "/";
-  const char * p = static_cast<const char *>(memchr(key, '#', std::min(len, kMaxNamespaceLength + 1)));
+  const char * p = static_cast<const char *>(memchr(key, '#',
+        std::min(int(len), Config::Instance().max_namespace_length() + 1)));
   if (p != nullptr) {
     oss << std::string(key, p - key);
   }

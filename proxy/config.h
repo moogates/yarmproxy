@@ -22,6 +22,9 @@ public:
   int worker_threads() const {
     return worker_threads_;
   }
+  int max_namespace_length() const {
+    return max_namespace_length_;
+  }
   size_t buffer_size() const {
     return buffer_size_;
   }
@@ -64,6 +67,7 @@ private:
   std::string listen_ = "127.0.0.1:11311";
   bool daemonize_ = false;
   int worker_threads_ = 0;
+  int max_namespace_length_ = 4;
 
   int worker_max_idle_backends_    = 32;
   size_t worker_buffer_size_       = 4096;

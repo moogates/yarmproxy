@@ -9,8 +9,6 @@
 
 namespace yarmproxy {
 
-size_t kMaxNamespaceLength = 4;
-
 void TokenizeLine(const std::string& line, std::vector<std::string>* tokens) {
   int status = 0;
   for(char ch : line) {
@@ -85,6 +83,17 @@ bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
       error_msg_ = "positive integer required";
       return false;
     }
+  }
+
+  if (tokens.size() == 2 && tokens[0] == "max_namespace_length") {
+    try {
+      max_namespace_length_ = std::stoi(tokens[1]);
+      if (max_namespace_length_ > 0) {
+        return true;
+      }
+    } catch (...) {}
+    error_msg_ = "positive integer required";
+    return false;
   }
 
   if (tokens.size() == 2 && tokens[0] == "log_file") {
@@ -196,7 +205,7 @@ bool Config::ApplyClusterTokens(const std::vector<std::string>& tokens) {
     if (tokens.size() >= 2) {
       for(size_t i = 1; i < tokens.size(); ++i) {
         auto& ns = tokens[i];
-        if (ns.size() > kMaxNamespaceLength) {
+        if (ns.size() > max_namespace_length_) {
           error_msg_ = "too long namespace length";
           return false;
         }
