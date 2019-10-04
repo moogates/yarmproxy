@@ -75,7 +75,7 @@ void ClientConnection::StartRead() {
 
 void ClientConnection::TryReadMoreQuery(const char* caller) {
   // TODO : checking preconditions
-  LOG_WARN << "ClientConnection::TryReadMoreQuery caller=" << caller
+  LOG_DEBUG << "ClientConnection::TryReadMoreQuery caller=" << caller
            << " buffer_lock=" << buffer_->recycle_lock_count();
   AsyncRead();
 }
@@ -86,12 +86,12 @@ void ClientConnection::AsyncRead() {
     return;
   }
   if (buffer_->free_space_size() < 512) {
-    LOG_INFO << "ClientConnection::AsyncRead no free space, do nothing"
+    LOG_DEBUG << "ClientConnection::AsyncRead no free space, do nothing"
                << " lock=" << buffer_->recycle_lock_count()
                << " received_bytes=" << buffer_->received_bytes();
     return;
   }
-  LOG_INFO << "ClientConnection::AsyncRead begin,"
+  LOG_DEBUG << "ClientConnection::AsyncRead begin,"
                << " lock=" << buffer_->recycle_lock_count()
                << " received_unprocess_bytes=" << buffer_->received_bytes();
 
@@ -158,7 +158,6 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
       g_stats_.bytes_to_clients_ += bytes_transferred;
     }
     if (!error && bytes_transferred < bytes) {
-      // LOG_WARN << "ClientConnection::WriteReply callback to write more, ec=" << error.message();
       client_conn->WriteReply(data + bytes_transferred,
                               bytes - bytes_transferred, callback);
     } else {
@@ -187,6 +186,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
     }  else if (parsed_bytes == 0) {
       if (buffer_->unparsed_received_bytes() > 2048) {
         LOG_WARN << "Too long unparsable command line";
+        // Abort(); // TODO : verify it
         return false;
       }
       TryReadMoreQuery("client_conn_2");
@@ -231,7 +231,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
       // TODO : gracefully shutdown
       LOG_DEBUG << "ClientConnection::HandleRead eof error, conn=" << this;
     } else {
-      LOG_WARN << "ClientConnection::HandleRead error=" << error.message()
+      LOG_DEBUG << "ClientConnection::HandleRead error=" << error.message()
                << " conn=" << this;
       Abort();
     }
@@ -243,14 +243,14 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   buffer_->update_received_bytes(bytes_transferred);
   buffer_->dec_recycle_lock();
 
-  LOG_WARN << "HandleRead bytes_transferred=" << bytes_transferred
+  LOG_DEBUG << "HandleRead bytes_transferred=" << bytes_transferred
             << " buffer=" << buffer_
             << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes();
 
   if (!active_cmd_queue_.empty() && !active_cmd_queue_.back()->query_recv_complete()) {
     LOG_DEBUG << "ClientConnection::HandleRead ParseUnparsedPart";
     if (!active_cmd_queue_.back()->ParseUnparsedPart()) {
-      LOG_WARN << "ClientConnection::HandleRead ParseUnparsedPart Abort";
+      LOG_DEBUG << "ClientConnection::HandleRead ParseUnparsedPart Abort";
       Abort();
       return;
     }
@@ -276,29 +276,23 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   // process the big bulk arrays in redis query
   if (!active_cmd_queue_.empty() &&
       !active_cmd_queue_.back()->query_parsing_complete()) {
-    LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedPart";
+    LOG_DEBUG << "ClientConnection::HandleRead ProcessUnparsedPart";
     if (!active_cmd_queue_.back()->ProcessUnparsedPart()) {
-      LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedPart Abort";
+      LOG_DEBUG << "ClientConnection::HandleRead ProcessUnparsedPart Abort";
       Abort();
       return;
     }
-    LOG_WARN << "ProcessUnparsedPart done";
-  } else {
-  //LOG_WARN << "ClientConnection::HandleRead no ProcessUnparsedPart "
-  //         << " active_cmd_queue_.empty=" << active_cmd_queue_.empty();
   }
 
 
   if (active_cmd_queue_.empty() ||
       active_cmd_queue_.back()->query_parsing_complete()) {
-    LOG_WARN << "ClientConnection::HandleRead ProcessUnparsedQuery 1";
     ProcessUnparsedQuery();
   }
-  return;
 }
 
 void ClientConnection::Abort() {
-  LOG_WARN << "ClientConnection::Abort client=" << this;
+  LOG_DEBUG << "ClientConnection::Abort client=" << this;
   aborted_ = true;
   timer_.cancel();
   active_cmd_queue_.clear();

@@ -65,6 +65,10 @@ private:
   bool daemonize_ = false;
   int worker_threads_ = 0;
 
+  int worker_max_idle_backends_    = 32;
+  size_t worker_buffer_size_       = 4096;
+  size_t worker_buffer_trunk_size_ = 0;
+
   std::string log_file_ = "./yarmproxy.log";
   std::string log_level_ = "WARN";
 
@@ -88,6 +92,7 @@ private:
   bool ApplyTokens(const std::vector<std::string>& tokens);
   bool ApplyGlobalTokens(const std::vector<std::string>& tokens);
   bool ApplyClusterTokens(const std::vector<std::string>& tokens);
+  bool ApplyWorkerTokens(const std::vector<std::string>& tokens);
   bool ApplyLogTokens(const std::vector<std::string>& tokens);
 
   void PushSubcontext(const std::string& subcontext);

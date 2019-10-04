@@ -42,6 +42,9 @@ bool Config::ApplyTokens(const std::vector<std::string>& tokens) {
   if (strncmp(context_.c_str(), "/cluster", sizeof("/cluster") - 1) == 0) {
     return ApplyClusterTokens(tokens);
   }
+  if (context_ == "/worker") {
+    return ApplyWorkerTokens(tokens);
+  }
 //if (context_ == "/log") {
 //  return ApplyLogTokens(tokens);
 //}
@@ -100,6 +103,11 @@ bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
     return true;
   }
 
+  if (tokens.size() == 2 && tokens[0] == "worker" && tokens[1] == "{") {
+    PushSubcontext(tokens[0]);
+    return true;
+  }
+
 //if (tokens.size() == 2 && tokens[1] == "{") {
 //  PushSubcontext(tokens[0]);
 //  return true;
@@ -108,6 +116,60 @@ bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
   error_msg_.append(tokens[0]);
   return false;
 }
+
+bool Config::ApplyWorkerTokens(const std::vector<std::string>& tokens) {
+  if (tokens.size() == 1 && tokens[0] == "}") {
+    if (context_.empty()) {
+      return false;
+    }
+    PopSubcontext();
+    return true;
+  }
+  if (tokens.size() != 2) {
+    error_msg_ = "bad token count";
+    return false;
+  }
+
+  if (tokens[0] == "max_idle_backends") {
+    try {
+      worker_max_idle_backends_ = std::stoi(tokens[1]);
+    } catch (...) {
+      error_msg_ = "bad nubmer";
+      return false;
+    }
+    return true;
+  } else if (tokens[0] == "buffer_size") {
+    try {
+      int sz = std::stoi(tokens[1]);
+      if (sz < 1 || sz > 1024 ||
+          ((sz & (sz - 1)) != 0)) {
+        error_msg_ = "bad buffer size";
+        return false;
+      }
+      worker_buffer_size_ = sz * 1024;
+    } catch (...) {
+      error_msg_ = "bad number";
+      return false;
+    }
+    return true;
+  } else if (tokens[0] == "buffer_trunk_size") {
+    try {
+      int sz = std::stoi(tokens[1]);
+      if (sz < 32 || sz > 8192 ||
+          ((sz & (sz - 1)) != 0)) {
+        error_msg_ = "bad buffer trunk size";
+        return false;
+      }
+      worker_buffer_trunk_size_ = sz * 1024;
+    } catch (...) {
+      error_msg_ = "bad number";
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 bool Config::ApplyClusterTokens(const std::vector<std::string>& tokens) {
   if (tokens.size() == 1 && tokens[0] == "}") {
     if (context_.empty()) {
