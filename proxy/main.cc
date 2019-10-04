@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
   MaximizeFdLimit();
 
   LOG_INFO << "Service listening on " << conf.listen();
-  yarmproxy::ProxyServer server(conf.listen()); // TODO : concurrency
+  yarmproxy::ProxyServer server(conf.listen(), conf.worker_threads()); // TODO : concurrency
   server.Run();
   return 0;
 }

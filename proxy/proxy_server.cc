@@ -24,12 +24,13 @@ static size_t DefaultConcurrency() {
   return hd_concurrency == 0 ? 4 : hd_concurrency;
 }
 
-ProxyServer::ProxyServer(const std::string & addr, size_t concurrency)
+ProxyServer::ProxyServer(const std::string & addr, size_t worker_threads)
     : work_(io_service_)
     , acceptor_(io_service_)
     , listen_addr_(addr)
     , stopped_(false)
-    , worker_pool_(new WorkerPool(concurrency > 0 ? concurrency : DefaultConcurrency())) {
+    , worker_pool_(new WorkerPool(worker_threads > 0 ? worker_threads
+                                      : DefaultConcurrency())) {
 }
 
 ProxyServer::~ProxyServer() {

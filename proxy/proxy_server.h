@@ -14,7 +14,7 @@ class WorkerPool;
 
 class ProxyServer {
 public:
-  explicit ProxyServer(const std::string & addr, size_t worker_concurrency = 0);
+  explicit ProxyServer(const std::string & addr, size_t worker_threads);
   ~ProxyServer();
 
   void Run();

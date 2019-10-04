@@ -19,6 +19,9 @@ public:
   bool daemonize() const {
     return daemonize_;
   }
+  int worker_threads() const {
+    return worker_threads_;
+  }
   size_t buffer_size() const {
     return buffer_size_;
   }
@@ -60,6 +63,7 @@ private:
 
   std::string listen_ = "127.0.0.1:11311";
   bool daemonize_ = false;
+  int worker_threads_ = 0;
 
   std::string log_file_ = "./yarmproxy.log";
   std::string log_level_ = "WARN";

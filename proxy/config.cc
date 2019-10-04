@@ -74,6 +74,16 @@ bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
     return true;
   }
 
+  if (tokens.size() == 2 && tokens[0] == "worker_threads") {
+    try {
+      worker_threads_ = std::stoi(tokens[1]);
+      return true;
+    } catch (...) {
+      error_msg_ = "positive integer required";
+      return false;
+    }
+  }
+
   if (tokens.size() == 2 && tokens[0] == "log_file") {
     log_file_ = tokens[1];
     return true;

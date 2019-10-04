@@ -128,7 +128,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       }
       command->reset(new RedisBasicCommand(client, ba));
       return ba.total_size();
-    } else if (ba[0].equals("ymstats", sizeof("ymstats") - 1)) {
+    } else if (ba[0].equals("yarmstats", sizeof("yarmstats") - 1)) {
       if (!ba.completed()) {
         return 0;
       }
