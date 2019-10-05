@@ -4,10 +4,10 @@
 
 #include "base/logging.h"
 
-#include "client_conn.h"
-#include "worker_pool.h"
 #include "backend_locator.h"
+#include "client_conn.h"
 #include "signal_watcher.h"
+#include "worker_pool.h"
 
 namespace yarmproxy {
 
@@ -58,7 +58,14 @@ void ProxyServer::Run() {
     return;
   }
 
-  // SignalWatcher::Instance().RegisterHandler(SIGHUP, [this](int) { ReloadBackends(); });
+  SignalWatcher::Instance().RegisterHandler(SIGHUP, [](int) {
+      // FIXME : 屏蔽正在触发的signal，防止重入
+      if (!BackendLoactor::Reload()) {
+        LOG_WARN << "SIGHUP BackendLoactor::Reload Fail.";
+      } else {
+        LOG_WARN << "SIGHUP BackendLoactor::Reload OK.";
+      }
+    });
   SignalWatcher::Instance().RegisterHandler(SIGINT,
       [this](int) {
         LOG_ERROR << "SIGINT Received.";

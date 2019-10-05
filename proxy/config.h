@@ -2,6 +2,7 @@
 #define _YAMPROXY_CONFIG_H_
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -17,10 +18,7 @@ public:
   }
 
   bool Initialize();
-  bool ReloadCulsters() {
-    // TODO : reload clusters conf
-    return true;
-  }
+  bool ReloadCulsters();
 
   bool daemonize() const {
     return daemonize_;
@@ -65,8 +63,13 @@ public:
   const std::string& log_level() const {
     return log_level_;
   }
+  const std::vector<Cluster>& clusters() const {
+    return clusters_;
+  }
 private:
   std::string config_file_ = "./yarmproxy.conf";
+  using TokensHandler = std::function<bool(const std::vector<std::string>& tokens)>;
+  bool TraverseConfFile(TokensHandler handler);
 
   std::string listen_ = "127.0.0.1:11311";
   bool daemonize_ = false;
@@ -81,20 +84,9 @@ private:
   std::string log_level_ = "WARN";
 
   size_t buffer_size_ = 4096;
-public:
-  const std::vector<Cluster>& clusters() const {
-    return clusters_;
-  }
   std::vector<Cluster> clusters_;
 private:
   Config() {}
-  void set_buffer_size(size_t sz) {
-    // TODO : must be 2^n
-    if (sz >= 1024 && sz <= 1024 * 1024 &&
-        ((sz & (sz - 1)) == 0)) {
-      buffer_size_ = sz;
-    }
-  }
 
   // TODO : add them in parser class
   bool ApplyTokens(const std::vector<std::string>& tokens);

@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_CONSIST_HASH_H_
-#define _YARMPROXY_CONSIST_HASH_H_
+#ifndef _YARMPROXY_BACKEND_CONTINUUM_H_
+#define _YARMPROXY_BACKEND_CONTINUUM_H_
 
 #include <string>
 #include <map>
@@ -41,5 +41,5 @@ private:
 
 }
 
-#endif // _YARMPROXY_CONSIST_HASH_H_
+#endif // _YARMPROXY_BACKEND_CONTINUUM_H_
 

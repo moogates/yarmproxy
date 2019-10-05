@@ -9,30 +9,6 @@
 
 namespace yarmproxy {
 
-void TokenizeLine(const std::string& line, std::vector<std::string>* tokens) {
-  int status = 0;
-  for(char ch : line) {
-    if (ch == ';' || ch == '#') {
-      return;
-    }
-    if (status == 0) {
-      if (isspace(ch)) {
-        continue;
-      } else {
-        tokens->emplace_back(1, ch);
-        status = 1;
-      }
-    } else {
-      if (isspace(ch)) {
-        status = 0;
-        continue;
-      } else {
-        tokens->back().push_back(ch);
-      }
-    }
-  }
-}
-
 bool Config::ApplyTokens(const std::vector<std::string>& tokens) {
   if (context_.empty()) {
     return ApplyGlobalTokens(tokens);
@@ -179,6 +155,7 @@ bool Config::ApplyWorkerTokens(const std::vector<std::string>& tokens) {
     }
     return true;
   }
+  error_msg_ = "unknown directive";
   return false;
 }
 
@@ -271,7 +248,58 @@ bool Config::ApplyLogTokens(const std::vector<std::string>& tokens) {
   return true;
 }
 
+bool Config::ReloadCulsters() {
+  clusters_.clear();
+  return TraverseConfFile(
+      [this](const std::vector<std::string>& tokens) -> bool {
+          if (context_.empty()) {
+            if (tokens[0] != "cluster") {
+              std::cout << "skip global directive " << tokens[0] << std::endl;
+              return true;
+            }
+          } else {
+            if (strncmp(context_.c_str(), "/cluster", sizeof("/cluster") - 1) != 0) {
+               std::cout << "skip none-cluster sub-directive " << tokens[0] << std::endl;
+               return true;
+            }
+          }
+
+          return ApplyTokens(tokens);
+      });
+}
+
 bool Config::Initialize() {
+  return TraverseConfFile(
+      [this](const std::vector<std::string>& tokens) -> bool {
+          return this->ApplyTokens(tokens);
+      });
+}
+
+static void TokenizeLine(const std::string& line, std::vector<std::string>* tokens) {
+  int status = 0;
+  for(char ch : line) {
+    if (ch == ';' || ch == '#') {
+      return;
+    }
+    if (status == 0) {
+      if (isspace(ch)) {
+        continue;
+      } else {
+        tokens->emplace_back(1, ch);
+        status = 1;
+      }
+    } else {
+      if (isspace(ch)) {
+        status = 0;
+        continue;
+      } else {
+        tokens->back().push_back(ch);
+      }
+    }
+  }
+}
+
+bool Config::TraverseConfFile(TokensHandler handler) {
   std::ifstream conf_fs(config_file_);
   if (!conf_fs) {
     std::cerr << "Open conf file " << config_file_ << " error." << std::endl;
@@ -288,10 +316,7 @@ bool Config::Initialize() {
     if (tokens.empty()) {
       continue;
     }
-  //std::copy(tokens.begin(), tokens.end(),
-  //    std::ostream_iterator<std::string>(std::cout, " / "));
-  //std::cout << std::endl;
-    if (!ApplyTokens(tokens)) {
+    if (!handler(tokens)) {
       std::cout << "Config " << config_file_ << " line " << line_count
                 << " error:" << error_msg_ << std::endl;
       return false;
