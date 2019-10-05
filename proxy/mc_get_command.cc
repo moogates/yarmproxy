@@ -46,7 +46,7 @@ void MemcachedGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
     while(*q != ' ' && *q != '\r') {
       ++q;
     }
-    auto ep = BackendLoactor::Instance().Locate(p, q - p,
+    auto ep = BackendLoactor::Instance()->Locate(p, q - p,
                   ProtocolType::MEMCACHED);
     auto it = ep_keys.find(ep);
     if (it == ep_keys.end()) {

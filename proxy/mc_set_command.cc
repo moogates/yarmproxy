@@ -26,7 +26,7 @@ size_t MemcachedSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   const char *q = p;
   while(*(++q) != ' ');
 
-  backend_endpoint_ = BackendLoactor::Instance().Locate(p, q - p,
+  backend_endpoint_ = BackendLoactor::Instance()->Locate(p, q - p,
                           ProtocolType::MEMCACHED);
 
   p = cmd_data + cmd_len - 2;

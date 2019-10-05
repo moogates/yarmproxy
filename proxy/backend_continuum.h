@@ -7,23 +7,20 @@
 #include <stdint.h>
 
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/thread/shared_mutex.hpp>
 
 #include "config.h"
 
 namespace yarmproxy {
 using Endpoint = boost::asio::ip::tcp::endpoint;
 
-using CacheNodeMap = std::map<Endpoint, size_t>;
-
-class Continuum {
+class BackendContinuum {
 public:
-  Continuum(const std::vector<Config::Backend>& backends);
+  BackendContinuum(const std::vector<Config::Backend>& backends);
   Endpoint LocateCacheNode(const char * key, size_t len) const;
   void Dump();
 
 private:
-  bool RebuildCachePoints();
+  bool BuildCachePoints();
 
   // 每个 cache node 会对应 continuum 上数百个(按比例)cache point
   struct CachePoint {
@@ -38,10 +35,8 @@ private:
     bool operator<(const CachePoint& r) const { return hash_point < r.hash_point; }
   };  
 
-  CacheNodeMap cache_nodes_; //服务器信息
+  std::map<Endpoint, size_t> weighted_nodes_; //服务器信息
   std::vector<CachePoint> cache_points_;
-  // TODO : clone to each thread to avoid mutex
-  mutable boost::shared_mutex cache_points_mutex_;
 };
 
 }

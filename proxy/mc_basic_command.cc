@@ -26,7 +26,7 @@ size_t MemcachedBasicCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   const char *q = p;
   while(*(++q) != ' ' && *q != '\r');
 
-  backend_endpoint_ = BackendLoactor::Instance().Locate(p, q - p,
+  backend_endpoint_ = BackendLoactor::Instance()->Locate(p, q - p,
                           ProtocolType::MEMCACHED);
   return 0; // 2 is lenght of the ending "\r\n"
 }

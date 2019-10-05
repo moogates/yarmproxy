@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
   if (argc > 1) {
     conf.set_config_file(argv[1]);
   }
-  if (!conf.Reload()) {
+  if (!conf.Initialize()) {
     return 1;
   }
   base::InitLogging(conf.log_file().c_str(),

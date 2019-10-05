@@ -16,6 +16,12 @@ public:
     return config;
   }
 
+  bool Initialize();
+  bool ReloadCulsters() {
+    // TODO : reload clusters conf
+    return true;
+  }
+
   bool daemonize() const {
     return daemonize_;
   }
@@ -59,8 +65,6 @@ public:
   const std::string& log_level() const {
     return log_level_;
   }
-
-  bool Reload();
 private:
   std::string config_file_ = "./yarmproxy.conf";
 

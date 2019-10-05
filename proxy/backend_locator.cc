@@ -3,18 +3,30 @@
 #include "base/logging.h"
 
 #include "config.h"
-#include "consist_hash.h"
+#include "backend_continuum.h"
 
 namespace yarmproxy {
 
+std::shared_ptr<BackendLoactor> BackendLoactor::instance_;
+
+bool BackendLoactor::Reload() {
+  std::shared_ptr<BackendLoactor> locator(new BackendLoactor());
+  Config::Instance().ReloadCulsters();
+  locator->Initialize();
+  std::atomic_store(&instance_, locator); // TODO : shared_ptr thread safety
+  return true;
+}
+
 bool BackendLoactor::Initialize() {
   for(auto& cluster : Config::Instance().clusters()) {
-    Continuum * continuum = new Continuum(cluster.backends_);
+    std::shared_ptr<BackendContinuum> continuum(
+        new BackendContinuum(cluster.backends_));
     for(auto& ns : cluster.namespaces_) {
       std::ostringstream oss;
       oss << int(cluster.protocol_) << "/" << (ns == "_" ? "" : ns.c_str());
-      clusters_continum_.emplace(oss.str(), continuum);
-      LOG_DEBUG << "BackendLoactor ns=" << oss.str() << " continium=" << continuum;
+      namespace_continum_.emplace(oss.str(), continuum);
+      LOG_DEBUG << "BackendLoactor ns=" << oss.str()
+                << " continium=" << continuum;
     }
   }
   return true;
@@ -46,11 +58,11 @@ static std::string KeyNamespace(const char * key, size_t len, ProtocolType proto
 }
 
 Endpoint BackendLoactor::Locate(const char * key, size_t len, ProtocolType protocol) {
-  Continuum * continuum = nullptr;  // use shared_ptr
-  auto it = clusters_continum_.find(KeyNamespace(key, len, protocol));
-  if (it == clusters_continum_.end()) {
+  std::shared_ptr<BackendContinuum> continuum;  // use shared_ptr
+  auto it = namespace_continum_.find(KeyNamespace(key, len, protocol));
+  if (it == namespace_continum_.end()) {
     // TODO : optional drop user request
-    continuum = clusters_continum_[DefaultNamespace(protocol)];
+    continuum = namespace_continum_[DefaultNamespace(protocol)];
   } else {
     continuum = it->second;
   }

@@ -271,7 +271,7 @@ bool Config::ApplyLogTokens(const std::vector<std::string>& tokens) {
   return true;
 }
 
-bool Config::Reload() {
+bool Config::Initialize() {
   std::ifstream conf_fs(config_file_);
   if (!conf_fs) {
     std::cerr << "Open conf file " << config_file_ << " error." << std::endl;

@@ -40,7 +40,7 @@ ProxyServer::~ProxyServer() {
 }
 
 void ProxyServer::Run() {
-  if (!BackendLoactor::Instance().Initialize()) {
+  if (!BackendLoactor::Reload()) {
     LOG_ERROR << "ProxyServer BackendLoactor init error ...";
     return;
   }
