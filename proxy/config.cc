@@ -147,6 +147,9 @@ bool Config::ApplyWorkerTokens(const std::vector<std::string>& tokens) {
       return false;
     }
     return true;
+  } else if (tokens[0] == "cpu_affinity") {
+    // TODO
+    return true;
   } else if (tokens[0] == "buffer_size") {
     try {
       int sz = std::stoi(tokens[1]);
