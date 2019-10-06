@@ -140,7 +140,7 @@ void RedisMgetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
     return;
   }
   LOG_DEBUG << "OnWriteQueryFinished ok, backend=" << backend;
-  backend->ReadReply(); // TODO : 这里做了简化，要求mget读取完整的指令才开始处理
+  backend->ReadReply();
 }
 
 void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,

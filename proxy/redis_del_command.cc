@@ -114,10 +114,8 @@ RedisDelCommand::~RedisDelCommand() {
   LOG_WARN << "RedisDelCommand dtor " << --redis_del_cmd_count
            << " pending_subqueries_.size=" << pending_subqueries_.size();
 
-  // TODO : release all backends
   if (pending_subqueries_.size() != 1) {
-    LOG_WARN << "RedisDelCommand dtor pending_subqueries_.size error";
-    assert(client_conn_->aborted()); // TODO : check this
+    assert(client_conn_->aborted());
   }
   for(auto& it : pending_subqueries_) {
     backend_pool()->Release(it.second->backend_);
@@ -129,9 +127,7 @@ bool RedisDelCommand::query_recv_complete() {
 }
 
 bool RedisDelCommand::WriteQuery() {
-  if (!init_write_query_) {
-    assert(false);
-  }
+  assert(init_write_query_);
   init_write_query_ = false;
   ActivateWaitingSubquery();
   return false;
@@ -197,16 +193,13 @@ void RedisDelCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
       replying_backend_ = backend;
     }
   } else {
-    // TODO : prepare for recycling, a bit tedious
     assert(backend->buffer()->unparsed_bytes() == 0);
     backend->buffer()->update_processed_bytes(backend->buffer()->unprocessed_bytes());
     pending_subqueries_.erase(backend);
     backend_pool()->Release(backend);
 
     if (!client_conn_->buffer()->recycle_locked() && unparsed_bulks_ > 0) {
-      // TODO : newly added
-      // assert(client_conn_->buffer()->recycle_lock_count() == 0);
-      client_conn_->TryReadMoreQuery("RedisDelCommand::OnBackendReplyReceived 1");
+      client_conn_->TryReadMoreQuery("redis_del_1");
     }
 
     LOG_WARN << "OnBackendReplyReceived command=" << this
@@ -241,7 +234,7 @@ void RedisDelCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
       client_conn_->buffer()->dec_recycle_lock();
       if (!client_conn_->buffer()->recycle_locked() && // 全部完成write query 才能释放recycle_lock
           !query_recv_complete()) {
-        client_conn_->TryReadMoreQuery("redis_del_1");
+        client_conn_->TryReadMoreQuery("redis_del_2");
         LOG_DEBUG << "OnWriteQueryFinished E_CONNECT TryReadMoreQuery";
       }
     } else {
@@ -323,7 +316,7 @@ bool RedisDelCommand::ProcessUnparsedPart() {
 
   if (new_bulks.size() == 0) {
     if (!client_conn_->buffer()->recycle_locked()) {
-      client_conn_->TryReadMoreQuery("mset_call_5");
+      client_conn_->TryReadMoreQuery("redis_del_3");
     }
     return true;
   }

@@ -28,15 +28,12 @@ bool Config::ApplyTokens(const std::vector<std::string>& tokens) {
 }
 
 void Config::PushSubcontext(const std::string& subcontext) {
-  std::cout << "PushSubcontext. pre-context_=" << context_ << std::endl;
   context_.push_back('/');
   context_.append(subcontext);
-  std::cout << "PushSubcontext. context_=" << context_ << std::endl;
 }
 void Config::PopSubcontext() {
   auto const pos = context_.find_last_of('/');
   context_ = context_.substr(0, pos);
-  std::cout << "PopSubcontext. context_=" << context_ << std::endl;
 }
 
 bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
@@ -124,7 +121,8 @@ bool Config::ApplyWorkerTokens(const std::vector<std::string>& tokens) {
     }
     return true;
   } else if (tokens[0] == "cpu_affinity") {
-    // TODO
+    // TODO : support cpu affinity
+    worker_cpu_affinity_ = tokens[1] == "on" || tokens[1] == "1";
     return true;
   } else if (tokens[0] == "buffer_size") {
     try {
@@ -200,7 +198,6 @@ bool Config::ApplyClusterTokens(const std::vector<std::string>& tokens) {
       return true;
     }
   } else if (tokens[0] == "backend") {
-    std::cout << "backend directive in context " << context_ << std::endl;
     if (context_ == "/cluster/backends") {
       if (tokens.size() == 3) {
         size_t pos = tokens[1].find_first_of(':');
@@ -254,13 +251,11 @@ bool Config::ReloadCulsters() {
       [this](const std::vector<std::string>& tokens) -> bool {
           if (context_.empty()) {
             if (tokens[0] != "cluster") {
-              std::cout << "skip global directive " << tokens[0] << std::endl;
               return true;
             }
           } else {
             if (strncmp(context_.c_str(), "/cluster", sizeof("/cluster") - 1) != 0) {
-               std::cout << "skip none-cluster sub-directive " << tokens[0] << std::endl;
-               return true;
+              return true;
             }
           }
 
@@ -305,6 +300,7 @@ bool Config::TraverseConfFile(TokensHandler handler) {
     std::cerr << "Open conf file " << config_file_ << " error." << std::endl;
     return false;
   }
+  std::cout << "Start loading config file " << config_file_ << std::endl;
 
   std::string line;
   size_t line_count = 0;

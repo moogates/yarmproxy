@@ -59,7 +59,7 @@ void ProxyServer::Run() {
   }
 
   SignalWatcher::Instance().RegisterHandler(SIGHUP, [](int) {
-      // FIXME : 屏蔽正在触发的signal，防止重入
+      // FIXME : prevent signal handler reentrance
       if (!BackendLoactor::Reload()) {
         LOG_WARN << "SIGHUP BackendLoactor::Reload Fail.";
       } else {

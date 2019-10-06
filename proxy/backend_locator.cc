@@ -11,7 +11,9 @@ std::shared_ptr<BackendLoactor> BackendLoactor::instance_;
 
 bool BackendLoactor::Reload() {
   std::shared_ptr<BackendLoactor> locator(new BackendLoactor());
-  Config::Instance().ReloadCulsters();
+  if (instance_) {
+    Config::Instance().ReloadCulsters();
+  }
   locator->Initialize();
   std::atomic_store(&instance_, locator); // TODO : shared_ptr thread safety
   return true;

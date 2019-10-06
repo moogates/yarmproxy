@@ -26,6 +26,7 @@ public:
   int worker_threads() const {
     return worker_threads_;
   }
+
   int max_namespace_length() const {
     return max_namespace_length_;
   }
@@ -63,6 +64,11 @@ public:
   const std::string& log_level() const {
     return log_level_;
   }
+
+  bool worker_cpu_affinity() const {
+    return worker_cpu_affinity_;
+  }
+
   const std::vector<Cluster>& clusters() const {
     return clusters_;
   }
@@ -79,6 +85,7 @@ private:
   int worker_max_idle_backends_    = 32;
   size_t worker_buffer_size_       = 4096;
   size_t worker_buffer_trunk_size_ = 0;
+  bool worker_cpu_affinity_ = false;
 
   std::string log_file_ = "./yarmproxy.log";
   std::string log_level_ = "WARN";
