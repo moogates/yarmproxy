@@ -1,14 +1,27 @@
+#include <iostream>
+
 #ifndef _WINDOWS
 #include <sys/resource.h>
 #include <fcntl.h>
 #include <unistd.h>
 #endif // _WINDOWS
 
-#include "base/logging.h"
+#include "logging.h"
 
 #ifdef _GNU_SOURCE
 #include <sched.h>
 #endif
+
+void Welcome() {
+  std::cout << "\
+ ____  ____     _       _______     ____    ____  _______  _______      ___   ____  ____  ____  ____  \r\n\
+|_  _||_  _|   / \\     |_   __ \\   |_   \\  /   _||_   __ \\|_   __ \\   .'   `.|_  _||_  _||_  _||_  _| \r\n\
+  \\ \\  / /    / _ \\      | |__) |    |   \\/   |    | |__) | | |__) | /  .-.  \\ \\ \\  / /    \\ \\  / /   \r\n\
+   \\ \\/ /    / ___ \\     |  __ /     | |\\  /| |    |  ___/  |  __ /  | |   | |  > `' <      \\ \\/ /    \r\n\
+   _|  |_  _/ /   \\ \\_  _| |  \\ \\_  _| |_\\/_| |_  _| |_    _| |  \\ \\_\\  `-'  /_/ /'`\\ \\_    _|  |_    \r\n\
+  |______||____| |____||____| |___||_____||_____||_____|  |____| |___|`.___.'|____||____|  |______|   \r\n"
+      << std::endl;
+}
 
 int SetCpuAffinity(int cpu) {
 #ifdef _GNU_SOURCE
@@ -76,14 +89,13 @@ int MaximizeFdLimit() {
       if (setrlimit(RLIMIT_NOFILE, &lim)) {
         max = lim.rlim_cur;
       } else {
-        LOG_INFO << "MaximizeFdLimit set ok, min=" << min << " max=" << max; // TODO : check on linux
+        LOG_DEBUG << "MaximizeFdLimit set ok, min=" << min << " max=" << max; // TODO : check on linux
         min = lim.rlim_cur;
       }
     } while (min + 1 < max);
   } else {
-    LOG_INFO << "MaximizeFdLimit no set, rlim_cur =" << lim.rlim_cur << " rlim_max=" << lim.rlim_max;
+    LOG_DEBUG << "MaximizeFdLimit no set, rlim_cur =" << lim.rlim_cur << " rlim_max=" << lim.rlim_max;
   }
 #endif // _WINDOWS
   return 0;
 }
-

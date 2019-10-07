@@ -1,6 +1,6 @@
 #include "backend_continuum.h"
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "doobs_hash.h"
 

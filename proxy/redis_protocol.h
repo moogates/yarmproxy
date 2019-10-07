@@ -6,9 +6,8 @@
 #include <string>
 #include <vector>
 #include <cassert>
-#include <iostream>
 
-#include "base/logging.h"
+#include "logging.h"
 
 namespace yarmproxy {
 namespace redis {

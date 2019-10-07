@@ -1,10 +1,12 @@
 #include "config.h"
 
-#include <iostream>
+// #include <iostream>
 #include <fstream>
 #include <vector>
 
 #include <arpa/inet.h>
+
+#include "logging.h"
 #include "backend_locator.h"
 
 namespace yarmproxy {
@@ -297,10 +299,10 @@ static void TokenizeLine(const std::string& line, std::vector<std::string>* toke
 bool Config::TraverseConfFile(TokensHandler handler) {
   std::ifstream conf_fs(config_file_);
   if (!conf_fs) {
-    std::cerr << "Open conf file " << config_file_ << " error." << std::endl;
+    LOG_ERROR << "Open conf file '" << config_file_ << "' error.";
     return false;
   }
-  std::cout << "Start loading config file " << config_file_ << std::endl;
+  LOG_INFO << "Start loading config file '" << config_file_ << "'";
 
   std::string line;
   size_t line_count = 0;
@@ -313,8 +315,8 @@ bool Config::TraverseConfFile(TokensHandler handler) {
       continue;
     }
     if (!handler(tokens)) {
-      std::cout << "Config " << config_file_ << " line " << line_count
-                << " error:" << error_msg_ << std::endl;
+      LOG_ERROR << "Config '" << config_file_ << "' line " << line_count
+                << " error:" << error_msg_;
       return false;
     }
   }

@@ -1,12 +1,13 @@
-#include "base/logging.h"
-
-#include "proxy_server.h"
 #include "config.h"
+#include "logging.h"
+#include "proxy_server.h"
 
+void Welcome();
 int Daemonize();
 int MaximizeFdLimit();
 
 int main(int argc, char* argv[]) {
+  Welcome();
   auto& conf = yarmproxy::Config::Instance();
   if (argc > 1) {
     conf.set_config_file(argv[1]);
@@ -14,8 +15,7 @@ int main(int argc, char* argv[]) {
   if (!conf.Initialize()) {
     return 1;
   }
-  base::InitLogging(conf.log_file().c_str(),
-                    conf.log_level().c_str());
+  LOG_INIT(conf.log_file().c_str(), conf.log_level().c_str());
 
   if (conf.daemonize()) {
     Daemonize();

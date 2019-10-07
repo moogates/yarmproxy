@@ -1,6 +1,6 @@
 #include "mc_basic_command.h"
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "backend_conn.h"
 #include "backend_locator.h"

@@ -1,8 +1,6 @@
 #include "proxy_server.h"
 
-#include <iostream>
-
-#include "base/logging.h"
+#include "logging.h"
 
 #include "backend_locator.h"
 #include "client_conn.h"

@@ -16,14 +16,12 @@ include_directories(${YARM_ROOT_DIR})
 add_definitions(-DLOGURU_WITH_STREAMS=1) 
 
 aux_source_directory(. SOURCES)
-aux_source_directory(${YARM_ROOT_DIR}/base BASE_SOURCES)
 #file(GLOB SOURCES "*.cc")
 #set(SOURCES src/main.cc src/proxy_server.cc)
 link_directories(/usr/local/lib)
 message(${SOURCES})
-message(${BASE_SOURCES})
 
-add_executable(yarmproxy ${BASE_SOURCES} ${SOURCES})
+add_executable(yarmproxy ${SOURCES})
 
 target_link_libraries(yarmproxy boost_system boost_thread pthread dl)
 

@@ -1,6 +1,6 @@
 #include "mc_get_command.h"
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "error_code.h"
 

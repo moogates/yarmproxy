@@ -1,6 +1,6 @@
 #include "stats_command.h"
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "stats.h"
 #include "backend_conn.h"

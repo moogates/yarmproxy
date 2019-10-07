@@ -1,6 +1,6 @@
 #include "backend_locator.h"
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "config.h"
 #include "backend_continuum.h"
@@ -19,13 +19,24 @@ bool BackendLoactor::Reload() {
   return true;
 }
 
+static const char * ProtocolNs(ProtocolType protocol) {
+  switch(protocol) {
+  case ProtocolType::MEMCACHED:
+    return "m";
+  case ProtocolType::REDIS:
+    return "r";
+  default:
+    return "";
+  }
+}
+
 bool BackendLoactor::Initialize() {
   for(auto& cluster : Config::Instance().clusters()) {
     std::shared_ptr<BackendContinuum> continuum(
         new BackendContinuum(cluster.backends_));
     for(auto& ns : cluster.namespaces_) {
       std::ostringstream oss;
-      oss << int(cluster.protocol_) << "/" << (ns == "_" ? "" : ns.c_str());
+      oss << ProtocolNs(cluster.protocol_) << "/" << (ns == "_" ? "" : ns.c_str());
       namespace_continum_.emplace(oss.str(), continuum);
       LOG_DEBUG << "BackendLoactor ns=" << oss.str()
                 << " continium=" << continuum;
@@ -50,7 +61,7 @@ static const std::string& DefaultNamespace(ProtocolType protocol) {
 
 static std::string KeyNamespace(const char * key, size_t len, ProtocolType protocol) {
   std::ostringstream oss;
-  oss << int(protocol) << "/";
+  oss << ProtocolNs(protocol) << "/";
   const char * p = static_cast<const char *>(memchr(key, '#',
         std::min(int(len), Config::Instance().max_namespace_length() + 1)));
   if (p != nullptr) {

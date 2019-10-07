@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include "base/logging.h"
 
 namespace yarmproxy {
 

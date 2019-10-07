@@ -3,7 +3,7 @@
 #include <vector>
 #include <functional>
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "error_code.h"
 #include "backend_locator.h"
