@@ -23,8 +23,8 @@ ClientConnection::ClientConnection(WorkerContext& context)
     , buffer_(new ReadBuffer(context.allocator_->Alloc(),
                       context.allocator_->slab_size()))
     , context_(context)
-    , read_timer_(context.io_service_)
-    , write_timer_(context.io_service_) {
+    , timer_(context.io_service_, std::chrono::milliseconds(
+          Config::Instance().client_idle_timeout())) {
   ++g_stats_.client_conns_;
 }
 
@@ -39,50 +39,41 @@ ClientConnection::~ClientConnection() {
   --g_stats_.client_conns_;
 }
 
-void ClientConnection::OnReadTimeout(const boost::system::error_code& ec) {
+void ClientConnection::OnTimeout(const boost::system::error_code& ec) {
   if (ec == boost::asio::error::operation_aborted) {
-    LOG_WARN << "ClientConnection OnReadTimeout canceled.";
-    read_timer_.async_wait(std::bind(&ClientConnection::OnReadTimeout,
+    LOG_WARN << "ClientConnection OnTimeout canceled.";
+    timer_.async_wait(std::bind(&ClientConnection::OnTimeout,
                            shared_from_this(), std::placeholders::_1));
   } else {
     // timer was not cancelled, take necessary action.
-    LOG_WARN << "ClientConnection OnReadTimeout.";
+    LOG_WARN << "ClientConnection OnTimeout.";
     Abort();
   }
 }
 
-void ClientConnection::OnWriteTimeout(const boost::system::error_code& ec) {
-  if (ec == boost::asio::error::operation_aborted) {
-    LOG_WARN << "ClientConnection OnWriteTimeout canceled.";
-    write_timer_.async_wait(std::bind(&ClientConnection::OnWriteTimeout,
-                           shared_from_this(), std::placeholders::_1));
-  } else {
-    // timer was not cancelled, take necessary action.
-    LOG_WARN << "ClientConnection OnWriteTimeout.";
-    Abort();
-  }
-}
-
-void ClientConnection::UpdateReadTimer() {
+void ClientConnection::UpdateTimer() {
   // return;
   // TODO : 细致的超时处理, 包括connect/read/write/command
-  auto& conf = yarmproxy::Config::Instance();
+  ++timer_ref_count_;
+
   int timeout = active_cmd_queue_.empty() && 
       buffer_->unparsed_received_bytes() == 0 ?
-          conf.client_idle_timeout() : conf.command_exec_timeout();
-  LOG_WARN << "ClientConnection UpdateReadTimer timeout=" << timeout;
-  read_timer_.expires_after(std::chrono::milliseconds(timeout));
+          Config::Instance().client_idle_timeout() :
+          Config::Instance().command_exec_timeout();
+
+  size_t canceled = timer_.expires_after(std::chrono::milliseconds(timeout));
+  if (canceled == 0) {
+  //timer_.async_wait(std::bind(&ClientConnection::OnTimeout,
+  //                    shared_from_this(), std::placeholders::_1));
+  }
+  LOG_ERROR << "ClientConnection UpdateTimer timeout=" << timeout
+           << " canceled=" << canceled;
 }
 
-void ClientConnection::UpdateWriteTimer() {
-  // return;
-  // TODO : 细致的超时处理, 包括connect/read/write/command
-  int timeout = yarmproxy::Config::Instance().command_exec_timeout();
-  try {
-  size_t ret = write_timer_.expires_after(std::chrono::milliseconds(timeout));
-  LOG_WARN << "ClientConnection UpdateWriteTimer OK, timeout=" << timeout << " caneled=" << ret;
-  } catch(...) {
-  LOG_WARN << "ClientConnection UpdateWriteTimer err, timeout=" << timeout;
+void ClientConnection::RevokeTimer() {
+  assert(timer_ref_count_ > 0);
+  if (--timer_ref_count_ == 0) {
+    timer_.cancel();
   }
 }
 
@@ -92,19 +83,13 @@ void ClientConnection::StartRead() {
   socket_.set_option(nodelay, ec);
   LOG_ERROR << "ClientConnection StartRead ===================================";
 
-  write_timer_.expires_after(std::chrono::milliseconds(3000));
-  write_timer_.async_wait(std::bind(&ClientConnection::OnWriteTimeout,
-                           shared_from_this(), std::placeholders::_1));
-
-  read_timer_.expires_after(std::chrono::milliseconds(3000));
-  read_timer_.async_wait(std::bind(&ClientConnection::OnWriteTimeout,
-                           shared_from_this(), std::placeholders::_1));
-
   if (ec) {
     socket_.close();
-  } else {
-    AsyncRead();
+    return;
   }
+  timer_.async_wait(std::bind(&ClientConnection::OnTimeout,
+                        shared_from_this(), std::placeholders::_1));
+  AsyncRead();
 }
 
 void ClientConnection::TryReadMoreQuery(const char* caller) {
@@ -132,11 +117,12 @@ void ClientConnection::AsyncRead() {
   is_reading_query_ = true;
   buffer_->inc_recycle_lock();
 
-  LOG_DEBUG << "ClientConnection::AsyncRead begin, free_space_size=" << buffer_->free_space_size()
+  LOG_DEBUG << "ClientConnection::AsyncRead begin, free_space_size="
+            << buffer_->free_space_size()
             << " buffer=" << buffer_;
 
   assert(buffer_->recycle_locked());
-  UpdateReadTimer();
+  UpdateTimer();
   socket_.async_read_some(boost::asio::buffer(
       buffer_->free_space_begin(), buffer_->free_space_size()),
       std::bind(&ClientConnection::HandleRead, shared_from_this(),
@@ -177,7 +163,7 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
   std::shared_ptr<ClientConnection> client_conn(shared_from_this());
   auto cb_wrap = [client_conn, data, bytes, callback](
       const boost::system::error_code& error, size_t bytes_transferred) {
-    client_conn->write_timer_.cancel();
+    client_conn->RevokeTimer();
     if (!error) {
       g_stats_.bytes_to_clients_ += bytes_transferred;
     }
@@ -191,7 +177,7 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
   };
 
   is_writing_reply_ = true;
-  UpdateWriteTimer();
+  UpdateTimer();
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
@@ -232,8 +218,6 @@ bool ClientConnection::ProcessUnparsedQuery() {
         }
         LOG_DEBUG << "ProcessUnparsedQuery break. parsed_bytes=" << parsed_bytes;
         break;
-      } else {
-        LOG_DEBUG << "ProcessUnparsedQuery continue. parsed_bytes=" << parsed_bytes;
       }
     }
   }
@@ -243,7 +227,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
 
 void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
-  read_timer_.cancel();
+  RevokeTimer();
   if (aborted_) {
     // backend interrrupted
     return;
@@ -287,8 +271,8 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
-      // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
-      // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
+      // TODO : 这里不继续read, 而是在WriteQuery的回调函数里面才继续read
+      // (or WriteQuery has no callback). 理论上这并不是最佳方式
       if (no_callback) {
         TryReadMoreQuery("client_conn_4");
       }
@@ -317,8 +301,9 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 void ClientConnection::Abort() {
   LOG_WARN << "ClientConnection::Abort client=" << this;
   aborted_ = true;
-  read_timer_.cancel();
-  write_timer_.cancel();
+  if (timer_ref_count_ > 0) {
+    timer_.cancel();
+  }
   active_cmd_queue_.clear();
   socket_.close();
 }
