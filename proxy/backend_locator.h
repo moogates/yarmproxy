@@ -17,15 +17,10 @@ enum class ProtocolType {
 
 class BackendLoactor {
 public:
-  static std::shared_ptr<BackendLoactor> Instance() {
-    return instance_;
-  }
-  static bool Reload();
-  Endpoint Locate(const char * key, size_t len, ProtocolType protocol);
-private:
   BackendLoactor() {}
   bool Initialize();
-  static std::shared_ptr<BackendLoactor> instance_;
+  Endpoint Locate(const char * key, size_t len, ProtocolType protocol);
+private:
   std::map<std::string, std::shared_ptr<BackendContinuum>> namespace_continum_;
 };
 

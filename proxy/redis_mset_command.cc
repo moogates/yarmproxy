@@ -84,7 +84,7 @@ RedisMsetCommand::RedisMsetCommand(std::shared_ptr<ClientConnection> client, con
 {
   unparsed_bulks_ += unparsed_bulks_ % 2;  // don't parse the 'key' now if 'value' absent
   for(size_t i = 1; (i + 1) < ba.present_bulks(); i += 2) { // only 'key' is inadequate, 'value' field must be present
-    Endpoint ep = BackendLoactor::Instance()->Locate(
+    Endpoint ep = backend_locator()->Locate(
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size() + ba[i+1].present_size());
   }
@@ -367,6 +367,7 @@ void RedisMsetCommand::ActivateWaitingSubquery() {
   waiting_subqueries_.clear();
 }
 
+// TODO : merge with ctor parsing
 bool RedisMsetCommand::ProcessUnparsedPart() {
   ReadBuffer* buffer = client_conn_->buffer();
   std::vector<redis::Bulk> new_bulks;
@@ -412,7 +413,7 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
 
   size_t to_process_bytes = 0;
   for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) {
-    Endpoint ep = BackendLoactor::Instance()->Locate(
+    Endpoint ep = backend_locator()->Locate(
                                 new_bulks[i].payload_data(),
                                 new_bulks[i].payload_size(),
                                 ProtocolType::REDIS);

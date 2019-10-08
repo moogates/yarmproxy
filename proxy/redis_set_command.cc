@@ -18,7 +18,7 @@ RedisSetCommand::RedisSetCommand(std::shared_ptr<ClientConnection> client,
                                  const redis::BulkArray& ba)
     : Command(client)
     , unparsed_bulks_(ba.absent_bulks()) {
-  backend_endpoint_ = BackendLoactor::Instance()->Locate(ba[1].payload_data(),
+  backend_endpoint_ = backend_locator()->Locate(ba[1].payload_data(),
                           ba[1].payload_size(), ProtocolType::REDIS);
   LOG_DEBUG << "RedisSetCommand key=" << ba[1].to_string()
             << " ep=" << backend_endpoint_;

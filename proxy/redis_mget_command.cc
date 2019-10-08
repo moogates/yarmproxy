@@ -40,7 +40,7 @@ bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
 
   for(size_t i = 1; i < ba.total_bulks(); ++i) {
     const redis::Bulk& bulk = ba[i];
-    Endpoint current_endpoint = BackendLoactor::Instance()->Locate(
+    Endpoint current_endpoint = backend_locator()->Locate(
         bulk.payload_data(), bulk.payload_size(), ProtocolType::REDIS);
 
     LOG_DEBUG << "ParseQuery key=" << bulk.to_string() << " ep=" << current_endpoint

@@ -103,7 +103,7 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client, const
       ++unparsed_bulks_;// don't parse the last key if it's not complete
       break;
     }
-    Endpoint ep = BackendLoactor::Instance()->Locate(
+    Endpoint ep = backend_locator()->Locate(
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size());
   }
@@ -331,7 +331,7 @@ bool RedisDelCommand::ProcessUnparsedPart() {
   //  ++unparsed_bulks_;// don't parse the last key if it's not complete
   //  break;
   //}
-    Endpoint ep = BackendLoactor::Instance()->Locate(
+    Endpoint ep = backend_locator()->Locate(
                                 new_bulks[i].payload_data(),
                                 new_bulks[i].payload_size(),
                                 ProtocolType::REDIS);

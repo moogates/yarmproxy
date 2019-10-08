@@ -7,19 +7,6 @@
 
 namespace yarmproxy {
 
-std::shared_ptr<BackendLoactor> BackendLoactor::instance_;
-
-bool BackendLoactor::Reload() {
-  std::shared_ptr<BackendLoactor> locator(new BackendLoactor());
-  if (instance_) {
-    Config::Instance().ReloadCulsters();
-  }
-  locator->Initialize();
-  // std::atomic_store(&instance_, locator); // TODO : shared_ptr thread safety
-  instance_ = locator; // TODO : shared_ptr thread safety
-  return true;
-}
-
 static const char * ProtocolNs(ProtocolType protocol) {
   switch(protocol) {
   case ProtocolType::MEMCACHED:
@@ -32,6 +19,9 @@ static const char * ProtocolNs(ProtocolType protocol) {
 }
 
 bool BackendLoactor::Initialize() {
+  if (Config::Instance().clusters().empty()) {
+    return false;
+  }
   for(auto& cluster : Config::Instance().clusters()) {
     std::shared_ptr<BackendContinuum> continuum(
         new BackendContinuum(cluster.backends_));

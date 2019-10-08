@@ -18,7 +18,7 @@ RedisGetCommand::RedisGetCommand(std::shared_ptr<ClientConnection> client,
     , cmd_data_(ba.raw_data())
     , cmd_bytes_(ba.total_size())
 {
-  backend_endpoint_ = BackendLoactor::Instance()->Locate(
+  backend_endpoint_ = backend_locator()->Locate(
       ba[1].payload_data(), ba[1].payload_size(), ProtocolType::REDIS);
 }
 
