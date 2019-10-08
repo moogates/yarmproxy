@@ -17,8 +17,8 @@ public:
   virtual ~RedisMgetCommand();
 
   bool WriteQuery() override;
-  void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
-                            ErrorCode ec) override;
+//void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
+//                          ErrorCode ec) override;
 
   void StartWriteReply() override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,

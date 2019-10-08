@@ -125,6 +125,7 @@ bool RedisMgetCommand::WriteQuery() {
   return false;
 }
 
+/*
 void RedisMgetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
@@ -142,6 +143,7 @@ void RedisMgetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
   LOG_DEBUG << "OnWriteQueryFinished ok, backend=" << backend;
   backend->ReadReply();
 }
+*/
 
 void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
