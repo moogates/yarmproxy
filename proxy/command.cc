@@ -10,7 +10,7 @@
 
 #include "worker_pool.h"
 #include "client_conn.h"
-// #include "backend_locator.h"
+#include "backend_locator.h"
 #include "backend_conn.h"
 #include "backend_pool.h"
 #include "read_buffer.h"
@@ -44,6 +44,11 @@ Command::~Command() {
 BackendConnPool* Command::backend_pool() {
   return client_conn_->context().backend_conn_pool();
 }
+
+std::shared_ptr<BackendLoactor> Command::backend_locator() {
+  return client_conn_->context().backend_locator_;
+}
+
 
 // 0 : ok, 数据不够解析
 // >0 : ok, 解析成功，返回已解析的字节数

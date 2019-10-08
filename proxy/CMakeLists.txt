@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 2.8.9)
 project(yarmproxy)
 set (YARM_ROOT_DIR "..")
 
-SET (CMAKE_CXX_COMPILER "clang++")
+#SET (CMAKE_CXX_COMPILER "clang++")
+SET (CMAKE_CXX_COMPILER "g++")
 
 #set (CMAKE_BUILD_TYPE "Debug")
 set (CMAKE_BUILD_TYPE "Release")
@@ -27,6 +28,6 @@ target_link_libraries(yarmproxy boost_system boost_thread pthread dl)
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
   MESSAGE(STATUS "this is Linux")
-  target_link_libraries(yarmproxy atomic)
+  # target_link_libraries(yarmproxy atomic)
 endif (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 

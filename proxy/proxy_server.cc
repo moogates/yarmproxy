@@ -37,11 +37,22 @@ ProxyServer::~ProxyServer() {
   }
 }
 
+SignalHandler ProxyServer::WrapThreadSafeHandler(std::function<void()> handler) {
+  boost::asio::io_service& ios(io_service_);
+  return [&ios, handler](int) {
+    ios.post(handler);
+  };
+}
+
 void ProxyServer::Run() {
   if (!BackendLoactor::Reload()) {
     LOG_ERROR << "ProxyServer BackendLoactor init error ...";
     return;
   }
+  // TODO : BackendLoactor singleton not required
+  // TODO : BackendLoactor typofix
+  std::shared_ptr<BackendLoactor> locator = BackendLoactor::Instance();
+  worker_pool_->OnLocatorUpdated(locator);
 
   auto endpoint = ParseEndpoint(listen_addr_);
   acceptor_.open(endpoint.protocol());
@@ -56,24 +67,25 @@ void ProxyServer::Run() {
     return;
   }
 
-  SignalWatcher::Instance().RegisterHandler(SIGHUP, [](int) {
+  SignalWatcher::Instance().RegisterHandler(SIGHUP, WrapThreadSafeHandler([this]() {
       // FIXME : prevent signal handler reentrance
       if (!BackendLoactor::Reload()) {
         LOG_WARN << "SIGHUP BackendLoactor::Reload Fail.";
       } else {
         LOG_WARN << "SIGHUP BackendLoactor::Reload OK.";
+        worker_pool_->OnLocatorUpdated(BackendLoactor::Instance());
       }
-    });
+    }));
   SignalWatcher::Instance().RegisterHandler(SIGINT,
-      [this](int) {
+      WrapThreadSafeHandler([this]() {
         LOG_ERROR << "SIGINT Received.";
         Stop();
-      });
+      }));
   SignalWatcher::Instance().RegisterHandler(SIGTERM,
-      [this](int) {
+      WrapThreadSafeHandler([this]() {
         LOG_ERROR << "SIGTERM Received.";
         Stop();
-      });
+      }));
 
   worker_pool_->StartDispatching();
   StartAccept();

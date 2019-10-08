@@ -5,6 +5,7 @@
 #include "logging.h"
 
 #include "allocator.h"
+#include "backend_locator.h"
 #include "backend_pool.h"
 
 namespace yarmproxy {
@@ -22,6 +23,15 @@ BackendConnPool* WorkerContext::backend_conn_pool() {
     backend_conn_pool_ = new BackendConnPool(*this);
   }
   return backend_conn_pool_;
+}
+
+void WorkerPool::OnLocatorUpdated(std::shared_ptr<BackendLoactor> locator) {
+  for(size_t i = 0; i < concurrency_; ++i) {
+    WorkerContext& worker = workers_[i];
+    worker.io_service_.post([&worker, locator]() {
+          worker.backend_locator_ = locator;
+        });
+  }
 }
 
 void WorkerPool::StartDispatching() {
