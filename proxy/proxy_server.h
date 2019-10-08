@@ -10,6 +10,8 @@ namespace yarmproxy {
 class ClientConnection;
 class WorkerPool;
 
+using SignalHandler = std::function<void(int sigid)>;
+
 class ProxyServer {
 public:
   explicit ProxyServer(const std::string & addr, size_t worker_threads);
@@ -33,6 +35,9 @@ private:
   bool stopped_;
 
   std::unique_ptr<WorkerPool> worker_pool_;
+
+  // SignalHandler WrapThreadSafeHandler(SignalHandler handler);
+  SignalHandler WrapThreadSafeHandler(std::function<void()> handler);
 };
 
 }

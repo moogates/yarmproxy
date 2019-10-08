@@ -1,6 +1,6 @@
 #include "logging.h"
 
-// #include <iostream>
+#include <cstring>
 
 namespace logging {
 
