@@ -25,7 +25,7 @@ BackendConnPool* WorkerContext::backend_conn_pool() {
   return backend_conn_pool_;
 }
 
-void WorkerPool::OnLocatorUpdated(std::shared_ptr<BackendLoactor> locator) {
+void WorkerPool::OnLocatorUpdated(std::shared_ptr<BackendLocator> locator) {
   for(size_t i = 0; i < concurrency_; ++i) {
     WorkerContext& worker = workers_[i];
     worker.io_service_.post([&worker, locator]() {

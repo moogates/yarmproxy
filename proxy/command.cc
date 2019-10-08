@@ -45,7 +45,7 @@ BackendConnPool* Command::backend_pool() {
   return client_conn_->context().backend_conn_pool();
 }
 
-std::shared_ptr<BackendLoactor> Command::backend_locator() {
+std::shared_ptr<BackendLocator> Command::backend_locator() {
   return client_conn_->context().backend_locator_;
 }
 

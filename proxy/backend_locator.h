@@ -15,9 +15,9 @@ enum class ProtocolType {
   MEMCACHED = 1,
 };
 
-class BackendLoactor {
+class BackendLocator {
 public:
-  BackendLoactor() {}
+  BackendLocator() {}
   bool Initialize();
   Endpoint Locate(const char * key, size_t len, ProtocolType protocol);
 private:

@@ -13,7 +13,7 @@ namespace yarmproxy {
 using Endpoint = boost::asio::ip::tcp::endpoint;
 class BackendConn;
 class BackendConnPool;
-class BackendLoactor;
+class BackendLocator;
 class ClientConnection;
 
 enum class ErrorCode;
@@ -48,7 +48,7 @@ public:
 
 protected:
   BackendConnPool* backend_pool();
-  std::shared_ptr<BackendLoactor> backend_locator();
+  std::shared_ptr<BackendLocator> backend_locator();
 
   std::shared_ptr<BackendConn> AllocateBackend(const Endpoint& ep);
   void TryWriteReply(std::shared_ptr<BackendConn> backend);

@@ -46,13 +46,11 @@ SignalHandler ProxyServer::WrapThreadSafeHandler(std::function<void()> handler) 
 }
 
 void ProxyServer::Run() {
-  std::shared_ptr<BackendLoactor> locator(new BackendLoactor());
+  std::shared_ptr<BackendLocator> locator(new BackendLocator());
   if (!locator->Initialize()) {
-    LOG_ERROR << "ProxyServer BackendLoactor Initialize error ...";
+    LOG_ERROR << "ProxyServer BackendLocator Initialize error ...";
     return;
   }
-  // TODO : BackendLoactor singleton not required
-  // TODO : BackendLoactor typofix
   worker_pool_->OnLocatorUpdated(locator);
 
   auto endpoint = ParseEndpoint(listen_addr_);
@@ -64,22 +62,22 @@ void ProxyServer::Run() {
   static const int BACKLOG = 1024; // TODO : config
   acceptor_.listen(BACKLOG, ec);
   if (ec) {
-    LOG_ERROR << "BackendLoactor listen error " << ec.message();
+    LOG_ERROR << "ProxyServer listen error " << ec.message();
     return;
   }
 
   SignalWatcher::Instance().RegisterHandler(SIGHUP, WrapThreadSafeHandler([this]() {
       // FIXME : prevent signal handler reentrance
       if (!Config::Instance().ReloadCulsters()) {
-        LOG_WARN << "SIGHUP BackendLoactor reload config error.";
+        LOG_ERROR << "SIGHUP BackendLocator reload config error.";
         return;
       }
-      std::shared_ptr<BackendLoactor> locator(new BackendLoactor());
+      std::shared_ptr<BackendLocator> locator(new BackendLocator());
       if (!locator->Initialize()) {
-        LOG_WARN << "SIGHUP BackendLoactor reload error.";
+        LOG_ERROR << "SIGHUP BackendLocator reload Initialize error.";
         return;
       }
-      LOG_INFO << "SIGHUP BackendLoactor::Reload OK.";
+      LOG_WARN << "SIGHUP BackendLocator::Reload OK.";
       worker_pool_->OnLocatorUpdated(locator);
     }));
   SignalWatcher::Instance().RegisterHandler(SIGINT,

@@ -18,7 +18,7 @@ static const char * ProtocolNs(ProtocolType protocol) {
   }
 }
 
-bool BackendLoactor::Initialize() {
+bool BackendLocator::Initialize() {
   if (Config::Instance().clusters().empty()) {
     return false;
   }
@@ -29,7 +29,7 @@ bool BackendLoactor::Initialize() {
       std::ostringstream oss;
       oss << ProtocolNs(cluster.protocol_) << "/" << (ns == "_" ? "" : ns.c_str());
       namespace_continum_.emplace(oss.str(), continuum);
-      LOG_DEBUG << "BackendLoactor ns=" << oss.str()
+      LOG_DEBUG << "BackendLocator ns=" << oss.str()
                 << " continium=" << continuum;
     }
   }
@@ -61,7 +61,7 @@ static std::string KeyNamespace(const char * key, size_t len, ProtocolType proto
   return oss.str();
 }
 
-Endpoint BackendLoactor::Locate(const char * key, size_t len, ProtocolType protocol) {
+Endpoint BackendLocator::Locate(const char * key, size_t len, ProtocolType protocol) {
   std::shared_ptr<BackendContinuum> continuum;  // use shared_ptr
   auto it = namespace_continum_.find(KeyNamespace(key, len, protocol));
   if (it == namespace_continum_.end()) {
