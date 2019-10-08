@@ -19,6 +19,7 @@ MemcachedSetCommand::MemcachedSetCommand(std::shared_ptr<ClientConnection> clien
 }
 
 size_t MemcachedSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
+  // TODO : strict check
   // <command name> <key> <flags> <exptime> <bytes>\r\n
   const char *p = cmd_data;
   while(*(p++) != ' ');
@@ -33,7 +34,11 @@ size_t MemcachedSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   while(*(p - 1) != ' ') {
     --p;
   }
-  return std::atoi(p) + 2; // 2 is lenght of the ending "\r\n"
+  try {
+    return std::atoi(p) + 2; // 2 is length of the ending "\r\n"
+  } catch(...) {
+    return 0;
+  }
 }
 
 MemcachedSetCommand::~MemcachedSetCommand() {

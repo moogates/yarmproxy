@@ -104,7 +104,7 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       }
       command->reset(new RedisMsetCommand(client, ba));
       if (ba.present_bulks() % 2 == 0) {
-        return ba.parsed_size() - ba.back().total_size();    // TODO : 测试有k没v的情况, 是否会解析错误?
+        return ba.parsed_size() - ba.back().total_size();
       } else {
         return ba.parsed_size();
       }
@@ -141,7 +141,9 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       return ba.total_size();
     }
 
-    command->reset(new ErrorCommand(client, std::string("-YarmProxy unknown redis directive:") + ba[0].to_string() + "\r\n"));
+    command->reset(new ErrorCommand(client,
+          std::string("-ERR YarmProxy unsupported redis directive:[") +
+              ba[0].to_string() + "]\r\n"));
     return size;
   }
 
@@ -162,8 +164,13 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
              strncmp(buf, "append ", sizeof("append ") - 1) == 0 ||
              strncmp(buf, "prepend ", sizeof("prepend ") - 1) == 0 ||
              strncmp(buf, "cas", sizeof("cas ") - 1) == 0) {
-    size_t body_bytes;
-    command->reset(new MemcachedSetCommand(client, buf, cmd_line_bytes, &body_bytes));
+    size_t body_bytes = 0;
+    LOG_WARN << "MemcachedSetCommand created(" << std::string(buf, cmd_line_bytes) << ")";
+    command->reset(new MemcachedSetCommand(client, buf, cmd_line_bytes,
+                                           &body_bytes));
+    if (body_bytes <= 2) {
+      return -1;
+    }
     return cmd_line_bytes + body_bytes;
   } else if (strncmp(buf, "delete ", sizeof("delete ") - 1) == 0 ||
       strncmp(buf, "incr ", sizeof("incr ") - 1) == 0 ||
@@ -175,16 +182,19 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     return cmd_line_bytes;
   }
 
-  command->reset(new ErrorCommand(client, std::string("YarmProxy Unsupported Request\r\n")));
-  LOG_WARN << "ErrorCommand(" << std::string(buf, cmd_line_bytes < 2 ? cmd_line_bytes : cmd_line_bytes - 2)
-           << ") len=" << cmd_line_bytes << " client_conn=" << client;
+  command->reset(new ErrorCommand(client,
+        std::string("YarmProxy Unsupported Request [") +
+          std::string(buf,cmd_line_bytes) + "]\r\n"));
+  LOG_WARN << "ErrorCommand(" << std::string(buf, cmd_line_bytes) << ") len="
+           << cmd_line_bytes << " client_conn=" << client;
   return size;
 }
 
 std::shared_ptr<BackendConn> Command::AllocateBackend(const Endpoint& ep) {
   auto backend = backend_pool()->Allocate(ep);
-  backend->SetReadWriteCallback(WeakBind(&Command::OnWriteQueryFinished, backend),
-                             WeakBind(&Command::OnBackendReplyReceived, backend));
+  backend->SetReadWriteCallback(
+      WeakBind(&Command::OnWriteQueryFinished, backend),
+      WeakBind(&Command::OnBackendReplyReceived, backend));
   return backend;
 }
 
@@ -222,10 +232,10 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
   }
 
   if (query_recv_complete()) {
-    LOG_DEBUG << "OnWriteQueryFinished ok, begin read reply, backend=" << backend;
+    // begin to read reply
     backend->ReadReply();
   } else {
-    LOG_DEBUG << "OnWriteQueryFinished ok, need more query, backend=" << backend;
+    // need more query
   }
 }
 
@@ -243,11 +253,10 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
 
   if (backend->finished()) {
     assert(!backend->buffer()->recycle_locked());
-    LOG_DEBUG << "OnWriteReplyFinished backend=" << backend << " finished";
-    assert(query_recv_complete()); // write_reply开始时, 一定recv_query结束, 包括connect error时候，也要遵守这一约定
+    // write_reply开始时须recv_query结束, 包括connect error时也要遵守这一约定
+    assert(query_recv_complete());
     RotateReplyingBackend(backend->recyclable());
   } else {
-    LOG_DEBUG << "OnWriteReplyFinished backend=" << backend << " unfinished";
     backend->TryReadMoreReply(); // 这里必须继续try
     TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
   }
@@ -273,12 +282,9 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
               << " unprocessed=" << unprocessed;
   if (!is_writing_reply_ && unprocessed > 0) {
     is_writing_reply_ = true;
-
     backend->buffer()->inc_recycle_lock();
-
-    client_conn_->WriteReply(backend->buffer()->unprocessed_data(), unprocessed,
-                                  WeakBind(&Command::OnWriteReplyFinished, backend));
-
+    client_conn_->WriteReply(backend->buffer()->unprocessed_data(),
+        unprocessed, WeakBind(&Command::OnWriteReplyFinished, backend));
     backend->buffer()->update_processed_bytes(unprocessed);
   }
 }

@@ -60,6 +60,26 @@ bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
     }
   }
 
+  if (tokens.size() == 2 && tokens[0] == "client_idle_timeout") {
+    try {
+      client_idle_timeout_ = std::stoi(tokens[1]);
+      return true;
+    } catch (...) {
+      error_msg_ = "positive integer required";
+      return false;
+    }
+  }
+
+  if (tokens.size() == 2 && tokens[0] == "command_exec_timeout") {
+    try {
+      command_exec_timeout_ = std::stoi(tokens[1]);
+      return true;
+    } catch (...) {
+      error_msg_ = "positive integer required";
+      return false;
+    }
+  }
+
   if (tokens.size() == 2 && tokens[0] == "max_namespace_length") {
     try {
       max_namespace_length_ = std::stoi(tokens[1]);

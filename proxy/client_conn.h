@@ -74,9 +74,12 @@ private:
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   bool ProcessUnparsedQuery();
 
-  void IdleTimeout(const boost::system::error_code& error);
-  void UpdateTimer();
-  boost::asio::steady_timer timer_; // TODO : system_timer or steady_timer?
+  boost::asio::steady_timer read_timer_; // TODO : system_timer or steady_timer?
+  boost::asio::steady_timer write_timer_; // TODO : system_timer or steady_timer?
+  void OnReadTimeout(const boost::system::error_code& error);
+  void OnWriteTimeout(const boost::system::error_code& error);
+  void UpdateReadTimer();
+  void UpdateWriteTimer();
 };
 
 }

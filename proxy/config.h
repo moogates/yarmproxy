@@ -69,6 +69,13 @@ public:
     return worker_cpu_affinity_;
   }
 
+  int client_idle_timeout() const {
+    return client_idle_timeout_;
+  }
+  int command_exec_timeout() const {
+    return command_exec_timeout_;
+  }
+
   const std::vector<Cluster>& clusters() const {
     return clusters_;
   }
@@ -91,6 +98,10 @@ private:
   std::string log_level_ = "WARN";
 
   size_t buffer_size_ = 4096;
+
+  int client_idle_timeout_ = 60000; // 60,000ms(one minute)
+  int command_exec_timeout_ =   50; // 50 ms
+
   std::vector<Cluster> clusters_;
 private:
   Config() {}
