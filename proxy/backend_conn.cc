@@ -38,6 +38,7 @@ void BackendConn::Close() {
   LOG_DEBUG << "BackendConn Close, backend=" << this;
   closed_ = true;
   no_recycle_  = false;
+  is_reading_reply_ = false;
 
   socket_.close();
   timer_.cancel();

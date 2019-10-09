@@ -85,7 +85,7 @@ private:
   bool reply_recv_complete_ = false;
   bool no_recycle_          = false;
 
-  bool closed_ = true;
+  bool closed_ = false;
 
   boost::asio::steady_timer timer_;
   int timer_ref_count_ = 0;
