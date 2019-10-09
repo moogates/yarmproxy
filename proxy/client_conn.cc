@@ -23,8 +23,7 @@ ClientConnection::ClientConnection(WorkerContext& context)
     , buffer_(new ReadBuffer(context.allocator_->Alloc(),
                       context.allocator_->slab_size()))
     , context_(context)
-    , timer_(context.io_service_, std::chrono::milliseconds(
-          Config::Instance().client_idle_timeout())) {
+    , timer_(context.io_service_) {
   ++g_stats_.client_conns_;
 }
 
@@ -40,10 +39,17 @@ ClientConnection::~ClientConnection() {
 }
 
 void ClientConnection::OnTimeout(const boost::system::error_code& ec) {
+  return;
+  assert(!aborted_);
   if (ec == boost::asio::error::operation_aborted) {
     LOG_WARN << "ClientConnection OnTimeout canceled.";
-    timer_.async_wait(std::bind(&ClientConnection::OnTimeout,
-                           shared_from_this(), std::placeholders::_1));
+
+    std::weak_ptr<ClientConnection> wptr(shared_from_this());
+    timer_.async_wait([wptr](const boost::system::error_code& ec) {
+          if (auto ptr = wptr.lock()) {
+            ptr->OnTimeout(ec);
+          }
+        });
   } else {
     // timer was not cancelled, take necessary action.
     LOG_WARN << "ClientConnection OnTimeout.";
@@ -52,7 +58,8 @@ void ClientConnection::OnTimeout(const boost::system::error_code& ec) {
 }
 
 void ClientConnection::UpdateTimer() {
-  // return;
+  return;
+  assert(!aborted_);
   // TODO : 细致的超时处理, 包括connect/read/write/command
   ++timer_ref_count_;
 
@@ -60,20 +67,24 @@ void ClientConnection::UpdateTimer() {
       buffer_->unparsed_received_bytes() == 0 ?
           Config::Instance().client_idle_timeout() :
           Config::Instance().command_exec_timeout();
-
+  try {
   size_t canceled = timer_.expires_after(std::chrono::milliseconds(timeout));
-  if (canceled == 0) {
-  //timer_.async_wait(std::bind(&ClientConnection::OnTimeout,
-  //                    shared_from_this(), std::placeholders::_1));
-  }
-  LOG_ERROR << "ClientConnection UpdateTimer timeout=" << timeout
+  LOG_WARN << "ClientConnection UpdateTimer timeout=" << timeout
            << " canceled=" << canceled;
+    } catch(...) {
+      abort();
+    }
 }
 
 void ClientConnection::RevokeTimer() {
+  return;
   assert(timer_ref_count_ > 0);
   if (--timer_ref_count_ == 0) {
+    try {
     timer_.cancel();
+    } catch(...) {
+      abort();
+    }
   }
 }
 
@@ -87,9 +98,15 @@ void ClientConnection::StartRead() {
     socket_.close();
     return;
   }
-  timer_.async_wait(std::bind(&ClientConnection::OnTimeout,
-                        shared_from_this(), std::placeholders::_1));
+
   AsyncRead();
+
+  std::weak_ptr<ClientConnection> wptr(shared_from_this());
+  timer_.async_wait([wptr](const boost::system::error_code& ec) {
+        if (auto ptr = wptr.lock()) {
+          ptr->OnTimeout(ec);
+        }
+      });
 }
 
 void ClientConnection::TryReadMoreQuery(const char* caller) {
@@ -301,9 +318,10 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 void ClientConnection::Abort() {
   LOG_WARN << "ClientConnection::Abort client=" << this;
   aborted_ = true;
-  if (timer_ref_count_ > 0) {
-    timer_.cancel();
-  }
+//if (timer_ref_count_ > 0) {
+//  timer_.cancel();
+//}
+  timer_.cancel();
   active_cmd_queue_.clear();
   socket_.close();
 }
