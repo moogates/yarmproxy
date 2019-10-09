@@ -39,18 +39,8 @@ ClientConnection::~ClientConnection() {
 }
 
 void ClientConnection::OnTimeout(const boost::system::error_code& ec) {
-  return;
   assert(!aborted_);
-  if (ec == boost::asio::error::operation_aborted) {
-    LOG_WARN << "ClientConnection OnTimeout canceled.";
-
-    std::weak_ptr<ClientConnection> wptr(shared_from_this());
-    timer_.async_wait([wptr](const boost::system::error_code& ec) {
-          if (auto ptr = wptr.lock()) {
-            ptr->OnTimeout(ec);
-          }
-        });
-  } else {
+  if (ec != boost::asio::error::operation_aborted) {
     // timer was not cancelled, take necessary action.
     LOG_WARN << "ClientConnection OnTimeout.";
     Abort();
@@ -58,7 +48,6 @@ void ClientConnection::OnTimeout(const boost::system::error_code& ec) {
 }
 
 void ClientConnection::UpdateTimer() {
-  return;
   assert(!aborted_);
   // TODO : 细致的超时处理, 包括connect/read/write/command
   ++timer_ref_count_;
@@ -67,17 +56,19 @@ void ClientConnection::UpdateTimer() {
       buffer_->unparsed_received_bytes() == 0 ?
           Config::Instance().client_idle_timeout() :
           Config::Instance().command_exec_timeout();
-  try {
   size_t canceled = timer_.expires_after(std::chrono::milliseconds(timeout));
   LOG_WARN << "ClientConnection UpdateTimer timeout=" << timeout
            << " canceled=" << canceled;
-    } catch(...) {
-      abort();
-    }
+
+  std::weak_ptr<ClientConnection> wptr(shared_from_this());
+  timer_.async_wait([wptr](const boost::system::error_code& ec) {
+        if (auto ptr = wptr.lock()) {
+          ptr->OnTimeout(ec);
+        }
+      });
 }
 
 void ClientConnection::RevokeTimer() {
-  return;
   assert(timer_ref_count_ > 0);
   if (--timer_ref_count_ == 0) {
     try {
@@ -92,21 +83,14 @@ void ClientConnection::StartRead() {
   boost::system::error_code ec;
   boost::asio::ip::tcp::no_delay nodelay(true);
   socket_.set_option(nodelay, ec);
-  LOG_ERROR << "ClientConnection StartRead ===================================";
 
   if (ec) {
+    LOG_WARN << "ClientConn StartRead set socket option error";
     socket_.close();
-    return;
+  } else {
+    LOG_ERROR << "ClientConn StartRead ===================================";
+    AsyncRead();
   }
-
-  AsyncRead();
-
-  std::weak_ptr<ClientConnection> wptr(shared_from_this());
-  timer_.async_wait([wptr](const boost::system::error_code& ec) {
-        if (auto ptr = wptr.lock()) {
-          ptr->OnTimeout(ec);
-        }
-      });
 }
 
 void ClientConnection::TryReadMoreQuery(const char* caller) {
