@@ -5,6 +5,7 @@
 #include <memory>
 
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include "read_buffer.h"
 
@@ -76,9 +77,16 @@ private:
   BackendReplyReceivedCallback reply_received_callback_;
   BackendQuerySentCallback query_sent_callback_;
 
-  bool is_reading_reply_    = false;
+  bool is_reading_reply_    = false; // TODO : merge into a flag
   bool reply_recv_complete_ = false;
   bool no_recycle_          = false;
+
+  boost::asio::steady_timer timer_;
+  int timer_ref_count_ = 0;
+
+  void UpdateTimer();
+  void RevokeTimer();
+  void OnTimeout(const boost::system::error_code& error);
 };
 
 }

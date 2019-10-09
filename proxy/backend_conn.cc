@@ -3,6 +3,7 @@
 #include "logging.h"
 
 #include "allocator.h"
+#include "config.h"
 #include "error_code.h"
 #include "read_buffer.h"
 #include "stats.h"
@@ -16,7 +17,8 @@ BackendConn::BackendConn(WorkerContext& context,
   : context_(context)
   , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
   , remote_endpoint_(endpoint)
-  , socket_(context.io_service_) {
+  , socket_(context.io_service_)
+  , timer_(context.io_service_) {
   ++g_stats_.backend_conns_;
   LOG_DEBUG << "BackendConn ctor, count=" << g_stats_.backend_conns_;
 }
@@ -152,6 +154,41 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
           std::placeholders::_1, std::placeholders::_2));
+}
+
+
+// TODO : connection_base
+void BackendConn::OnTimeout(const boost::system::error_code& ec) {
+  if (ec == boost::asio::error::operation_aborted) {
+    // timer was cancelled, take no action.
+    return;
+  }
+  LOG_WARN << "BackendConn timeout.";
+  Close();
+}
+
+void BackendConn::UpdateTimer() {
+  // TODO : 细致的超时处理, 包括connect/read/write/command
+  ++timer_ref_count_;
+
+  int timeout = Config::Instance().command_exec_timeout();
+  size_t canceled = timer_.expires_after(std::chrono::milliseconds(timeout));
+  LOG_WARN << "ClientConnection UpdateTimer timeout=" << timeout
+           << " canceled=" << canceled;
+
+  std::weak_ptr<BackendConn> wptr(shared_from_this());
+  timer_.async_wait([wptr](const boost::system::error_code& ec) {
+        if (auto ptr = wptr.lock()) {
+          ptr->OnTimeout(ec);
+        }
+      });
+}
+
+void BackendConn::RevokeTimer() {
+  assert(timer_ref_count_ > 0);
+  if (--timer_ref_count_ == 0) {
+    timer_.cancel();
+  }
 }
 
 }
