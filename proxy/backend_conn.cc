@@ -9,8 +9,7 @@
 #include "worker_pool.h"
 
 namespace yarmproxy {
-// TODO: 更好的容错，以及错误返回信息, 例如
-//   客户端格式错误时候，memcached返回错误信息: "CLIENT_ERROR bad data chunk\r\n"
+// TODO: 更好的容错，错误时更有好的返回信息
 
 BackendConn::BackendConn(WorkerContext& context,
     const Endpoint& endpoint)
@@ -65,7 +64,7 @@ void BackendConn::TryReadMoreReply() {
   ReadReply();
 }
 
-void BackendConn::WriteQuery(const char* data, size_t bytes) { // TODO : remove has_more_data param
+void BackendConn::WriteQuery(const char* data, size_t bytes) {
   if (!socket_.is_open()) {
     socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect,
           shared_from_this(), data, bytes, std::placeholders::_1));
@@ -142,8 +141,8 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
   if (connect_ec || option_ec) {
     socket_.close();
-    LOG_WARN << "HandleConnect error, connect_ec=" << connect_ec.message()
-             << " option_ec=" << option_ec.message()
+    LOG_WARN << "HandleConnect error, err=" << connect_ec.message()
+             << (connect_ec ? connect_ec.message() : option_ec.message())
              << " endpoint=" << remote_endpoint_
              << " backend=" << this;
     query_sent_callback_(ErrorCode::E_CONNECT);
