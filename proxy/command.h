@@ -52,6 +52,7 @@ protected:
 
   std::shared_ptr<BackendConn> AllocateBackend(const Endpoint& ep);
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
+  void OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
   virtual void OnBackendConnectError(std::shared_ptr<BackendConn> backend);
 

@@ -28,7 +28,6 @@ public:
 private:
   // void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
-  void OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec); // TODO : base class need it!
 
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool success) override;

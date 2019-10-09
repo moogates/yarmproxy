@@ -198,6 +198,46 @@ std::shared_ptr<BackendConn> Command::AllocateBackend(const Endpoint& ep) {
   return backend;
 }
 
+static const std::string& ErrorReply(ErrorCode ec) {
+  static const std::string kErrorConnect("-Backend Connect Error\r\n");
+  static const std::string kErrorWriteQuery("-Backend Write Error\r\n");
+  static const std::string kErrorReadReply("-Backend Read Error\r\n");
+  static const std::string kErrorProtocol("-Backend Protocol Error\r\n");
+  static const std::string kErrorTimeout("-Backend Timeout\r\n");
+  static const std::string kErrorDefault("-Backend Unknown Error\r\n");
+  switch(ec) {
+  case ErrorCode::E_CONNECT:
+    return kErrorConnect;
+  case ErrorCode::E_WRITE_QUERY:
+    return kErrorWriteQuery;
+  case ErrorCode::E_READ_REPLY:
+    return kErrorReadReply;
+  case ErrorCode::E_PROTOCOL:
+    return kErrorProtocol;
+  case ErrorCode::E_TIMEOUT:
+    return kErrorTimeout;
+  default:
+    return kErrorDefault;
+  }
+}
+
+void Command::OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  if (backend->has_read_some_reply()) {
+    client_conn_->Abort();
+    return;
+  }
+  auto& err_reply(ErrorReply(ec));
+  backend->SetReplyData(err_reply.data(), err_reply.size());
+  backend->set_reply_recv_complete();
+  backend->set_no_recycle();
+
+  if (client_conn_->IsFirstCommand(shared_from_this())) {
+    LOG_WARN << "RedisGetCommand::OnBackendError TryWriteReply, backend=" << backend;
+    TryWriteReply(backend);
+  }
+}
+
+
 void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
@@ -216,10 +256,11 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
     } else if (ec == ErrorCode::E_TIMEOUT) {
       LOG_WARN << "OnWriteQueryFinished timeout, backend=" << backend
                << " ep=" << backend->remote_endpoint();
-      client_conn_->Abort();
+      OnBackendError(backend, ec);
     } else {
       LOG_WARN << "OnWriteQueryFinished error, backend=" << backend
                << " ep=" << backend->remote_endpoint();
+      // TODO : more friendly error handling
       client_conn_->Abort();
     }
     return;
