@@ -213,6 +213,10 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
           client_conn_->TryReadMoreQuery("command_1");
         }
       }
+    } else if (ec == ErrorCode::E_TIMEOUT) {
+      LOG_WARN << "OnWriteQueryFinished timeout, backend=" << backend
+               << " ep=" << backend->remote_endpoint();
+      client_conn_->Abort();
     } else {
       LOG_WARN << "OnWriteQueryFinished error, backend=" << backend
                << " ep=" << backend->remote_endpoint();

@@ -41,6 +41,7 @@ static const std::string& ErrorReply(ErrorCode ec) {
   static const std::string kErrorWriteQuery("-Backend Write Error\r\n");
   static const std::string kErrorReadReply("-Backend Read Error\r\n");
   static const std::string kErrorProtocol("-Backend Protocol Error\r\n");
+  static const std::string kErrorTimeout("-Backend Timeout\r\n");
   static const std::string kErrorDefault("-Backend Unknown Error\r\n");
   switch(ec) {
   case ErrorCode::E_CONNECT:
@@ -51,13 +52,15 @@ static const std::string& ErrorReply(ErrorCode ec) {
     return kErrorReadReply;
   case ErrorCode::E_PROTOCOL:
     return kErrorProtocol;
+  case ErrorCode::E_TIMEOUT:
+    return kErrorTimeout;
   default:
     return kErrorDefault;
   }
 }
 
 void RedisGetCommand::OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  if (has_read_some_reply_) {
+  if (backend->has_read_some_reply()) {
     client_conn_->Abort();
     return;
   }
@@ -87,7 +90,6 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
     return;
   }
 
-  has_read_some_reply_ = true;
   if (client_conn_->IsFirstCommand(shared_from_this())) {
     TryWriteReply(backend);
   }

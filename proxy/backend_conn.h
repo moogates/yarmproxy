@@ -68,6 +68,9 @@ public:
   bool recyclable() const {
     return !no_recycle_ && finished();
   }
+  bool has_read_some_reply() const {
+    return has_read_some_reply_;
+  }
 private:
   WorkerContext& context_;
   ReadBuffer* buffer_;
@@ -78,8 +81,11 @@ private:
   BackendQuerySentCallback query_sent_callback_;
 
   bool is_reading_reply_    = false; // TODO : merge into a flag
+  bool has_read_some_reply_ = false;
   bool reply_recv_complete_ = false;
   bool no_recycle_          = false;
+
+  bool closed_ = true;
 
   boost::asio::steady_timer timer_;
   int timer_ref_count_ = 0;
