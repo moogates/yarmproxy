@@ -39,9 +39,9 @@ private:
         {
           if (ec) {
             if (ec == boost::asio::error::eof) {
-              printf("\r\n====END====\r\n");
+              printf("\r\n====EOF====\r\n");
             } else {
-              printf("\r\n====ERROR====\r\n");
+              printf("\r\n====%s====\r\n", ec.message().c_str());
             }
             fflush(stdout);
           } else {
