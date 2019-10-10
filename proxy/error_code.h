@@ -18,6 +18,8 @@ enum class ErrorCode {
   E_OTHERS   = 100,
 };
 
+const char* ErrorCodeMessage(ErrorCode ec);
+
 }
 
 #endif // _YARMPROXY_ERROR_CODE_H_

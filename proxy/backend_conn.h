@@ -87,12 +87,17 @@ private:
 
   bool closed_ = false;
 
-  boost::asio::steady_timer timer_;
-  int timer_ref_count_ = 0;
+  boost::asio::steady_timer write_timer_;
+  boost::asio::steady_timer read_timer_;
+  // int timer_ref_count_ = 0;
 
-  void UpdateTimer();
-  void RevokeTimer();
-  void OnTimeout(const boost::system::error_code& error);
+  enum class TimeoutType {
+    CONNECT,
+    WRITE_QUERY,
+    READ_REPLY,
+  };
+  void UpdateTimer(boost::asio::steady_timer& timer, TimeoutType type);
+  void OnTimeout(const boost::system::error_code& error, TimeoutType type);
 };
 
 }

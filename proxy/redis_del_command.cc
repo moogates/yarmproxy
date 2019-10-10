@@ -139,7 +139,7 @@ static void SetBackendReplyCount(std::shared_ptr<BackendConn> backend, size_t co
   backend->SetReplyData(oss.str().data(), oss.str().size());
 }
 
-void RedisDelCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+void RedisDelCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   auto& subquery = pending_subqueries_[backend];
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
@@ -229,7 +229,7 @@ void RedisDelCommand::RotateReplyingBackend(bool success) {
 void RedisDelCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     if (ec == ErrorCode::E_CONNECT) {
-      OnBackendConnectError(backend);
+      OnBackendRecoverableError(backend, ec);
       // 等同于转发完成已收数据
       client_conn_->buffer()->dec_recycle_lock();
       if (!client_conn_->buffer()->recycle_locked() && // 全部完成write query 才能释放recycle_lock
@@ -239,7 +239,7 @@ void RedisDelCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
       }
     } else {
       client_conn_->Abort();
-      LOG_DEBUG << "OnWriteQueryFinished error, ec=" << int(ec);
+      LOG_DEBUG << "OnWriteQueryFinished error, ec=" << ErrorCodeMessage(ec);
     }
     return;
   }

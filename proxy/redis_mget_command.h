@@ -27,7 +27,7 @@ public:
                             ErrorCode ec) override;
 
 private:
-  void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
+  void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool success) override;
 

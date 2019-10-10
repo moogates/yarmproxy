@@ -121,7 +121,7 @@ void MemcachedGetCommand::OnBackendReplyReceived(
 }
 
 
-void MemcachedGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+void MemcachedGetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   LOG_DEBUG << "MemcachedGetCommand::OnBackendConnectError endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   TryMarkLastBackend(backend);

@@ -198,7 +198,30 @@ std::shared_ptr<BackendConn> Command::AllocateBackend(const Endpoint& ep) {
   return backend;
 }
 
-static const std::string& ErrorReply(ErrorCode ec) {
+const std::string& Command::MemcachedErrorReply(ErrorCode ec) {
+  static const std::string kErrorConnect("ERROR Backend Connect Error\r\n");
+  static const std::string kErrorWriteQuery("ERROR Backend Write Error\r\n");
+  static const std::string kErrorReadReply("ERROR Backend Read Error\r\n");
+  static const std::string kErrorProtocol("ERROR Backend Protocol Error\r\n");
+  static const std::string kErrorTimeout("ERROR Backend Timeout\r\n");
+  static const std::string kErrorDefault("ERROR Backend Unknown Error\r\n");
+  switch(ec) {
+  case ErrorCode::E_CONNECT:
+    return kErrorConnect;
+  case ErrorCode::E_WRITE_QUERY:
+    return kErrorWriteQuery;
+  case ErrorCode::E_READ_REPLY:
+    return kErrorReadReply;
+  case ErrorCode::E_PROTOCOL:
+    return kErrorProtocol;
+  case ErrorCode::E_TIMEOUT:
+    return kErrorTimeout;
+  default:
+    return kErrorDefault;
+  }
+}
+
+const std::string& Command::RedisErrorReply(ErrorCode ec) {
   static const std::string kErrorConnect("-Backend Connect Error\r\n");
   static const std::string kErrorWriteQuery("-Backend Write Error\r\n");
   static const std::string kErrorReadReply("-Backend Read Error\r\n");
@@ -221,31 +244,17 @@ static const std::string& ErrorReply(ErrorCode ec) {
   }
 }
 
-void Command::OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  if (backend->has_read_some_reply()) {
-    client_conn_->Abort();
-    return;
-  }
-  auto& err_reply(ErrorReply(ec));
-  backend->SetReplyData(err_reply.data(), err_reply.size());
-  backend->set_reply_recv_complete();
-  backend->set_no_recycle();
-
-  if (client_conn_->IsFirstCommand(shared_from_this())) {
-    LOG_WARN << "RedisGetCommand::OnBackendError TryWriteReply, backend=" << backend;
-    TryWriteReply(backend);
-  }
-}
-
-
 void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
-    if (ec == ErrorCode::E_CONNECT) {
-      LOG_WARN << "OnWriteQueryFinished connect error, backend=" << backend
-               << " ep=" << backend->remote_endpoint();
-      OnBackendConnectError(backend);
-
+    LOG_WARN << "OnWriteQueryFinished error, backend=" << backend
+             << " has_written_some_reply_=" << has_written_some_reply_
+             << " ec=" << ErrorCodeMessage(ec)
+             << " ep=" << backend->remote_endpoint();
+    if (has_written_some_reply_) {
+      client_conn_->Abort();
+    } else {
+      OnBackendRecoverableError(backend, ec);
       // TODO : no duplicate code
       if (query_data_zero_copy()) {
         client_conn_->buffer()->dec_recycle_lock();
@@ -253,15 +262,6 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
           client_conn_->TryReadMoreQuery("command_1");
         }
       }
-    } else if (ec == ErrorCode::E_TIMEOUT) {
-      LOG_WARN << "OnWriteQueryFinished timeout, backend=" << backend
-               << " ep=" << backend->remote_endpoint();
-      OnBackendError(backend, ec);
-    } else {
-      LOG_WARN << "OnWriteQueryFinished error, backend=" << backend
-               << " ep=" << backend->remote_endpoint();
-      // TODO : more friendly error handling
-      client_conn_->Abort();
     }
     return;
   }
@@ -307,11 +307,31 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
   }
 }
 
-void Command::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
-  LOG_DEBUG << "Command::OnBackendConnectError endpoint="
-            << backend->remote_endpoint() << " backend=" << backend;
-  static const char BACKEND_ERROR[] = "BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
-  backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+/*
+void Command::OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  if (backend->has_read_some_reply()) {
+    client_conn_->Abort();
+    return;
+  }
+  auto& err_reply(RedisErrorReply(ec));
+  backend->SetReplyData(err_reply.data(), err_reply.size());
+  backend->set_reply_recv_complete();
+  backend->set_no_recycle();
+
+  if (client_conn_->IsFirstCommand(shared_from_this())) {
+    LOG_WARN << "RedisGetCommand::OnBackendError TryWriteReply, backend=" << backend;
+    TryWriteReply(backend);
+  }
+}
+*/
+
+void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  assert(!has_written_some_reply_);
+  LOG_DEBUG << "OnBackendRecoverableError ec=" << int(ec)
+            << "endpoint=" << backend->remote_endpoint()
+            << " backend=" << backend;
+  auto& err_reply(RedisErrorReply(ec));
+  backend->SetReplyData(err_reply.data(), err_reply.size());
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
@@ -327,6 +347,7 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
               << " unprocessed=" << unprocessed;
   if (!is_writing_reply_ && unprocessed > 0) {
     is_writing_reply_ = true;
+    has_written_some_reply_ = true;
     backend->buffer()->inc_recycle_lock();
     client_conn_->WriteReply(backend->buffer()->unprocessed_data(),
         unprocessed, WeakBind(&Command::OnWriteReplyFinished, backend));

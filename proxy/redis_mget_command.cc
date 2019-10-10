@@ -147,7 +147,7 @@ void RedisMgetCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend
 
 void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
-  LOG_DEBUG << "RedisMgetCommand OnWriteReplyFinished, backend=" << backend << " ec=" << int(ec);
+  LOG_DEBUG << "RedisMgetCommand OnWriteReplyFinished, backend=" << backend << " ec=" << ErrorCodeMessage(ec);
   if (backend == nullptr) {
     if (ec != ErrorCode::E_SUCCESS) {
       client_conn_->Abort();
@@ -234,7 +234,7 @@ static std::string ErrorReplyBody(size_t keys) {
   return oss.str();
 }
 
-void RedisMgetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+void RedisMgetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   ++unreachable_backends_;
   TryMarkLastBackend(backend);
 

@@ -40,15 +40,12 @@ bool RedisGetCommand::WriteQuery() {
 void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
         ErrorCode ec) {
   assert(backend == backend_conn_);
-  if (ec != ErrorCode::E_SUCCESS) {
-    LOG_WARN << "RedisGetCommand backend read error, backend=" << backend;
-    OnBackendError(backend, ec);
-    return;
-  }
-
-  if (ParseReply(backend) == false) {
-    LOG_WARN << "RedisGetCommand backend protocol error, backend=" << backend;
-    OnBackendError(backend, ErrorCode::E_PROTOCOL);
+  if (ec != ErrorCode::E_SUCCESS || ParseReply(backend) == false) {
+    if (has_written_some_reply_) {
+      client_conn_->Abort();
+    } else {
+      OnBackendRecoverableError(backend, ec);
+    }
     return;
   }
 
@@ -56,15 +53,6 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
     TryWriteReply(backend);
   }
   backend->TryReadMoreReply();
-}
-
-
-void RedisGetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
-  // TODO : use base class impl
-  assert(backend == backend_conn_);
-  LOG_WARN << "RedisGetCommand::OnBackendConnectError endpoint="
-          << backend->remote_endpoint() << " backend=" << backend;
-  OnBackendError(backend, ErrorCode::E_CONNECT);
 }
 
 void RedisGetCommand::RotateReplyingBackend(bool) {

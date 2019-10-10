@@ -57,7 +57,7 @@ void StatsCommand::StartWriteReply() {
 void StatsCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   assert(backend == nullptr);
-  LOG_DEBUG << "StatsCommand OnWriteReplyFinished, backend=" << backend << " ec=" << int(ec);
+  LOG_DEBUG << "StatsCommand OnWriteReplyFinished, backend=" << backend << " ec=" << ErrorCodeMessage(ec);
   client_conn_->Abort();
 }
 

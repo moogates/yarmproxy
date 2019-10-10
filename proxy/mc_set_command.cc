@@ -84,7 +84,7 @@ bool MemcachedSetCommand::WriteQuery() {
   return false;
 }
 
-void MemcachedSetCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+void MemcachedSetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   static const char BACKEND_ERROR[] = "BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
   backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
   backend->set_reply_recv_complete();

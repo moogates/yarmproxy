@@ -94,8 +94,8 @@ bool RedisSetCommand::query_parsing_complete() {
   return unparsed_bulks_ == 0;
 }
 
-void RedisSetCommand::OnBackendConnectError(
-    std::shared_ptr<BackendConn> backend) {
+void RedisSetCommand::OnBackendRecoverableError(
+    std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   // TODO :refining error message
   static const char BACKEND_ERROR[] = "-BACKEND_CONNECT_ERROR\r\n";
   backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);

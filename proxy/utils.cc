@@ -12,6 +12,8 @@
 #include <sched.h>
 #endif
 
+namespace yarmproxy {
+
 void Welcome() {
   std::cout << "\
  __   __ _    ____  __  __ ____  ____   _____  ___   __ \r\n\
@@ -98,3 +100,6 @@ int MaximizeFdLimit() {
 #endif // _WINDOWS
   return 0;
 }
+
+} // namespace yarmproxy
+
