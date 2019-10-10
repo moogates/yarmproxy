@@ -47,12 +47,14 @@ bool ReadBuffer::recycle_locked() const {
 }
 
 void ReadBuffer::inc_recycle_lock() {
-  // LOG_WARN << "ReadBuffer inc_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
+  // LOG_ERROR << "ReadBuffer inc_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
   ++recycle_lock_count_;
 }
 void ReadBuffer::dec_recycle_lock() {
+  if (recycle_lock_count_ <= 0) {
+    LOG_ERROR << "ReadBuffer dec_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
+  }
   assert(recycle_lock_count_ > 0);
-  // LOG_WARN << "ReadBuffer dec_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
   if (recycle_lock_count_ > 0) {
     --recycle_lock_count_;
   }

@@ -89,7 +89,6 @@ private:
 
   boost::asio::steady_timer write_timer_;
   boost::asio::steady_timer read_timer_;
-  // int timer_ref_count_ = 0;
 
   enum class TimeoutType {
     CONNECT,

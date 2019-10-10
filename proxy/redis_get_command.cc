@@ -40,7 +40,10 @@ bool RedisGetCommand::WriteQuery() {
 void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
         ErrorCode ec) {
   assert(backend == backend_conn_);
-  if (ec != ErrorCode::E_SUCCESS || ParseReply(backend) == false) {
+  if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
+    ec = ErrorCode::E_PROTOCOL;
+  }
+  if (ec != ErrorCode::E_SUCCESS) {
     if (has_written_some_reply_) {
       client_conn_->Abort();
     } else {

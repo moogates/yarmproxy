@@ -7,6 +7,7 @@ namespace yarmproxy {
 void Welcome();
 int Daemonize();
 int MaximizeFdLimit();
+int CreatePidFile();
 
 }
 
@@ -25,6 +26,8 @@ int main(int argc, char* argv[]) {
     yarmproxy::Daemonize();
   }
   yarmproxy::MaximizeFdLimit();
+  yarmproxy::MaximizeFdLimit();
+  yarmproxy::CreatePidFile();
 
   LOG_ERROR << "Service listening on " << conf.listen();
   yarmproxy::ProxyServer server(conf.listen(), conf.worker_threads());

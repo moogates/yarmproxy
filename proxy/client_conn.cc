@@ -39,11 +39,13 @@ ClientConnection::~ClientConnection() {
 }
 
 void ClientConnection::OnTimeout(const boost::system::error_code& ec) {
-  assert(!aborted_);
+  // assert(!aborted_);
   if (ec != boost::asio::error::operation_aborted) {
     // timer was not cancelled, take necessary action.
     LOG_WARN << "ClientConnection OnTimeout.";
-    Abort();
+    if (!aborted_) {
+      Abort();
+    }
   }
 }
 
@@ -55,9 +57,9 @@ void ClientConnection::UpdateTimer() {
   int timeout = active_cmd_queue_.empty() && 
       buffer_->unparsed_received_bytes() == 0 ?
           Config::Instance().client_idle_timeout() :
-          Config::Instance().command_exec_timeout();
+          (Config::Instance().command_exec_timeout() + 10);
   size_t canceled = timer_.expires_after(std::chrono::milliseconds(timeout));
-  LOG_WARN << "ClientConnection UpdateTimer timeout=" << timeout
+  LOG_DEBUG << "ClientConnection UpdateTimer timeout=" << timeout
            << " canceled=" << canceled;
 
   std::weak_ptr<ClientConnection> wptr(shared_from_this());

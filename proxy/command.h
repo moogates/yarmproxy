@@ -42,6 +42,7 @@ public:
   virtual bool query_recv_complete() {
     return true;
   }
+  virtual bool BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
   virtual bool ParseUnparsedPart() { return true; }
   virtual bool ProcessUnparsedPart() { return true; }

@@ -13,6 +13,16 @@
 #endif
 
 namespace yarmproxy {
+int CreatePidFile() {
+  auto file = fopen("/tmp/yarmproxy.pid", "w"); //w = truncate, a = append
+  if (!file) {
+    return -1;
+  }
+  fprintf(file, "%d", getpid());
+  fflush(file); // TODO : flush 是否有必要在lock之内?
+  fclose(file);
+  return 0;
+}
 
 void Welcome() {
   std::cout << "\

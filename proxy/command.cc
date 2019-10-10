@@ -244,14 +244,18 @@ const std::string& Command::RedisErrorReply(ErrorCode ec) {
   }
 }
 
+bool Command::BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  return !has_written_some_reply_;
+}
+
 void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_WARN << "OnWriteQueryFinished error, backend=" << backend
+    LOG_ERROR << "OnWriteQueryFinished error, backend=" << backend
              << " has_written_some_reply_=" << has_written_some_reply_
              << " ec=" << ErrorCodeMessage(ec)
              << " ep=" << backend->remote_endpoint();
-    if (has_written_some_reply_) {
+    if (!BackendErrorRecoverable(backend, ec)) {
       client_conn_->Abort();
     } else {
       OnBackendRecoverableError(backend, ec);
@@ -293,6 +297,7 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
     return;
   }
 
+  assert(is_writing_reply_);
   is_writing_reply_ = false;
   backend->buffer()->dec_recycle_lock();
 
