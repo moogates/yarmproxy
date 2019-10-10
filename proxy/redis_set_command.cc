@@ -62,11 +62,19 @@ bool RedisSetCommand::WriteQuery() {
   return false;
 }
 
+/*
 void RedisSetCommand::OnBackendReplyReceived(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
-    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
-    client_conn_->Abort();
+  assert(backend == backend_conn_);
+  if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
+    ec = ErrorCode::E_PROTOCOL;
+  }
+  if (ec != ErrorCode::E_SUCCESS) {
+    if (!BackendErrorRecoverable(backend, ec)) {
+      client_conn_->Abort();
+    } else {
+      OnBackendRecoverableError(backend, ec);
+    }
     return;
   }
 
@@ -78,6 +86,7 @@ void RedisSetCommand::OnBackendReplyReceived(
   }
   backend->TryReadMoreReply();
 }
+*/
 
 void RedisSetCommand::StartWriteReply() {
   if (query_recv_complete_) {

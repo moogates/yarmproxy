@@ -29,8 +29,8 @@ protected: // TODO : best practice ?
   Command(std::shared_ptr<ClientConnection> client);
 public:
   virtual ~Command();
-  virtual bool WriteQuery() = 0;
-  virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
+  virtual bool WriteQuery() = 0; // TODO : split into StartWriteQuery & ContinueWriteQuery
+  virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   virtual void StartWriteReply() = 0;
 
   virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);

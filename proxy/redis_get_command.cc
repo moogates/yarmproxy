@@ -44,7 +44,7 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
     ec = ErrorCode::E_PROTOCOL;
   }
   if (ec != ErrorCode::E_SUCCESS) {
-    if (has_written_some_reply_) {
+    if (!BackendErrorRecoverable(backend, ec)) {
       client_conn_->Abort();
     } else {
       OnBackendRecoverableError(backend, ec);
@@ -53,7 +53,10 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
   }
 
   if (client_conn_->IsFirstCommand(shared_from_this())) {
+    // write reply
     TryWriteReply(backend);
+  } else {
+    // wait to write reply
   }
   backend->TryReadMoreReply();
 }

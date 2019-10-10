@@ -1,4 +1,5 @@
 gunzip -c set5.data.gz | nc 127.0.0.1 11311 > set5.tmp
+cat set5.tmp
 stored_count=$(cat set5.tmp | grep -c STORED)
 set_count=$(gunzip -c set5.data.gz | grep -c "^set ")
 

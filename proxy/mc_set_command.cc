@@ -85,8 +85,8 @@ bool MemcachedSetCommand::WriteQuery() {
 }
 
 void MemcachedSetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  static const char BACKEND_ERROR[] = "BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
-  backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+  auto& err_reply(MemcachedErrorReply(ec));
+  backend->SetReplyData(err_reply.data(), err_reply.size());
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
@@ -94,18 +94,40 @@ void MemcachedSetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn>
 
   if (query_recv_complete_) {
     if (client_conn_->IsFirstCommand(shared_from_this())) {
-      LOG_DEBUG << "RedisSetCommand OnBackendConnectError write reply";
+      // write reply
       TryWriteReply(backend);
     } else {
-      LOG_DEBUG << "RedisSetCommand OnBackendConnectError waiting to write reply";
+      // waiting to write reply
     }
   } else {
-    LOG_DEBUG << "RedisSetCommand OnBackendConnectError waiting for more query data";
+    // wait for more query data
   }
 }
 
+/*
 void MemcachedSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {
+  assert(backend == backend_conn_);
+  if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
+    ec = ErrorCode::E_PROTOCOL;
+  }
+  if (ec != ErrorCode::E_SUCCESS) {
+    if (!BackendErrorRecoverable(backend, ec)) {
+      client_conn_->Abort();
+    } else {
+      OnBackendRecoverableError(backend, ec);
+    }
+    return;
+  }
+
+  if (client_conn_->IsFirstCommand(shared_from_this())) {
+    // write reply
+    TryWriteReply(backend);
+  } else {
+    // wait to write reply
+  }
+  backend->TryReadMoreReply();
+  return;
   if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
     LOG_DEBUG << "MemcachedSetCommand::OnBackendReplyReceived err, backend=" << backend;
     client_conn_->Abort();
@@ -117,6 +139,7 @@ void MemcachedSetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> ba
   }
   backend->TryReadMoreReply();
 }
+*/
 
 void MemcachedSetCommand::StartWriteReply() {
   // TODO : report error & rotate if connection refused

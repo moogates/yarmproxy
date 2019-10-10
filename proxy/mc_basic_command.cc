@@ -50,9 +50,30 @@ bool MemcachedBasicCommand::WriteQuery() {
                             buffer->unprocessed_bytes());
   return false;
 }
-
+/*
 void MemcachedBasicCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {
+  assert(backend == backend_conn_);
+  if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
+    ec = ErrorCode::E_PROTOCOL;
+  }
+  if (ec != ErrorCode::E_SUCCESS) {
+    if (!BackendErrorRecoverable(backend, ec)) {
+      client_conn_->Abort();
+    } else {
+      OnBackendRecoverableError(backend, ec);
+    }
+    return;
+  }
+
+  if (client_conn_->IsFirstCommand(shared_from_this())) {
+    // write reply
+    TryWriteReply(backend);
+  } else {
+    // wait to write reply
+  }
+  backend->TryReadMoreReply();
+  return;
   if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
     LOG_WARN << "MemcachedBasicCommand::OnBackendReplyReceived err, backend=" << backend;
     client_conn_->Abort();
@@ -64,7 +85,7 @@ void MemcachedBasicCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> 
   }
   backend->TryReadMoreReply();
 }
-
+*/
 void MemcachedBasicCommand::StartWriteReply() {
   // TODO : report error & rotate if connection refused
   TryWriteReply(backend_conn_);

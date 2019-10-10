@@ -1,6 +1,6 @@
-for id in `seq 1 15`; do
-  echo "./mset${id}.sh"
-  ./mset${id}.sh
+for id in `seq 1 4`; do
+  echo "./mget${id}.sh"
+  ./mget${id}.sh
   sleep 0.1
 done
 
