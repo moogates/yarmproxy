@@ -210,7 +210,7 @@ bool ClientConnection::ProcessUnparsedQuery() {
       buffer_->update_parsed_bytes(parsed_bytes);
 
       active_cmd_queue_.push_back(command);
-      bool no_callback = command->WriteQuery();
+      bool no_callback = command->WriteQuery(); // rename to StartWriteQuery
       buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
       // TODO : check the precondition very carefully
@@ -270,12 +270,13 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(!active_cmd_queue_.empty());
 
+    // bool no_callback = active_cmd_queue_.back()->ContinueWriteQuery(); // TODO : split to WriteNewParsedQuery()/WriteEarlierParsedQuery()
     bool no_callback = active_cmd_queue_.back()->WriteQuery(); // TODO : split to WriteNewParsedQuery()/WriteEarlierParsedQuery()
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
-      // TODO : 这里不继续read, 而是在WriteQuery的回调函数里面才继续read
-      // (or WriteQuery has no callback). 理论上这并不是最佳方式
+      // TODO : 这里不继续read, 而是在ContinueWriteQuery的回调函数里面才继续read
+      // (or ContinueWriteQuery has no callback). 理论上这并不是最佳方式
       if (no_callback) {
         TryReadMoreQuery("client_conn_4");
       }

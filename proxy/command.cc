@@ -253,6 +253,8 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
   if (ec != ErrorCode::E_SUCCESS) {
     LOG_ERROR << "OnWriteQueryFinished err " << ErrorCodeMessage(ec)
              << " backend=" << backend
+             << " client_buffer=" << client_conn_->buffer()
+             << " client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
              << " has_written_some_reply_=" << has_written_some_reply_
              << " ep=" << backend->remote_endpoint();
     if (!BackendErrorRecoverable(backend, ec)) {
@@ -270,7 +272,11 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
     return;
   }
 
-  LOG_DEBUG << "OnWriteQueryFinished ok, backend=" << backend;
+  LOG_ERROR << "OnWriteQueryFinished ok, backend=" << backend
+             << " client_buffer=" << client_conn_->buffer()
+             << " client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
+             << " has_written_some_reply_=" << has_written_some_reply_
+             << " ep=" << backend->remote_endpoint();
 
   if (query_data_zero_copy()) {
     client_conn_->buffer()->dec_recycle_lock();
@@ -290,10 +296,15 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
 
 void Command::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {
+  LOG_ERROR << "OnBackendReplyReceived, backend=" << backend
+            << " ec=" << ErrorCodeMessage(ec);
   // assert(backend == backend_conn_);
   if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
     ec = ErrorCode::E_PROTOCOL;
   }
+  LOG_ERROR << "OnBackendReplyReceived 2, backend=" << backend
+            << " ec=" << ErrorCodeMessage(ec)
+            << " recoveralbe=" << BackendErrorRecoverable(backend, ec);
   if (ec != ErrorCode::E_SUCCESS) {
     if (!BackendErrorRecoverable(backend, ec)) {
       client_conn_->Abort();
@@ -302,6 +313,8 @@ void Command::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
     }
     return;
   }
+  LOG_ERROR << "OnBackendReplyReceived 3, backend=" << backend
+            << " ec=" << ErrorCodeMessage(ec);
 
   if (client_conn_->IsFirstCommand(shared_from_this())) {
     // write reply
@@ -356,7 +369,7 @@ void Command::OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec)
 
 void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   assert(BackendErrorRecoverable(backend, ec));
-  LOG_DEBUG << "OnBackendRecoverableError ec=" << int(ec)
+  LOG_DEBUG << "OnBackendRecoverableError ec=" << ErrorCodeMessage(ec)
             << "endpoint=" << backend->remote_endpoint()
             << " backend=" << backend;
   auto& err_reply(RedisErrorReply(ec));
@@ -372,7 +385,9 @@ void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, Er
 void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
   LOG_DEBUG << "Command::TryWriteReply backend=" << backend
+              << " ep=" << backend->remote_endpoint()
               << " is_writing_reply_=" << is_writing_reply_
+              << " reply_recv_complete=" << backend->reply_recv_complete()
               << " unprocessed=" << unprocessed;
   if (!is_writing_reply_ && unprocessed > 0) {
     is_writing_reply_ = true;

@@ -23,6 +23,7 @@ private:
   void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
   bool WriteQuery() override;
+  bool ContinueWriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool) override;
 

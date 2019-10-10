@@ -104,6 +104,7 @@ RedisMgetCommand::~RedisMgetCommand() {
 
 bool RedisMgetCommand::WriteQuery() {
   for(auto& query : subqueries_) {
+    assert(!query->backend_conn_);
     if (!query->backend_conn_) {
       query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
 

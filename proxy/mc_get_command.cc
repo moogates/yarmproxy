@@ -63,9 +63,8 @@ void MemcachedGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
 
 bool MemcachedGetCommand::WriteQuery() {
   for(auto& query : subqueries_) {
-    if (!query->backend_conn_) {
-      query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
-    }
+    assert(!query->backend_conn_);
+    query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
     query->backend_conn_->WriteQuery(query->query_data_.data(),
                                      query->query_data_.size());
   }

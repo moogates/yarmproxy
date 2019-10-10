@@ -108,6 +108,10 @@ bool RedisMsetCommand::query_recv_complete() {
   return tail_query_->query_recv_complete_ && query_parsing_complete();
 }
 
+bool RedisMsetCommand::ContinueWriteQuery() {
+  return WriteQuery();
+}
+
 bool RedisMsetCommand::WriteQuery() {
   assert(tail_query_);
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {

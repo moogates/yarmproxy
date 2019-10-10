@@ -71,6 +71,9 @@ public:
   bool has_read_some_reply() const {
     return has_read_some_reply_;
   }
+  bool closed() const {
+    return closed_;
+  }
 private:
   WorkerContext& context_;
   ReadBuffer* buffer_;
@@ -88,7 +91,9 @@ private:
   bool closed_ = false;
 
   boost::asio::steady_timer write_timer_;
+  bool write_timer_canceled_ = false;
   boost::asio::steady_timer read_timer_;
+  bool read_timer_canceled_ = false;
 
   enum class TimeoutType {
     CONNECT,

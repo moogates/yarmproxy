@@ -39,10 +39,8 @@ MemcachedBasicCommand::~MemcachedBasicCommand() {
 
 bool MemcachedBasicCommand::WriteQuery() {
   assert(backend_conn_ == nullptr);
-  if (!backend_conn_) {
-    backend_conn_ = AllocateBackend(backend_endpoint_);
-    LOG_DEBUG << "MemcachedBasicCommand::WriteQuery backend=" << backend_conn_;
-  }
+  backend_conn_ = AllocateBackend(backend_endpoint_);
+  LOG_DEBUG << "MemcachedBasicCommand::WriteQuery backend=" << backend_conn_;
 
   auto buffer = client_conn_->buffer();
   buffer->inc_recycle_lock();

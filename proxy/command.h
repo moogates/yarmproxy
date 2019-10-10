@@ -30,6 +30,10 @@ protected: // TODO : best practice ?
 public:
   virtual ~Command();
   virtual bool WriteQuery() = 0; // TODO : split into StartWriteQuery & ContinueWriteQuery
+  virtual bool ContinueWriteQuery() {
+    assert(false);
+    return false;
+  }
   virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   virtual void StartWriteReply() = 0;
 

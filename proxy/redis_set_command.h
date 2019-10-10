@@ -27,6 +27,7 @@ private:
   bool ParseUnparsedPart() override;
 
   bool WriteQuery() override;
+  bool ContinueWriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool) override;
 

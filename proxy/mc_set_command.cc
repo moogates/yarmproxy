@@ -47,6 +47,10 @@ MemcachedSetCommand::~MemcachedSetCommand() {
   }
 }
 
+bool MemcachedSetCommand::ContinueWriteQuery() {
+  return WriteQuery();
+}
+
 bool MemcachedSetCommand::WriteQuery() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
     query_recv_complete_ = true;
