@@ -5,6 +5,7 @@
 #include <memory>
 
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include "read_buffer.h"
 
@@ -67,6 +68,12 @@ public:
   bool recyclable() const {
     return !no_recycle_ && finished();
   }
+  bool has_read_some_reply() const {
+    return has_read_some_reply_;
+  }
+  bool error() const {
+    return no_recycle_;
+  }
 private:
   WorkerContext& context_;
   ReadBuffer* buffer_;
@@ -76,9 +83,20 @@ private:
   BackendReplyReceivedCallback reply_received_callback_;
   BackendQuerySentCallback query_sent_callback_;
 
-  bool is_reading_reply_    = false;
+  bool is_reading_reply_    = false; // TODO : merge into a flag
+  bool has_read_some_reply_ = false;
   bool reply_recv_complete_ = false;
   bool no_recycle_          = false;
+
+  bool closed_ = false;
+
+  boost::asio::steady_timer write_timer_;
+  bool write_timer_canceled_ = false;
+  boost::asio::steady_timer read_timer_;
+  bool read_timer_canceled_ = false;
+
+  void UpdateTimer(boost::asio::steady_timer& timer, ErrorCode timeout_code);
+  void OnTimeout(const boost::system::error_code& error, ErrorCode timeout_code);
 };
 
 }

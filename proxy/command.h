@@ -29,8 +29,12 @@ protected: // TODO : best practice ?
   Command(std::shared_ptr<ClientConnection> client);
 public:
   virtual ~Command();
-  virtual bool WriteQuery() = 0;
-  virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) = 0;
+  virtual bool WriteQuery() = 0; // TODO : split into StartWriteQuery & ContinueWriteQuery
+  virtual bool ContinueWriteQuery() {
+    assert(false);
+    return false;
+  }
+  virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   virtual void StartWriteReply() = 0;
 
   virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
@@ -42,6 +46,7 @@ public:
   virtual bool query_recv_complete() {
     return true;
   }
+  virtual bool BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
   virtual bool ParseUnparsedPart() { return true; }
   virtual bool ProcessUnparsedPart() { return true; }
@@ -52,8 +57,11 @@ protected:
 
   std::shared_ptr<BackendConn> AllocateBackend(const Endpoint& ep);
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
+  // void OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+  virtual void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
-  virtual void OnBackendConnectError(std::shared_ptr<BackendConn> backend);
+  static const std::string& RedisErrorReply(ErrorCode ec);
+  static const std::string& MemcachedErrorReply(ErrorCode ec);
 
   typedef void(Command::*BackendCallback)(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   WriteReplyCallback WeakBind(BackendCallback mem_func, std::shared_ptr<BackendConn> backend) {
@@ -74,6 +82,7 @@ private:
 
 protected:
   std::shared_ptr<ClientConnection> client_conn_;
+  bool has_written_some_reply_ = false;
 private:
   bool is_writing_reply_ = false;
 };

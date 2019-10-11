@@ -10,7 +10,6 @@ if [ $count -ne $expected_count ]; then
   exit 1
 else
   echo -e "\033[32mSuccess \033[0m"
-  exit 100
 fi
 echo
 

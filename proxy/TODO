@@ -6,8 +6,8 @@ TODO : limit max data size
 TODO : memcached key_len_limit=250, body_size_limit=1M
 TODO : size limit : Redis strings are limited to 512 megabytes.
 
-TODO : anti spam-request
-TODO : 超时处理, backend_conn / client_conn 的读写，都要处理超时
+TODO : anti bad request
+TODO : 更有好的超时处理
 TODO : cpu affinity
 TODO : IPv6 support
 TODO : pid_file

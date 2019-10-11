@@ -107,11 +107,11 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client, const
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size());
   }
-  LOG_WARN << "RedisDelCommand ctor " << ++redis_del_cmd_count;
+  LOG_DEBUG << "RedisDelCommand ctor " << ++redis_del_cmd_count;
 }
 
 RedisDelCommand::~RedisDelCommand() {
-  LOG_WARN << "RedisDelCommand dtor " << --redis_del_cmd_count
+  LOG_DEBUG << "RedisDelCommand dtor " << --redis_del_cmd_count
            << " pending_subqueries_.size=" << pending_subqueries_.size();
 
   if (pending_subqueries_.size() != 1) {
@@ -124,6 +124,10 @@ RedisDelCommand::~RedisDelCommand() {
 
 bool RedisDelCommand::query_recv_complete() {
   return unparsed_bulks_ == 0; // 只解析completed bulk, 因而解析完就是接收完
+}
+
+bool RedisDelCommand::ContinueWriteQuery() {
+  return WriteQuery();
 }
 
 bool RedisDelCommand::WriteQuery() {
@@ -139,7 +143,7 @@ static void SetBackendReplyCount(std::shared_ptr<BackendConn> backend, size_t co
   backend->SetReplyData(oss.str().data(), oss.str().size());
 }
 
-void RedisDelCommand::OnBackendConnectError(std::shared_ptr<BackendConn> backend) {
+void RedisDelCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   auto& subquery = pending_subqueries_[backend];
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
@@ -202,7 +206,7 @@ void RedisDelCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
       client_conn_->TryReadMoreQuery("redis_del_1");
     }
 
-    LOG_WARN << "OnBackendReplyReceived command=" << this
+    LOG_DEBUG << "OnBackendReplyReceived command=" << this
              << " unparsed_bulks_=" << unparsed_bulks_
              << " pending_subqueries_.size=" << pending_subqueries_.size()
              << " don't write reply, backend=" << backend;
@@ -218,10 +222,7 @@ void RedisDelCommand::StartWriteReply() {
 }
 
 void RedisDelCommand::RotateReplyingBackend(bool success) {
-  if (unparsed_bulks_ > 0) {
-    LOG_WARN << "RedisDelCommand::RotateReplyingBackend unparsed_bulks_=" << unparsed_bulks_;
-    assert(false);
-  }
+  assert(unparsed_bulks_ == 0);
   client_conn_->RotateReplyingCommand();
 }
 
@@ -229,7 +230,7 @@ void RedisDelCommand::RotateReplyingBackend(bool success) {
 void RedisDelCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
     if (ec == ErrorCode::E_CONNECT) {
-      OnBackendConnectError(backend);
+      OnBackendRecoverableError(backend, ec);
       // 等同于转发完成已收数据
       client_conn_->buffer()->dec_recycle_lock();
       if (!client_conn_->buffer()->recycle_locked() && // 全部完成write query 才能释放recycle_lock
@@ -239,7 +240,7 @@ void RedisDelCommand::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
       }
     } else {
       client_conn_->Abort();
-      LOG_DEBUG << "OnWriteQueryFinished error, ec=" << int(ec);
+      LOG_DEBUG << "OnWriteQueryFinished error, ec=" << ErrorCodeMessage(ec);
     }
     return;
   }

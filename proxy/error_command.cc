@@ -37,7 +37,8 @@ void ErrorCommand::StartWriteReply() {
 void ErrorCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   assert(backend == nullptr);
-  LOG_DEBUG << "ErrorCommand OnWriteReplyFinished, backend=" << backend << " ec=" << int(ec);
+  LOG_DEBUG << "ErrorCommand OnWriteReplyFinished, backend=" << backend
+            << " ec=" << ErrorCodeMessage(ec);
   client_conn_->Abort();
 }
 

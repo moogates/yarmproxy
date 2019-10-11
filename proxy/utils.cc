@@ -6,11 +6,36 @@
 #include <unistd.h>
 #endif // _WINDOWS
 
+#include "config.h"
 #include "logging.h"
 
 #ifdef _GNU_SOURCE
 #include <sched.h>
 #endif
+
+namespace yarmproxy {
+
+int CreatePidFile() {
+  const auto& fname = Config::Instance().pid_file();
+  auto file = fopen(fname.c_str(), "w"); //w = truncate, a = append
+  if (!file) {
+    LOG_WARN << "CreatePidFile err, file_name=" << fname;
+    return -1;
+  }
+  fprintf(file, "%d", getpid());
+  fflush(file);
+  fclose(file);
+  return 0;
+}
+
+int CleanupPidFile() {
+  const auto& fname = Config::Instance().pid_file();
+  int r = remove(fname.c_str());
+  if (r != 0) {
+    LOG_WARN << "CleanupPidFile err, file_name=" << fname;
+  }
+  return 0;
+}
 
 void Welcome() {
   std::cout << "\
@@ -98,3 +123,6 @@ int MaximizeFdLimit() {
 #endif // _WINDOWS
   return 0;
 }
+
+} // namespace yarmproxy
+

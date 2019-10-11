@@ -1,9 +1,9 @@
 body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
-./data_gen $body_size | sed "1s/EXAMPLE_KEY/key1/g" | nc 127.0.0.1 11311 > /dev/null
+./data_gen $body_size | sed "1s/EXAMPLE_KEY/key5/g" | nc 127.0.0.1 11311 > /dev/null
 ./data_gen $body_size | sed "1s/EXAMPLE_KEY/key2/g" | nc 127.0.0.1 11311 > /dev/null
 
-query="get key2 key1\r\n"
-printf "$query" | nc 127.0.0.1 11311 | grep "VALUE\|END" > get2.tmp
+query="get key2 key5\r\n"
+printf "$query" | nc 127.0.0.1 11311 | grep "^ERROR\|^VALUE\|^END" > get2.tmp
 
 cat get2.tmp
 value_lines=$(cat get2.tmp | grep -c $body_size)

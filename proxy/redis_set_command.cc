@@ -30,13 +30,20 @@ RedisSetCommand::~RedisSetCommand() {
   }
 }
 
+bool RedisSetCommand::ContinueWriteQuery() {
+  return WriteQuery();
+}
+
 bool RedisSetCommand::WriteQuery() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0 &&
       unparsed_bulks_ == 0) {
     query_recv_complete_ = true;
   }
 
-  if (connect_error_) {
+//if (backend_error_ || // TODO : connect error if not enough. mset has the same bug
+//    (backend_conn_ && backend_conn_->closed())) {
+//if (backend_error_) {
+  if (backend_conn_ && backend_conn_->error()) {
     assert(backend_conn_);
     if (!query_recv_complete_) {
       return true; // no callback, try read more query directly
@@ -54,7 +61,10 @@ bool RedisSetCommand::WriteQuery() {
     backend_conn_ = AllocateBackend(backend_endpoint_);
   }
 
-  LOG_DEBUG << "RedisSetCommand WriteQuery data, backend=" << backend_conn_
+  LOG_DEBUG << "RedisSetCommand " << this << " WriteQuery data, backend=" << backend_conn_
+           << " ep=" << backend_conn_->remote_endpoint()
+           << " client_buff=" << client_conn_->buffer()
+           << " PRE-client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
            << " bytes=" << client_conn_->buffer()->unprocessed_bytes();
   client_conn_->buffer()->inc_recycle_lock();
   backend_conn_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
@@ -62,11 +72,19 @@ bool RedisSetCommand::WriteQuery() {
   return false;
 }
 
+/*
 void RedisSetCommand::OnBackendReplyReceived(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
-    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
-    client_conn_->Abort();
+  assert(backend == backend_conn_);
+  if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
+    ec = ErrorCode::E_PROTOCOL;
+  }
+  if (ec != ErrorCode::E_SUCCESS) {
+    if (!BackendErrorRecoverable(backend, ec)) {
+      client_conn_->Abort();
+    } else {
+      OnBackendRecoverableError(backend, ec);
+    }
     return;
   }
 
@@ -78,6 +96,7 @@ void RedisSetCommand::OnBackendReplyReceived(
   }
   backend->TryReadMoreReply();
 }
+*/
 
 void RedisSetCommand::StartWriteReply() {
   if (query_recv_complete_) {
@@ -94,15 +113,19 @@ bool RedisSetCommand::query_parsing_complete() {
   return unparsed_bulks_ == 0;
 }
 
-void RedisSetCommand::OnBackendConnectError(
-    std::shared_ptr<BackendConn> backend) {
-  // TODO :refining error message
-  static const char BACKEND_ERROR[] = "-BACKEND_CONNECT_ERROR\r\n";
-  backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+void RedisSetCommand::OnBackendRecoverableError(
+    std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  LOG_DEBUG << "RedisSetCommand::OnBackendRecoverableError ec=" << ErrorCodeMessage(ec)
+            << " endpoint=" << backend->remote_endpoint()
+            << " query_recv_complete_=" << query_recv_complete_
+            << " is_first_cmd=" << client_conn_->IsFirstCommand(shared_from_this())
+            << " backend=" << backend;
+  auto& err_reply(RedisErrorReply(ec));
+  backend->SetReplyData(err_reply.data(), err_reply.size());
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
-  connect_error_ = true;
+  backend_error_ = true; // remove var backend_error_
 
   if (query_recv_complete_) {
     if (client_conn_->IsFirstCommand(shared_from_this())) {

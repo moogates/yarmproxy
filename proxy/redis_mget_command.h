@@ -27,7 +27,8 @@ public:
                             ErrorCode ec) override;
 
 private:
-  void OnBackendConnectError(std::shared_ptr<BackendConn> backend) override;
+  bool BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
+  void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool success) override;
 
@@ -62,7 +63,6 @@ private:
   std::shared_ptr<BackendConn> last_backend_;
 
   size_t completed_backends_ = 0;
-  size_t unreachable_backends_ = 0;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 
   // std::map<std::shared_ptr<BackendConn>, size_t> absent_bulks_tracker_;

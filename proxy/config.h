@@ -17,7 +17,7 @@ public:
     return config;
   }
 
-  bool Initialize();
+  bool Initialize(const char* conf_file);
   bool ReloadCulsters();
 
   bool daemonize() const {
@@ -52,9 +52,10 @@ public:
   const std::string& config_file() const {
     return config_file_;
   }
-  void set_config_file(const char* fname) {
-    config_file_ = fname;
+  const std::string& pid_file() const { 
+    return pid_file_;
   }
+
   const std::string& listen() const {
     return listen_;
   }
@@ -80,7 +81,9 @@ public:
     return clusters_;
   }
 private:
-  std::string config_file_ = "./yarmproxy.conf";
+  std::string config_file_;
+  std::string pid_file_ = "/tmp/yarmproxy.pid";
+
   using TokensHandler = std::function<bool(const std::vector<std::string>& tokens)>;
   bool TraverseConfFile(TokensHandler handler);
 
