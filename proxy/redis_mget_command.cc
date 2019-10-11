@@ -86,7 +86,7 @@ RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
 {
   ParseQuery(ba);
 
-  LOG_DEBUG << "RedisMgetCommand ctor, cmd=" << this << " count=" << ++redis_mget_cmd_count
+  LOG_DEBUG << "RedisMgetCommand ctor, count=" << ++redis_mget_cmd_count
             << " reply_prefix_=" << reply_prefix_;
 }
 
@@ -99,7 +99,7 @@ RedisMgetCommand::~RedisMgetCommand() {
       backend_pool()->Release(query->backend_conn_);
     }
   }
-  LOG_DEBUG << "RedisMgetCommand dtor, cmd=" << this << " count=" << --redis_mget_cmd_count;
+  LOG_DEBUG << "RedisMgetCommand " << this << " dtor, count=" << --redis_mget_cmd_count;
 }
 
 bool RedisMgetCommand::WriteQuery() {
@@ -112,7 +112,7 @@ bool RedisMgetCommand::WriteQuery() {
       waiting_reply_queue_.push_back(query->backend_conn_);
       backend_subqueries_.emplace(query->backend_conn_, query);
     }
-    LOG_DEBUG << "RedisMgetCommand WriteQuery cmd=" << this
+    LOG_DEBUG << "RedisMgetCommand " << this << " WriteQuery "
               << " backend=" << query->backend_conn_ << ", query=("
               << query->query_data_.substr(0, query->query_data_.size() - 2) << ")";
     query->backend_conn_->WriteQuery(query->query_data_.data(),
@@ -128,7 +128,7 @@ bool RedisMgetCommand::WriteQuery() {
 
 void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
-  LOG_DEBUG << "RedisMgetCommand OnWriteReplyFinished, backend=" << backend
+  LOG_DEBUG << "RedisMgetCommand " << this << " OnWriteReplyFinished, backend=" << backend
             << " ec=" << ErrorCodeMessage(ec);
   if (backend == nullptr) {
     if (ec != ErrorCode::E_SUCCESS) {
@@ -189,7 +189,7 @@ void RedisMgetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend)
   }
 
   assert(!backend->finished());
-  LOG_DEBUG << "RedisMgetCommand::BackendReadyToReply TryWriteReply, backend=" << backend;
+  LOG_DEBUG << "RedisMgetCommand " << this << " BackendReadyToReply TryWriteReply, backend=" << backend;
   TryWriteReply(backend);
 }
 
@@ -200,7 +200,7 @@ void RedisMgetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
   }
 
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_DEBUG << "RedisMgetCommand::OnBackendReplyReceived error, backend=" << backend;
+    LOG_DEBUG << "RedisMgetCommand " << this << " OnBackendReplyReceived error, backend=" << backend;
     if (backend == replying_backend_) { // the backend is replying
       client_conn_->Abort();
     } else {
@@ -209,7 +209,7 @@ void RedisMgetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
     return;
   }
 
-  LOG_DEBUG << "RedisMgetCommand::OnBackendReplyReceived, endpoint="
+  LOG_DEBUG << "RedisMgetCommand " << this << " OnBackendReplyReceived, endpoint="
            << backend->remote_endpoint() << " backend=" << backend;
   BackendReadyToReply(backend);
   backend->TryReadMoreReply();
@@ -229,7 +229,7 @@ void RedisMgetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> ba
 
   std::string err_reply = ErrorReplyBody(backend_subqueries_[backend]->key_count_);
   backend->SetReplyData(err_reply.data(), err_reply.size());
-  LOG_DEBUG << "RedisMgetCommand::OnBackendRecoverableError backend=" << backend
+  LOG_DEBUG << "RedisMgetCommand " << this << " OnBackendRecoverableError backend=" << backend
            << " ec=" << ErrorCodeMessage(ec)
            << " err_reply=[" << err_reply << "]";
 
@@ -239,13 +239,13 @@ void RedisMgetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> ba
 }
 
 void RedisMgetCommand::StartWriteReply() {
-  LOG_DEBUG << "RedisMgetCommand::StartWriteReply cmd=" << this;
+  LOG_DEBUG << "RedisMgetCommand " << this << " StartWriteReply";
   client_conn_->WriteReply(reply_prefix_.data(), reply_prefix_.size(),
           WeakBind(&Command::OnWriteReplyFinished, nullptr));
 }
 
 void RedisMgetCommand::NextBackendStartReply() {
-  LOG_DEBUG << "RedisMgetCommand::NextBackendStartReply cmd=" << this
+  LOG_DEBUG << "RedisMgetCommand " << this << " NextBackendStartReply"
             << " last_replying_backend_=" << replying_backend_;
   if (!reply_prefix_complete()) {
     return;
@@ -256,12 +256,12 @@ void RedisMgetCommand::NextBackendStartReply() {
   auto next_backend = waiting_reply_queue_.front();
   if (next_backend->buffer()->unprocessed_bytes() > 0) { // TODO : is this condition enough for ready?
     waiting_reply_queue_.pop_front();
-    LOG_DEBUG << "RedisMgetCommand::NextBackendStartReply activate ready backend,"
+    LOG_DEBUG << "RedisMgetCommand " << this << " NextBackendStartReply activate ready backend,"
             << " backend=" << next_backend;
     TryWriteReply(next_backend);
     replying_backend_ = next_backend;
   } else {
-    LOG_DEBUG << "RedisMgetCommand::NextBackendStartReply activate but next backend not ready,"
+    LOG_DEBUG << "RedisMgetCommand " << this << " NextBackendStartReply activate but next backend not ready,"
             << " backend=" << next_backend;
     replying_backend_ = nullptr;
   }
@@ -286,10 +286,10 @@ void RedisMgetCommand::RotateReplyingBackend(bool recyclable) {
   // TODO : remove HasUnfinishedBanckends
   assert(!waiting_reply_queue_.empty() == HasUnfinishedBanckends());
   if (!waiting_reply_queue_.empty()) {
-    LOG_DEBUG << "RedisMgetCommand::Rotate to next backend";
+    LOG_DEBUG << "RedisMgetCommand " << this << " Rotate to next backend";
     NextBackendStartReply();
   } else {
-    LOG_DEBUG << "RedisMgetCommand::Rotate to next COMMAND";
+    LOG_DEBUG << "RedisMgetCommand " << this << " Rotate to next COMMAND";
     client_conn_->RotateReplyingCommand();
   }
 }

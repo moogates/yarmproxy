@@ -3,35 +3,35 @@
 #include "proxy_server.h"
 
 namespace yarmproxy {
-
 void Welcome();
 int Daemonize();
 int MaximizeFdLimit();
 int CreatePidFile();
-
+int CleanupPidFile();
 }
 
 int main(int argc, char* argv[]) {
-  yarmproxy::Welcome();
-  auto& conf = yarmproxy::Config::Instance();
-  if (argc > 1) {
-    conf.set_config_file(argv[1]);
-  }
-  if (!conf.Initialize()) {
+  using namespace yarmproxy;
+  Welcome();
+  auto& conf = Config::Instance();
+  const char* conf_file = argc > 1 ? argv[1] : "./yarmproxy.conf";
+  if (!conf.Initialize(conf_file)) {
     return 1;
   }
   LOG_INIT(conf.log_file().c_str(), conf.log_level().c_str());
 
   if (conf.daemonize()) {
-    yarmproxy::Daemonize();
+    Daemonize();
   }
-  yarmproxy::MaximizeFdLimit();
-  yarmproxy::MaximizeFdLimit();
-  yarmproxy::CreatePidFile();
+  MaximizeFdLimit();
+  MaximizeFdLimit();
+  CreatePidFile();
 
-  LOG_ERROR << "Service listening on " << conf.listen();
-  yarmproxy::ProxyServer server(conf.listen(), conf.worker_threads());
+  LOG_ERROR << "YarmProxy listening on " << conf.listen();
+  ProxyServer server(conf.listen(), conf.worker_threads());
   server.Run();
+  CleanupPidFile();
+  LOG_ERROR << "YarmProxy stopped.";
   return 0;
 }
 

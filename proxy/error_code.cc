@@ -17,8 +17,16 @@ const char* ErrorCodeMessage(ErrorCode ec) {
     return "E_WRITE_REPLY";
   case ErrorCode::E_PROTOCOL:
     return "E_PROTOCOL";
-  case ErrorCode::E_TIMEOUT:
-    return "E_TIMEOUT";
+//case ErrorCode::E_TIMEOUT:
+//  return "E_TIMEOUT";
+
+  case ErrorCode::E_BACKEND_CONNECT_TIMEOUT:
+    return "E_BACKEND_CONNECT_TIMEOUT";
+  case ErrorCode::E_BACKEND_WRITE_TIMEOUT:
+    return "E_BACKEND_WRITE_TIMEOUT";
+  case ErrorCode::E_BACKEND_READ_TIMEOUT:
+    return "E_BACKEND_READ_TIMEOUT";
+
   default:
     return "E_UNKNOWN";
   }

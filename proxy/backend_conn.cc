@@ -44,6 +44,8 @@ void BackendConn::Close() {
   socket_.close();
   write_timer_.cancel();
   read_timer_.cancel();
+  write_timer_canceled_ = true;
+  read_timer_canceled_ = true;
 }
 
 void BackendConn::SetReplyData(const char* data, size_t bytes) {
@@ -67,7 +69,7 @@ void BackendConn::ReadReply() {
   is_reading_reply_ = true;
   buffer_->inc_recycle_lock();
   read_timer_canceled_ = false;
-  UpdateTimer(read_timer_, TimeoutType::READ_REPLY);
+  UpdateTimer(read_timer_, ErrorCode::E_BACKEND_READ_TIMEOUT);
 
   socket_.async_read_some(
       boost::asio::buffer(buffer_->free_space_begin(),
@@ -86,7 +88,8 @@ void BackendConn::TryReadMoreReply() {
 
 void BackendConn::WriteQuery(const char* data, size_t bytes) {
   if (!socket_.is_open()) {
-    UpdateTimer(write_timer_, TimeoutType::CONNECT);
+    assert(!closed_);
+    UpdateTimer(write_timer_, ErrorCode::E_BACKEND_CONNECT_TIMEOUT);
     write_timer_canceled_ = false;
 
     socket_.async_connect(remote_endpoint_, std::bind(&BackendConn::HandleConnect,
@@ -94,7 +97,7 @@ void BackendConn::WriteQuery(const char* data, size_t bytes) {
     return;
   }
 
-  UpdateTimer(write_timer_, TimeoutType::WRITE_QUERY);
+  UpdateTimer(write_timer_, ErrorCode::E_BACKEND_WRITE_TIMEOUT);
   write_timer_canceled_ = false;
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes),
           std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
@@ -111,7 +114,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes,
   write_timer_canceled_ = true;
 
   if (error) {
-    LOG_WARN << "BackendConn::HandleWrite error, backend=" << this
+    LOG_INFO << "BackendConn::HandleWrite error, backend=" << this
              << " ep=" << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     query_sent_callback_(ErrorCode::E_WRITE_QUERY);
@@ -121,7 +124,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes,
   g_stats_.bytes_to_backends_ += bytes_transferred;
   if (bytes_transferred < bytes) {
     LOG_DEBUG << "HandleWrite 向 backend 没写完, 继续写. backend=" << this;
-    UpdateTimer(write_timer_, TimeoutType::WRITE_QUERY);
+    UpdateTimer(write_timer_, ErrorCode::E_BACKEND_WRITE_TIMEOUT);
     write_timer_canceled_ = false;
     boost::asio::async_write(socket_,
         boost::asio::buffer(data + bytes_transferred, bytes - bytes_transferred),
@@ -139,12 +142,12 @@ void BackendConn::HandleRead(const boost::system::error_code& error,
   if (closed_) {
     return;
   }
-  read_timer_canceled_ = true;
   read_timer_.cancel();
+  read_timer_canceled_ = true;
 
   is_reading_reply_ = false;
   if (error) {
-    LOG_WARN << "HandleRead read error, backend=" << this
+    LOG_INFO << "HandleRead read error, backend=" << this
              << " ep=" << remote_endpoint_ << " err=" << error.message();
     socket_.close();
     reply_received_callback_(ErrorCode::E_READ_REPLY);
@@ -167,6 +170,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
     return;
   }
   write_timer_.cancel();
+  write_timer_canceled_ = true;
   boost::system::error_code option_ec;
   if (!connect_ec) {
     boost::asio::ip::tcp::no_delay no_delay(true);
@@ -185,7 +189,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
   if (connect_ec || option_ec) {
     socket_.close();
-    LOG_WARN << "HandleConnect error, err="
+    LOG_DEBUG << "HandleConnect error, err="
              << (connect_ec ? connect_ec.message() : option_ec.message())
              << " endpoint=" << remote_endpoint_
              << " backend=" << this;
@@ -193,7 +197,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
     return;
   }
 
-  UpdateTimer(write_timer_, TimeoutType::WRITE_QUERY);
+  UpdateTimer(write_timer_, ErrorCode::E_BACKEND_WRITE_TIMEOUT);
   write_timer_canceled_ = false;
   async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
@@ -202,10 +206,12 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
 
 // TODO : connection_base
-void BackendConn::OnTimeout(const boost::system::error_code& ec, TimeoutType type) {
+void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeout_code) {
   if (closed_) {
-    LOG_WARN << "BackendConn " << this << " ep=" << remote_endpoint()
-             << " timeout " << int(type) << " after closed.";
+    LOG_INFO << "BackendConn " << this << " ep=" << remote_endpoint()
+             << " timeout after closed."
+             << " code=" << ErrorCodeMessage(timeout_code);
+    // assert(false);
     return;
   }
 
@@ -213,51 +219,50 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, TimeoutType typ
     // timer was cancelled, take no action.
     return;
   }
-  LOG_WARN << "BackendConn " << this << " timeout. timeout_type=" << int(type)
+  LOG_INFO << "BackendConn " << this << " timeout. timeout_code=" << ErrorCodeMessage(timeout_code)
            << " endpoint=" << remote_endpoint_
            << " read_timer_canceled_=" << read_timer_canceled_
            << " write_timer_canceled_=" << write_timer_canceled_
            << " backend=" << this;
-  Close();
 
-  switch(type) {
-  case TimeoutType::CONNECT:
+  switch(timeout_code) {
+  case ErrorCode::E_BACKEND_CONNECT_TIMEOUT:
     if (!write_timer_canceled_) {
-    query_sent_callback_(ErrorCode::E_CONNECT);
+      query_sent_callback_(timeout_code);
+      Close();
     }
     break;
-  case TimeoutType::WRITE_QUERY:
+  case ErrorCode::E_BACKEND_WRITE_TIMEOUT:
     if (!write_timer_canceled_) {
-    query_sent_callback_(ErrorCode::E_TIMEOUT);
+      query_sent_callback_(timeout_code);
+      Close();
     }
-    break;
-  case TimeoutType::READ_REPLY:
+      break;
+  case ErrorCode::E_BACKEND_READ_TIMEOUT:
     if (!read_timer_canceled_) {
-      reply_received_callback_(ErrorCode::E_TIMEOUT);
+      reply_received_callback_(timeout_code);
+      Close();
     }
     break;
   default:
     assert(false);
     break;
   }
-  write_timer_canceled_ = true;
-  read_timer_canceled_ = true;
-  // Close();
 }
 
-void BackendConn::UpdateTimer(boost::asio::steady_timer& timer, TimeoutType timeout_type) {
+void BackendConn::UpdateTimer(boost::asio::steady_timer& timer, ErrorCode timeout_code) {
   // TODO : 细致的超时处理, 包括connect/read/write/command
   int timeout = Config::Instance().command_exec_timeout();
   size_t canceled = timer.expires_after(std::chrono::milliseconds(timeout));
   LOG_DEBUG << "BackendConn UpdateTimer timeout=" << timeout
            << " backend=" << this
-           << " timeout_type=" << int(timeout_type)
+           << " timeout_code=" << ErrorCodeMessage(timeout_code)
            << " canceled=" << canceled;
 
   std::weak_ptr<BackendConn> wptr(shared_from_this());
-  timer.async_wait([wptr, timeout_type](const boost::system::error_code& ec) {
+  timer.async_wait([wptr, timeout_code](const boost::system::error_code& ec) {
         if (auto ptr = wptr.lock()) {
-          ptr->OnTimeout(ec, timeout_type);
+          ptr->OnTimeout(ec, timeout_code);
         }
       });
 }

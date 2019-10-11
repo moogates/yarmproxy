@@ -6,6 +6,7 @@
 #include <unistd.h>
 #endif // _WINDOWS
 
+#include "config.h"
 #include "logging.h"
 
 #ifdef _GNU_SOURCE
@@ -13,14 +14,26 @@
 #endif
 
 namespace yarmproxy {
+
 int CreatePidFile() {
-  auto file = fopen("/tmp/yarmproxy.pid", "w"); //w = truncate, a = append
+  const auto& fname = Config::Instance().pid_file();
+  auto file = fopen(fname.c_str(), "w"); //w = truncate, a = append
   if (!file) {
+    LOG_WARN << "CreatePidFile err, file_name=" << fname;
     return -1;
   }
   fprintf(file, "%d", getpid());
-  fflush(file); // TODO : flush 是否有必要在lock之内?
+  fflush(file);
   fclose(file);
+  return 0;
+}
+
+int CleanupPidFile() {
+  const auto& fname = Config::Instance().pid_file();
+  int r = remove(fname.c_str());
+  if (r != 0) {
+    LOG_WARN << "CleanupPidFile err, file_name=" << fname;
+  }
   return 0;
 }
 

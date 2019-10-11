@@ -50,6 +50,11 @@ bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
     return true;
   }
 
+  if (tokens.size() == 2 && tokens[0] == "pid_file") {
+    pid_file_ = tokens[1];
+    return true;
+  }
+
   if (tokens.size() == 2 && tokens[0] == "worker_threads") {
     try {
       worker_threads_ = std::stoi(tokens[1]);
@@ -285,7 +290,8 @@ bool Config::ReloadCulsters() {
       });
 }
 
-bool Config::Initialize() {
+bool Config::Initialize(const char* conf_file) {
+  config_file_.assign(conf_file);
   return TraverseConfFile(
       [this](const std::vector<std::string>& tokens) -> bool {
           return this->ApplyTokens(tokens);

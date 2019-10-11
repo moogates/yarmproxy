@@ -100,8 +100,8 @@ private:
     WRITE_QUERY,
     READ_REPLY,
   };
-  void UpdateTimer(boost::asio::steady_timer& timer, TimeoutType type);
-  void OnTimeout(const boost::system::error_code& error, TimeoutType type);
+  void UpdateTimer(boost::asio::steady_timer& timer, ErrorCode timeout_code);
+  void OnTimeout(const boost::system::error_code& error, ErrorCode timeout_code);
 };
 
 }

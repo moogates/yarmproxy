@@ -5,11 +5,11 @@ cat mset9.tmp
 expected="+OK"
 res=$(cat mset9.tmp | tr -d '\r\n')
 
-if [ $res == $expected ]; then
-  echo -e "\033[32mSuccess \033[0m"
+if [ "$res" == "$expected" ]; then
+  echo -e "\033[32mPASS \033[0m"
   exit 0
 else
-  echo -e "\033[33mFail \033[0m"
+  echo -e "\033[33mFAIL $res/$expected \033[0m"
   exit 1
 fi
 

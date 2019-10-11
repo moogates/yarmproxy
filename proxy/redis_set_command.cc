@@ -59,10 +59,10 @@ bool RedisSetCommand::WriteQuery() {
     backend_conn_ = AllocateBackend(backend_endpoint_);
   }
 
-  LOG_ERROR << "RedisSetCommand WriteQuery data, backend=" << backend_conn_
-             << " ep=" << backend_conn_->remote_endpoint()
-             << " client_buff=" << client_conn_->buffer()
-             << " PRE-client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
+  LOG_DEBUG << "RedisSetCommand " << this << " WriteQuery data, backend=" << backend_conn_
+           << " ep=" << backend_conn_->remote_endpoint()
+           << " client_buff=" << client_conn_->buffer()
+           << " PRE-client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
            << " bytes=" << client_conn_->buffer()->unprocessed_bytes();
   client_conn_->buffer()->inc_recycle_lock();
   backend_conn_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
@@ -113,10 +113,6 @@ bool RedisSetCommand::query_parsing_complete() {
 
 void RedisSetCommand::OnBackendRecoverableError(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  // TODO :refining error message
-  // TODO : merge into base class(mc_set is the same)
-  // static const char BACKEND_ERROR[] = "-BACKEND_CONNECT_ERROR\r\n";
-  // backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
   LOG_DEBUG << "RedisSetCommand::OnBackendRecoverableError ec=" << ErrorCodeMessage(ec)
             << " endpoint=" << backend->remote_endpoint()
             << " query_recv_complete_=" << query_recv_complete_

@@ -25,10 +25,10 @@ ClientConnection::ClientConnection(WorkerContext& context)
     , context_(context)
     , timer_(context.io_service_) {
   ++g_stats_.client_conns_;
+  LOG_DEBUG << "ClientConnection ctor. count=" << g_stats_.client_conns_;
 }
 
 ClientConnection::~ClientConnection() {
-  LOG_WARN << "ClientConnection dtor.";
   if (socket_.is_open()) {
     LOG_DEBUG << "ClientConnection destroyed close socket.";
     socket_.close();
@@ -36,10 +36,10 @@ ClientConnection::~ClientConnection() {
   context_.allocator_->Release(buffer_->data());
   delete buffer_;
   --g_stats_.client_conns_;
+  LOG_DEBUG << "ClientConnection dtor. count=" << g_stats_.client_conns_;
 }
 
 void ClientConnection::OnTimeout(const boost::system::error_code& ec) {
-  // assert(!aborted_);
   if (ec != boost::asio::error::operation_aborted) {
     // timer was not cancelled, take necessary action.
     LOG_WARN << "ClientConnection OnTimeout.";

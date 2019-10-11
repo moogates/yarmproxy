@@ -170,8 +170,12 @@ bool RedisMsetCommand::WriteQuery() {
 }
 
 void RedisMsetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  static const char BACKEND_ERROR[] = "-MSET_BACKEND_CONNECT_ERROR\r\n"; // TODO :refining error message
-  backend->SetReplyData(BACKEND_ERROR, sizeof(BACKEND_ERROR) - 1);
+  assert(BackendErrorRecoverable(backend, ec));
+  LOG_DEBUG << "redismset OnBackendRecoverableError ec=" << ErrorCodeMessage(ec)
+            << " endpoint=" << backend->remote_endpoint()
+            << " backend=" << backend;
+  auto& err_reply(RedisErrorReply(ec));
+  backend->SetReplyData(err_reply.data(), err_reply.size());
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
@@ -208,6 +212,7 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
                                               ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS || !ParseReply(backend)) {
     LOG_DEBUG << "Command::OnBackendReplyReceived error, backend=" << backend;
+    // TODO : more friendly reply on recoverable error
     client_conn_->Abort();
     return;
   }

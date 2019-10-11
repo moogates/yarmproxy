@@ -203,7 +203,10 @@ const std::string& Command::MemcachedErrorReply(ErrorCode ec) {
   static const std::string kErrorWriteQuery("ERROR Backend Write Error\r\n");
   static const std::string kErrorReadReply("ERROR Backend Read Error\r\n");
   static const std::string kErrorProtocol("ERROR Backend Protocol Error\r\n");
-  static const std::string kErrorTimeout("ERROR Backend Timeout\r\n");
+  // static const std::string kErrorTimeout("ERROR Backend Timeout\r\n");
+  static const std::string kErrorConnectTimeout("ERROR Backend Connect Timeout\r\n");
+  static const std::string kErrorWriteTimeout("ERROR Backend Write Timeout\r\n");
+  static const std::string kErrorReadTimeout("ERROR Backend Read Timeout\r\n");
   static const std::string kErrorDefault("ERROR Backend Unknown Error\r\n");
   switch(ec) {
   case ErrorCode::E_CONNECT:
@@ -214,8 +217,14 @@ const std::string& Command::MemcachedErrorReply(ErrorCode ec) {
     return kErrorReadReply;
   case ErrorCode::E_PROTOCOL:
     return kErrorProtocol;
-  case ErrorCode::E_TIMEOUT:
-    return kErrorTimeout;
+//case ErrorCode::E_TIMEOUT:
+//  return kErrorTimeout;
+  case ErrorCode::E_BACKEND_CONNECT_TIMEOUT:
+    return kErrorConnectTimeout;
+  case ErrorCode::E_BACKEND_WRITE_TIMEOUT:
+    return kErrorWriteTimeout;
+  case ErrorCode::E_BACKEND_READ_TIMEOUT:
+    return kErrorReadTimeout;
   default:
     return kErrorDefault;
   }
@@ -226,7 +235,10 @@ const std::string& Command::RedisErrorReply(ErrorCode ec) {
   static const std::string kErrorWriteQuery("-Backend Write Error\r\n");
   static const std::string kErrorReadReply("-Backend Read Error\r\n");
   static const std::string kErrorProtocol("-Backend Protocol Error\r\n");
-  static const std::string kErrorTimeout("-Backend Timeout\r\n");
+  // static const std::string kErrorTimeout("-Backend Timeout\r\n");
+  static const std::string kErrorConnectTimeout("-Backend Connect Timeout\r\n");
+  static const std::string kErrorWriteTimeout("-Backend Write Timeout\r\n");
+  static const std::string kErrorReadTimeout("-Backend Read Timeout\r\n");
   static const std::string kErrorDefault("-Backend Unknown Error\r\n");
   switch(ec) {
   case ErrorCode::E_CONNECT:
@@ -237,8 +249,14 @@ const std::string& Command::RedisErrorReply(ErrorCode ec) {
     return kErrorReadReply;
   case ErrorCode::E_PROTOCOL:
     return kErrorProtocol;
-  case ErrorCode::E_TIMEOUT:
-    return kErrorTimeout;
+//case ErrorCode::E_TIMEOUT:
+//  return kErrorTimeout;
+  case ErrorCode::E_BACKEND_CONNECT_TIMEOUT:
+    return kErrorConnectTimeout;
+  case ErrorCode::E_BACKEND_WRITE_TIMEOUT:
+    return kErrorWriteTimeout;
+  case ErrorCode::E_BACKEND_READ_TIMEOUT:
+    return kErrorReadTimeout;
   default:
     return kErrorDefault;
   }
@@ -251,7 +269,7 @@ bool Command::BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, Erro
 void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_ERROR << "OnWriteQueryFinished err " << ErrorCodeMessage(ec)
+    LOG_DEBUG << "OnWriteQueryFinished err " << ErrorCodeMessage(ec)
              << " backend=" << backend
              << " client_buffer=" << client_conn_->buffer()
              << " client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
@@ -272,7 +290,7 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
     return;
   }
 
-  LOG_ERROR << "OnWriteQueryFinished ok, backend=" << backend
+  LOG_DEBUG << "OnWriteQueryFinished ok, backend=" << backend
              << " client_buffer=" << client_conn_->buffer()
              << " client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
              << " has_written_some_reply_=" << has_written_some_reply_
@@ -296,13 +314,11 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
 
 void Command::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {
-  LOG_ERROR << "OnBackendReplyReceived, backend=" << backend
-            << " ec=" << ErrorCodeMessage(ec);
   // assert(backend == backend_conn_);
   if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
     ec = ErrorCode::E_PROTOCOL;
   }
-  LOG_ERROR << "OnBackendReplyReceived 2, backend=" << backend
+  LOG_DEBUG << "Command " << this << " OnBackendReplyReceived, backend=" << backend
             << " ec=" << ErrorCodeMessage(ec)
             << " recoveralbe=" << BackendErrorRecoverable(backend, ec);
   if (ec != ErrorCode::E_SUCCESS) {
@@ -313,8 +329,6 @@ void Command::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
     }
     return;
   }
-  LOG_ERROR << "OnBackendReplyReceived 3, backend=" << backend
-            << " ec=" << ErrorCodeMessage(ec);
 
   if (client_conn_->IsFirstCommand(shared_from_this())) {
     // write reply
@@ -334,6 +348,10 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
     return;
   }
 
+ LOG_DEBUG << "Command " << this << " OnWriteReplyFinished ok, backend="
+          << backend << " backend->finished=" << backend->finished()
+          << " backend->unprocessed=" << backend->buffer()->unprocessed_bytes()
+          << " backend_buf=" << backend->buffer();
   assert(is_writing_reply_);
   is_writing_reply_ = false;
   backend->buffer()->dec_recycle_lock();
@@ -370,7 +388,7 @@ void Command::OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec)
 void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   assert(BackendErrorRecoverable(backend, ec));
   LOG_DEBUG << "OnBackendRecoverableError ec=" << ErrorCodeMessage(ec)
-            << "endpoint=" << backend->remote_endpoint()
+            << " endpoint=" << backend->remote_endpoint()
             << " backend=" << backend;
   auto& err_reply(RedisErrorReply(ec));
   backend->SetReplyData(err_reply.data(), err_reply.size());
@@ -388,6 +406,8 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
               << " ep=" << backend->remote_endpoint()
               << " is_writing_reply_=" << is_writing_reply_
               << " reply_recv_complete=" << backend->reply_recv_complete()
+              << " backend_buf=" << backend->buffer()
+              << " PRE-backend_buf_lock_count=" << backend->buffer()->recycle_lock_count()
               << " unprocessed=" << unprocessed;
   if (!is_writing_reply_ && unprocessed > 0) {
     is_writing_reply_ = true;
