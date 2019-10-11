@@ -14,7 +14,7 @@ namespace yarmproxy {
 
 MemcachedBasicCommand::MemcachedBasicCommand(
     std::shared_ptr<ClientConnection> client, const char* buf, size_t cmd_len) 
-    : Command(client) {
+    : Command(client, ProtocolType::MEMCACHED) {
   ParseQuery(buf, cmd_len);
 }
 

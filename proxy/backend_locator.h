@@ -11,8 +11,9 @@ using Endpoint = boost::asio::ip::tcp::endpoint;
 
 class BackendContinuum;
 enum class ProtocolType {
-  REDIS     = 0,
-  MEMCACHED = 1,
+  NONE      = 0,
+  REDIS     = 1,
+  MEMCACHED = 2,
 };
 
 class BackendLocator {

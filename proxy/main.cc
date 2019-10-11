@@ -24,7 +24,6 @@ int main(int argc, char* argv[]) {
     Daemonize();
   }
   MaximizeFdLimit();
-  MaximizeFdLimit();
   CreatePidFile();
 
   LOG_ERROR << "YarmProxy listening on " << conf.listen();

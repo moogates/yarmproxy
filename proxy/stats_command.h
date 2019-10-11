@@ -33,7 +33,6 @@ private:
     return true;
   }
 private:
-  ProtocolType protocol_;
   std::string reply_message_;
 };
 

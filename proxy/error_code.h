@@ -23,7 +23,7 @@ enum class ErrorCode {
   E_OTHERS   = 100,
 };
 
-const char* ErrorCodeMessage(ErrorCode ec);
+const char* ErrorCodeString(ErrorCode ec);
 
 }
 

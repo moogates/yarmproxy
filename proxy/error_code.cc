@@ -1,7 +1,7 @@
 #include "error_code.h"
 namespace yarmproxy {
 
-const char* ErrorCodeMessage(ErrorCode ec) {
+const char* ErrorCodeString(ErrorCode ec) {
   switch(ec) {
   case ErrorCode::E_SUCCESS:
     return "E_SUCCESS";

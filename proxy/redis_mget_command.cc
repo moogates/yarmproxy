@@ -81,7 +81,7 @@ bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
 
 RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
                                    const redis::BulkArray& ba)
-    : Command(client)
+    : Command(client, ProtocolType::REDIS)
     , reply_prefix_(redis::BulkArray::SerializePrefix(ba.total_bulks() - 1))
 {
   ParseQuery(ba);
@@ -129,7 +129,7 @@ bool RedisMgetCommand::WriteQuery() {
 void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   LOG_DEBUG << "RedisMgetCommand " << this << " OnWriteReplyFinished, backend=" << backend
-            << " ec=" << ErrorCodeMessage(ec);
+            << " ec=" << ErrorCodeString(ec);
   if (backend == nullptr) {
     if (ec != ErrorCode::E_SUCCESS) {
       client_conn_->Abort();
@@ -230,7 +230,7 @@ void RedisMgetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> ba
   std::string err_reply = ErrorReplyBody(backend_subqueries_[backend]->key_count_);
   backend->SetReplyData(err_reply.data(), err_reply.size());
   LOG_DEBUG << "RedisMgetCommand " << this << " OnBackendRecoverableError backend=" << backend
-           << " ec=" << ErrorCodeMessage(ec)
+           << " ec=" << ErrorCodeString(ec)
            << " err_reply=[" << err_reply << "]";
 
   backend->set_reply_recv_complete();

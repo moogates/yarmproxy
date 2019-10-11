@@ -17,6 +17,7 @@ class BackendLocator;
 class ClientConnection;
 
 enum class ErrorCode;
+enum class ProtocolType;
 
 typedef std::function<void(ErrorCode ec)> WriteReplyCallback;
 
@@ -26,7 +27,7 @@ public:
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* cmd);
 protected: // TODO : best practice ?
-  Command(std::shared_ptr<ClientConnection> client);
+  Command(std::shared_ptr<ClientConnection> client, ProtocolType protocol);
 public:
   virtual ~Command();
   virtual bool WriteQuery() = 0; // TODO : split into StartWriteQuery & ContinueWriteQuery
@@ -60,6 +61,7 @@ protected:
   // void OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   virtual void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
+  const std::string& ErrorReply(ErrorCode ec);
   static const std::string& RedisErrorReply(ErrorCode ec);
   static const std::string& MemcachedErrorReply(ErrorCode ec);
 
@@ -85,6 +87,7 @@ protected:
   bool has_written_some_reply_ = false;
 private:
   bool is_writing_reply_ = false;
+  ProtocolType protocol_;
 };
 
 }

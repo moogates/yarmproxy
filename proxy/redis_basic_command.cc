@@ -14,7 +14,7 @@ namespace yarmproxy {
 
 RedisBasicCommand::RedisBasicCommand(std::shared_ptr<ClientConnection> client,
                                      const redis::BulkArray& ba)
-    : Command(client) {
+    : Command(client, ProtocolType::REDIS) {
   backend_endpoint_ = backend_locator()->Locate(
       ba[1].payload_data(), ba[1].payload_size(), ProtocolType::REDIS);
 }

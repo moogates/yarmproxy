@@ -14,7 +14,7 @@ namespace yarmproxy {
 
 RedisGetCommand::RedisGetCommand(std::shared_ptr<ClientConnection> client,
                                  const redis::BulkArray& ba)
-    : Command(client)
+    : Command(client, ProtocolType::REDIS)
     , cmd_data_(ba.raw_data())
     , cmd_bytes_(ba.total_size())
 {

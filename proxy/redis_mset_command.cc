@@ -90,7 +90,7 @@ void RedisMsetCommand::PushSubquery(const Endpoint& ep, const char* data,
 
 RedisMsetCommand::RedisMsetCommand(std::shared_ptr<ClientConnection> client,
                                    const redis::BulkArray& ba)
-    : Command(client)
+    : Command(client, ProtocolType::REDIS)
     , total_bulks_(ba.total_bulks())
     , unparsed_bulks_(ba.absent_bulks())
 {
@@ -111,7 +111,13 @@ RedisMsetCommand::~RedisMsetCommand() {
            << " pending_subqueries_.size=" << pending_subqueries_.size();
 
   if (pending_subqueries_.size() != 1) {
-    assert(client_conn_->aborted());
+    LOG_ERROR << "RedisMsetCommand not aborted bad pending size."
+        << " client=" << client_conn_
+        << " aborted=" << client_conn_->aborted()
+        << " pending_subqueries_.size=" << pending_subqueries_.size();
+    if (!client_conn_->aborted()) {
+       assert(false);
+    }
   }
 
   for(auto& it : pending_subqueries_) {
@@ -188,7 +194,7 @@ void RedisMsetCommand::OnBackendRecoverableError(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   assert(BackendErrorRecoverable(backend, ec));
   LOG_DEBUG << "redismset OnBackendRecoverableError ec="
-            << ErrorCodeMessage(ec) << " backend=" << backend
+            << ErrorCodeString(ec) << " backend=" << backend
             << " endpoint=" << backend->remote_endpoint();
   auto& err_reply(RedisErrorReply(ec));
   backend->SetReplyData(err_reply.data(), err_reply.size());
@@ -306,7 +312,7 @@ void RedisMsetCommand::OnWriteQueryFinished(
       }
     } else {
       client_conn_->Abort();
-      LOG_DEBUG << "OnWriteQueryFinished error, ec=" << ErrorCodeMessage(ec);
+      LOG_DEBUG << "OnWriteQueryFinished error, ec=" << ErrorCodeString(ec);
     }
     return;
   }

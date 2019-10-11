@@ -16,7 +16,7 @@ namespace yarmproxy {
 
 RedisSetCommand::RedisSetCommand(std::shared_ptr<ClientConnection> client,
                                  const redis::BulkArray& ba)
-    : Command(client)
+    : Command(client, ProtocolType::REDIS)
     , unparsed_bulks_(ba.absent_bulks()) {
   backend_endpoint_ = backend_locator()->Locate(ba[1].payload_data(),
                           ba[1].payload_size(), ProtocolType::REDIS);
@@ -40,9 +40,6 @@ bool RedisSetCommand::WriteQuery() {
     query_recv_complete_ = true;
   }
 
-//if (backend_error_ || // TODO : connect error if not enough. mset has the same bug
-//    (backend_conn_ && backend_conn_->closed())) {
-//if (backend_error_) {
   if (backend_conn_ && backend_conn_->error()) {
     assert(backend_conn_);
     if (!query_recv_complete_) {
@@ -72,32 +69,6 @@ bool RedisSetCommand::WriteQuery() {
   return false;
 }
 
-/*
-void RedisSetCommand::OnBackendReplyReceived(
-    std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  assert(backend == backend_conn_);
-  if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
-    ec = ErrorCode::E_PROTOCOL;
-  }
-  if (ec != ErrorCode::E_SUCCESS) {
-    if (!BackendErrorRecoverable(backend, ec)) {
-      client_conn_->Abort();
-    } else {
-      OnBackendRecoverableError(backend, ec);
-    }
-    return;
-  }
-
-  if (client_conn_->IsFirstCommand(shared_from_this())) {
-    // write reply
-    TryWriteReply(backend);
-  } else {
-    // wait to write reply
-  }
-  backend->TryReadMoreReply();
-}
-*/
-
 void RedisSetCommand::StartWriteReply() {
   if (query_recv_complete_) {
     TryWriteReply(backend_conn_);
@@ -111,32 +82,6 @@ void RedisSetCommand::RotateReplyingBackend(bool) {
 
 bool RedisSetCommand::query_parsing_complete() {
   return unparsed_bulks_ == 0;
-}
-
-void RedisSetCommand::OnBackendRecoverableError(
-    std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  LOG_DEBUG << "RedisSetCommand::OnBackendRecoverableError ec=" << ErrorCodeMessage(ec)
-            << " endpoint=" << backend->remote_endpoint()
-            << " query_recv_complete_=" << query_recv_complete_
-            << " is_first_cmd=" << client_conn_->IsFirstCommand(shared_from_this())
-            << " backend=" << backend;
-  auto& err_reply(RedisErrorReply(ec));
-  backend->SetReplyData(err_reply.data(), err_reply.size());
-  backend->set_reply_recv_complete();
-  backend->set_no_recycle();
-
-  backend_error_ = true; // remove var backend_error_
-
-  if (query_recv_complete_) {
-    if (client_conn_->IsFirstCommand(shared_from_this())) {
-      // write reply
-      TryWriteReply(backend);
-    } else {
-      // waiting to write reply";
-    }
-  } else {
-    // waiting for more query data
-  }
 }
 
 bool RedisSetCommand::ParseUnparsedPart() {

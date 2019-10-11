@@ -16,9 +16,8 @@ Stats g_stats_;
 
 StatsCommand::StatsCommand(std::shared_ptr<ClientConnection> client,
                            ProtocolType protocol)
-    : Command(client)
-    , protocol_(protocol) {
-  if (protocol_ == ProtocolType::REDIS) {
+    : Command(client, protocol) {
+  if (protocol == ProtocolType::REDIS) {
     reply_message_ = "+";
   }
   reply_message_.reserve(256);
@@ -36,7 +35,7 @@ StatsCommand::StatsCommand(std::shared_ptr<ClientConnection> client,
       .append(std::to_string(g_stats_.bytes_from_backends_))
       .append("\tbytes_to_backends ")
       .append(std::to_string(g_stats_.bytes_to_backends_));
-  if (protocol_ == ProtocolType::MEMCACHED) {
+  if (protocol == ProtocolType::MEMCACHED) {
     reply_message_.append("\r\n");
   }
 }
@@ -60,7 +59,8 @@ void StatsCommand::StartWriteReply() {
 void StatsCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   assert(backend == nullptr);
-  LOG_DEBUG << "StatsCommand OnWriteReplyFinished, backend=" << backend << " ec=" << ErrorCodeMessage(ec);
+  LOG_DEBUG << "StatsCommand OnWriteReplyFinished, backend=" << backend
+            << " ec=" << ErrorCodeString(ec);
   client_conn_->Abort();
 }
 

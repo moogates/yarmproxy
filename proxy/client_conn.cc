@@ -226,7 +226,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
   RevokeTimer();
   if (aborted_) {
-    // backend interrrupted
     return;
   }
   is_reading_query_ = false;
@@ -250,12 +249,17 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   LOG_DEBUG << "client HandleRead buffer=" << buffer_
             << " bytes_transferred=" << bytes_transferred
             << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes();
+  std::shared_ptr<Command> back_cmd;
+  if (!active_cmd_queue_.empty()) {
+    back_cmd = active_cmd_queue_.back();
+  }
 
-  if (!active_cmd_queue_.empty() &&
-      !active_cmd_queue_.back()->query_recv_complete()) {
-    LOG_DEBUG << "client HandleRead ParseUnparsedPart";
-    if (!active_cmd_queue_.back()->ParseUnparsedPart()) {
-      LOG_DEBUG << "client HandleRead ParseUnparsedPart Abort";
+//if (!active_cmd_queue_.empty() &&
+//    !active_cmd_queue_.back()->query_recv_complete()) {
+  if (back_cmd && !back_cmd->query_recv_complete()) {
+    LOG_DEBUG << "client ParseUnparsedPart";
+    if (!back_cmd->ParseUnparsedPart()) {
+      LOG_DEBUG << "client ParseUnparsedPart Abort";
       Abort();
       return;
     }
@@ -263,11 +267,12 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 
   // TODO :  add var back_cmd
   if (buffer_->parsed_unprocessed_bytes() > 0) {
-    assert(!active_cmd_queue_.empty());
+    // assert(!active_cmd_queue_.empty());
+    assert(back_cmd);
 
     // TODO : split to WriteNewParsedQuery()/WriteEarlierParsedQuery()
-    bool no_callback = active_cmd_queue_.back()->ContinueWriteQuery();
-    // bool no_callback = active_cmd_queue_.back()->WriteQuery();
+    bool no_callback = back_cmd->ContinueWriteQuery();
+    // bool no_callback = back_cmd->WriteQuery();
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
@@ -281,10 +286,9 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   }
 
   // process the big bulk arrays in redis query
-  if (!active_cmd_queue_.empty() &&
-      !active_cmd_queue_.back()->query_parsing_complete()) {
+  if (back_cmd && !back_cmd->query_parsing_complete()) {
     LOG_DEBUG << "client HandleRead ProcessUnparsedPart";
-    if (!active_cmd_queue_.back()->ProcessUnparsedPart()) {
+    if (!back_cmd->ProcessUnparsedPart()) {
       LOG_DEBUG << "client HandleRead ProcessUnparsedPart Abort";
       Abort();
       return;
@@ -292,8 +296,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   }
 
 
-  if (active_cmd_queue_.empty() ||
-      active_cmd_queue_.back()->query_parsing_complete()) {
+  if (!back_cmd || back_cmd->query_parsing_complete()) {
     ProcessUnparsedQuery();
   }
 }
@@ -302,13 +305,14 @@ void ClientConnection::Abort() {
   if (aborted_) {
     return;
   }
-  LOG_WARN << "client " << this << "Abort";
-
-  active_cmd_queue_.clear();
+  LOG_WARN << "client " << this << " Abort";
 
   aborted_ = true;
   timer_.cancel();
   socket_.close();
+
+  // keep this line at end to avoid earyly deref.
+  active_cmd_queue_.clear();
 }
 
 }

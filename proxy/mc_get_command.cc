@@ -25,7 +25,7 @@ struct MemcachedGetCommand::BackendQuery {
 
 MemcachedGetCommand::MemcachedGetCommand(std::shared_ptr<ClientConnection> client,
                      const char* cmd_data, size_t cmd_size)
-    : Command(client)
+    : Command(client, ProtocolType::MEMCACHED)
 {
   ParseQuery(cmd_data, cmd_size);
 }
@@ -144,8 +144,6 @@ void MemcachedGetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn>
       static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
       backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
     } else {
-    //static const char CONNECT_ERROR[] = "SERVER_ERROR: Backend Connect Fail\r\n"; // TODO : 统一放置错误码
-    //backend->SetReplyData(CONNECT_ERROR, sizeof(CONNECT_ERROR) - 1);
       const auto& err_reply(MemcachedErrorReply(ec));
       backend->SetReplyData(err_reply.data(), err_reply.size());
     }

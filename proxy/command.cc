@@ -34,8 +34,9 @@ namespace yarmproxy {
 
 std::atomic_int x_cmd_count;
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
-Command::Command(std::shared_ptr<ClientConnection> client)
-    : client_conn_(client) {
+Command::Command(std::shared_ptr<ClientConnection> client, ProtocolType protocol)
+    : client_conn_(client)
+    , protocol_(protocol) {
 };
 
 Command::~Command() {
@@ -200,6 +201,7 @@ std::shared_ptr<BackendConn> Command::AllocateBackend(const Endpoint& ep) {
   return backend;
 }
 
+// TODO : merge
 const std::string& Command::MemcachedErrorReply(ErrorCode ec) {
   static const std::string kErrorConnect("ERROR Backend Connect Error\r\n");
   static const std::string kErrorWriteQuery("ERROR Backend Write Error\r\n");
@@ -270,7 +272,7 @@ bool Command::BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, Erro
 void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_DEBUG << "OnWriteQueryFinished err " << ErrorCodeMessage(ec)
+    LOG_DEBUG << "OnWriteQueryFinished err " << ErrorCodeString(ec)
              << " backend=" << backend
              << " client_buffer=" << client_conn_->buffer()
              << " client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
@@ -320,7 +322,7 @@ void Command::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
     ec = ErrorCode::E_PROTOCOL;
   }
   LOG_DEBUG << "Command " << this << " OnBackendReplyReceived, backend=" << backend
-            << " ec=" << ErrorCodeMessage(ec)
+            << " ec=" << ErrorCodeString(ec)
             << " recoveralbe=" << BackendErrorRecoverable(backend, ec);
   if (ec != ErrorCode::E_SUCCESS) {
     if (!BackendErrorRecoverable(backend, ec)) {
@@ -368,36 +370,34 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
   }
 }
 
-/*
-void Command::OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  if (backend->has_read_some_reply()) {
-    client_conn_->Abort();
-    return;
-  }
-  auto& err_reply(RedisErrorReply(ec));
-  backend->SetReplyData(err_reply.data(), err_reply.size());
-  backend->set_reply_recv_complete();
-  backend->set_no_recycle();
-
-  if (client_conn_->IsFirstCommand(shared_from_this())) {
-    LOG_WARN << "RedisGetCommand::OnBackendError TryWriteReply, backend=" << backend;
-    TryWriteReply(backend);
+const std::string& Command::ErrorReply(ErrorCode ec) {
+  switch(protocol_) {
+  case ProtocolType::REDIS:
+    return RedisErrorReply(ec);
+  case ProtocolType::MEMCACHED:
+  default:
+    return MemcachedErrorReply(ec);
   }
 }
-*/
-
 void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   assert(BackendErrorRecoverable(backend, ec));
-  LOG_DEBUG << "OnBackendRecoverableError ec=" << ErrorCodeMessage(ec)
+  LOG_DEBUG << "OnBackendRecoverableError ec=" << ErrorCodeString(ec)
             << " endpoint=" << backend->remote_endpoint()
             << " backend=" << backend;
-  auto& err_reply(RedisErrorReply(ec));
+  auto& err_reply(ErrorReply(ec));
   backend->SetReplyData(err_reply.data(), err_reply.size());
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
-  if (client_conn_->IsFirstCommand(shared_from_this())) {
-    TryWriteReply(backend);
+  if (query_recv_complete()) {
+    if (client_conn_->IsFirstCommand(shared_from_this())) {
+      // write reply
+      TryWriteReply(backend);
+    } else {
+      // waiting to write reply
+    }
+  } else {
+    // wait for more query data
   }
 }
 

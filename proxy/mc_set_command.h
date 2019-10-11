@@ -19,8 +19,8 @@ public:
 
 private:
   void StartWriteReply() override;
-  // void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
-  void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
+//void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend,
+//                               ErrorCode ec) override;
 
   bool WriteQuery() override;
   bool ContinueWriteQuery() override;
@@ -37,7 +37,6 @@ private:
   Endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_conn_;
 
-  bool connect_error_ = false;
   bool query_recv_complete_ = false;
 };
 

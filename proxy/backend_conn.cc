@@ -210,7 +210,7 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeo
   if (closed_) {
     LOG_INFO << "BackendConn " << this << " ep=" << remote_endpoint()
              << " timeout after closed."
-             << " code=" << ErrorCodeMessage(timeout_code);
+             << " code=" << ErrorCodeString(timeout_code);
     // assert(false);
     return;
   }
@@ -219,7 +219,7 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeo
     // timer was cancelled, take no action.
     return;
   }
-  LOG_INFO << "BackendConn " << this << " timeout. timeout_code=" << ErrorCodeMessage(timeout_code)
+  LOG_INFO << "BackendConn " << this << " timeout. timeout_code=" << ErrorCodeString(timeout_code)
            << " endpoint=" << remote_endpoint_
            << " read_timer_canceled_=" << read_timer_canceled_
            << " write_timer_canceled_=" << write_timer_canceled_
@@ -256,7 +256,7 @@ void BackendConn::UpdateTimer(boost::asio::steady_timer& timer, ErrorCode timeou
   size_t canceled = timer.expires_after(std::chrono::milliseconds(timeout));
   LOG_DEBUG << "BackendConn UpdateTimer timeout=" << timeout
            << " backend=" << this
-           << " timeout_code=" << ErrorCodeMessage(timeout_code)
+           << " timeout_code=" << ErrorCodeString(timeout_code)
            << " canceled=" << canceled;
 
   std::weak_ptr<BackendConn> wptr(shared_from_this());

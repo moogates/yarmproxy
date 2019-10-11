@@ -14,7 +14,7 @@ namespace yarmproxy {
 
 ErrorCommand::ErrorCommand(std::shared_ptr<ClientConnection> client,
                            const std::string& reply_message) 
-    : Command(client)
+    : Command(client, ProtocolType::NONE)
     , reply_message_(reply_message) {
 }
 
@@ -38,7 +38,7 @@ void ErrorCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
   assert(backend == nullptr);
   LOG_DEBUG << "ErrorCommand OnWriteReplyFinished, backend=" << backend
-            << " ec=" << ErrorCodeMessage(ec);
+            << " ec=" << ErrorCodeString(ec);
   client_conn_->Abort();
 }
 
