@@ -40,8 +40,10 @@ bool RedisSetCommand::WriteQuery() {
     query_recv_complete_ = true;
   }
 
-  if (connect_error_ || // FIXME : connect error if not enough. mset has the same bug
-      (backend_conn_ && backend_conn_->closed())) {
+//if (backend_error_ || // TODO : connect error if not enough. mset has the same bug
+//    (backend_conn_ && backend_conn_->closed())) {
+//if (backend_error_) {
+  if (backend_conn_ && backend_conn_->error()) {
     assert(backend_conn_);
     if (!query_recv_complete_) {
       return true; // no callback, try read more query directly
@@ -123,7 +125,7 @@ void RedisSetCommand::OnBackendRecoverableError(
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
-  connect_error_ = true;
+  backend_error_ = true; // remove var backend_error_
 
   if (query_recv_complete_) {
     if (client_conn_->IsFirstCommand(shared_from_this())) {

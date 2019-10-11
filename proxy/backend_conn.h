@@ -71,8 +71,8 @@ public:
   bool has_read_some_reply() const {
     return has_read_some_reply_;
   }
-  bool closed() const {
-    return closed_;
+  bool error() const {
+    return no_recycle_;
   }
 private:
   WorkerContext& context_;
@@ -95,11 +95,6 @@ private:
   boost::asio::steady_timer read_timer_;
   bool read_timer_canceled_ = false;
 
-  enum class TimeoutType {
-    CONNECT,
-    WRITE_QUERY,
-    READ_REPLY,
-  };
   void UpdateTimer(boost::asio::steady_timer& timer, ErrorCode timeout_code);
   void OnTimeout(const boost::system::error_code& error, ErrorCode timeout_code);
 };

@@ -107,11 +107,11 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client, const
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size());
   }
-  LOG_WARN << "RedisDelCommand ctor " << ++redis_del_cmd_count;
+  LOG_DEBUG << "RedisDelCommand ctor " << ++redis_del_cmd_count;
 }
 
 RedisDelCommand::~RedisDelCommand() {
-  LOG_WARN << "RedisDelCommand dtor " << --redis_del_cmd_count
+  LOG_DEBUG << "RedisDelCommand dtor " << --redis_del_cmd_count
            << " pending_subqueries_.size=" << pending_subqueries_.size();
 
   if (pending_subqueries_.size() != 1) {
@@ -206,7 +206,7 @@ void RedisDelCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
       client_conn_->TryReadMoreQuery("redis_del_1");
     }
 
-    LOG_WARN << "OnBackendReplyReceived command=" << this
+    LOG_DEBUG << "OnBackendReplyReceived command=" << this
              << " unparsed_bulks_=" << unparsed_bulks_
              << " pending_subqueries_.size=" << pending_subqueries_.size()
              << " don't write reply, backend=" << backend;
@@ -222,10 +222,7 @@ void RedisDelCommand::StartWriteReply() {
 }
 
 void RedisDelCommand::RotateReplyingBackend(bool success) {
-  if (unparsed_bulks_ > 0) {
-    LOG_WARN << "RedisDelCommand::RotateReplyingBackend unparsed_bulks_=" << unparsed_bulks_;
-    assert(false);
-  }
+  assert(unparsed_bulks_ == 0);
   client_conn_->RotateReplyingCommand();
 }
 

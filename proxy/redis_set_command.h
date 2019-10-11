@@ -44,7 +44,7 @@ private:
 
   size_t unparsed_bulks_;
   bool query_recv_complete_ = false;
-  bool connect_error_ = false;
+  bool backend_error_ = false;
 };
 
 }

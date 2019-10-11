@@ -237,7 +237,6 @@ const std::string& Command::RedisErrorReply(ErrorCode ec) {
   static const std::string kErrorWriteQuery("-Backend Write Error\r\n");
   static const std::string kErrorReadReply("-Backend Read Error\r\n");
   static const std::string kErrorProtocol("-Backend Protocol Error\r\n");
-  // static const std::string kErrorTimeout("-Backend Timeout\r\n");
   static const std::string kErrorConnectTimeout("-Backend Connect Timeout\r\n");
   static const std::string kErrorWriteTimeout("-Backend Write Timeout\r\n");
   static const std::string kErrorReadTimeout("-Backend Read Timeout\r\n");
