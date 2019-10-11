@@ -11,7 +11,7 @@ for id in `seq 1 100`; do
 done
 echo "Done"
 
-gunzip -c get8.data.gz | $driver 127.0.0.1 $port | grep "VALUE\|END" > get8.tmp
+gunzip -c get8.data.gz | $driver 127.0.0.1 $port | grep "ERROR\|VALUE\|END" > get8.tmp
 
 expected_value_lines=1500
 value_lines=$(cat get8.tmp | grep -c $body_size)

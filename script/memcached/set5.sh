@@ -1,6 +1,6 @@
 gunzip -c set5.data.gz | nc 127.0.0.1 11311 > set5.tmp
 cat set5.tmp
-stored_count=$(cat set5.tmp | grep -c STORED)
+stored_count=$(cat set5.tmp | grep -c "^ERROR\|^STORED")
 set_count=$(gunzip -c set5.data.gz | grep -c "^set ")
 
 if [ $stored_count -ne $set_count ]; then

@@ -7,12 +7,11 @@ echo "Done"
 query="get key61 key2 key3 key4 key5 key6 key17 key18 key21 key12 key93 key84 key75 key66 key57 key48 key30 key31 key32 key33 key34 key35 key36 key37 key38\r\n"
 #printf "$query" | nc 127.0.0.1 11311 | grep "VALUE\|END"
 
-printf "$query" | nc 127.0.0.1 11311 | grep "VALUE\|END" > get3.tmp
-
-# cat get3.tmp
+printf "$query" | nc 127.0.0.1 11311 | grep "^ERROR\|^VALUE\|^END" > get3.tmp
+cat get3.tmp
 value_lines=$(cat get3.tmp | grep -c $body_size)
 if [ $value_lines -ne $keys_count ]; then
-  echo -e "\033[33mFail: Response values error.$value_lines.\033[0m"
+  echo -e "\033[33mFail: Response values error.$value_lines/$keys_count.\033[0m"
   exit 1
 else
   echo -e "\033[32mResponse values ok.\033[0m"

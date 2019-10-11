@@ -5,8 +5,9 @@ for id in `seq 1 10`; do
   ./data_gen $body_size | sed "1s/EXAMPLE_KEY/$key/g" | nc 127.0.0.1 11311 > /dev/null
 done
 echo "Done"
-
-gunzip -c get7.data.gz | nc 127.0.0.1 11311 | grep "VALUE\|END" > get7.tmp
+driver=../yarmnc
+gunzip -c get7.data.gz | $driver 127.0.0.1 11311 | grep "^ERROR\|^VALUE\|^END" > get7.tmp
+#cat get7.tmp
 
 expected_value_lines=350
 value_lines=$(cat get7.tmp | grep -c $body_size)

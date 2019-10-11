@@ -36,6 +36,9 @@ StatsCommand::StatsCommand(std::shared_ptr<ClientConnection> client,
       .append(std::to_string(g_stats_.bytes_from_backends_))
       .append("\tbytes_to_backends ")
       .append(std::to_string(g_stats_.bytes_to_backends_));
+  if (protocol_ == ProtocolType::MEMCACHED) {
+    reply_message_.append("\r\n");
+  }
 }
 
 StatsCommand::~StatsCommand() {

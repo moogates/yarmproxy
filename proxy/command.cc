@@ -165,7 +165,6 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
              strncmp(buf, "prepend ", sizeof("prepend ") - 1) == 0 ||
              strncmp(buf, "cas", sizeof("cas ") - 1) == 0) {
     size_t body_bytes = 0;
-    LOG_WARN << "MemcachedSetCommand created(" << std::string(buf, cmd_line_bytes) << ")";
     command->reset(new MemcachedSetCommand(client, buf, cmd_line_bytes,
                                            &body_bytes));
     if (body_bytes <= 2) {
@@ -179,6 +178,9 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       strncmp(buf, "touch ", sizeof("touch ") - 1) == 0) {
     // TODO : strict protocol check
     command->reset(new MemcachedBasicCommand(client, buf, cmd_line_bytes));
+    return cmd_line_bytes;
+  } else if (strncmp(buf, "yarmstats\r", sizeof("yarmstats\r") - 1) == 0) {
+    command->reset(new StatsCommand(client, ProtocolType::MEMCACHED));
     return cmd_line_bytes;
   }
 

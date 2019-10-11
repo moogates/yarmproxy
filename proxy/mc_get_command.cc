@@ -108,17 +108,31 @@ void MemcachedGetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backe
 void MemcachedGetCommand::OnBackendReplyReceived(
         std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   TryMarkLastBackend(backend);
-  if (ec != ErrorCode::E_SUCCESS
-      || ParseReply(backend) == false) {
-    LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
-    client_conn_->Abort();
+//if (ec != ErrorCode::E_SUCCESS || ParseReply(backend) == false) {
+//  LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
+//  client_conn_->Abort();
+//  return;
+//}
+  if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
+    ec = ErrorCode::E_PROTOCOL;
+  }
+  if (ec != ErrorCode::E_SUCCESS) {
+    if (!BackendErrorRecoverable(backend, ec)) {
+      client_conn_->Abort();
+    } else {
+      OnBackendRecoverableError(backend, ec);
+    }
     return;
   }
+
 
   BackendReadyToReply(backend);
   backend->TryReadMoreReply();
 }
 
+bool MemcachedGetCommand::BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  return !backend->has_read_some_reply();
+}
 
 void MemcachedGetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   LOG_DEBUG << "MemcachedGetCommand::OnBackendConnectError endpoint="
@@ -130,8 +144,10 @@ void MemcachedGetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn>
       static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
       backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
     } else {
-      static const char CONNECT_ERROR[] = "SERVER_ERROR: Backend Connect Fail\r\n"; // TODO : 统一放置错误码
-      backend->SetReplyData(CONNECT_ERROR, sizeof(CONNECT_ERROR) - 1);
+    //static const char CONNECT_ERROR[] = "SERVER_ERROR: Backend Connect Fail\r\n"; // TODO : 统一放置错误码
+    //backend->SetReplyData(CONNECT_ERROR, sizeof(CONNECT_ERROR) - 1);
+      const auto& err_reply(MemcachedErrorReply(ec));
+      backend->SetReplyData(err_reply.data(), err_reply.size());
     }
     LOG_DEBUG << "MemcachedGetCommand::OnBackendConnectError last, endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
@@ -151,13 +167,13 @@ void MemcachedGetCommand::StartWriteReply() {
 }
 
 void MemcachedGetCommand::NextBackendStartReply() {
-  LOG_WARN << "NextBackendStartReply cmd=" << this
+  LOG_DEBUG << "NextBackendStartReply cmd=" << this
             << " last replying_backend_=" << replying_backend_;
   if (waiting_reply_queue_.size() > 0) {
     auto next_backend = waiting_reply_queue_.front();
     waiting_reply_queue_.pop_front();
 
-    LOG_WARN << "NextBackendStartReply activate ready backend,"
+    LOG_DEBUG << "NextBackendStartReply activate ready backend,"
               << " subqueries_.size=" << subqueries_.size()
               << " completed_backends_=" << completed_backends_
               << " backend=" << next_backend;
@@ -185,7 +201,7 @@ void MemcachedGetCommand::RotateReplyingBackend(bool) {
               << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
     NextBackendStartReply();
   } else {
-    LOG_WARN << "MemcachedGetCommand::Rotate to next COMMAND"
+    LOG_DEBUG << "MemcachedGetCommand::Rotate to next COMMAND"
              << " completed_backends_=" << completed_backends_
              << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
     client_conn_->RotateReplyingCommand();
@@ -241,7 +257,7 @@ bool MemcachedGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
         }
         return true;
       } else {
-        LOG_WARN << "ParseReply ERROR, data=(" << std::string(entry, p - entry)
+        LOG_INFO << "ParseReply ERROR, data=(" << std::string(entry, p - entry)
                  << ") backend=" << backend;
         return false;
       }
