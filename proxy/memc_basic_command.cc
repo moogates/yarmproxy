@@ -37,10 +37,10 @@ MemcBasicCommand::~MemcBasicCommand() {
   }
 }
 
-bool MemcBasicCommand::WriteQuery() {
+bool MemcBasicCommand::StartWriteQuery() {
   assert(replying_backend_ == nullptr);
   replying_backend_ = AllocateBackend(backend_endpoint_);
-  LOG_DEBUG << "MemcBasicCommand::WriteQuery backend=" << replying_backend_;
+  LOG_DEBUG << "MemcBasicCommand::StartWriteQuery backend=" << replying_backend_;
 
   auto buffer = client_conn_->buffer();
   buffer->inc_recycle_lock();

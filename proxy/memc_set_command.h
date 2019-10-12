@@ -1,8 +1,6 @@
 #ifndef _YARMPROXY_MEMC_SET_COMMAND_H_
 #define _YARMPROXY_MEMC_SET_COMMAND_H_
 
-#include <boost/asio/ip/tcp.hpp>
-
 #include "command.h"
 
 namespace yarmproxy {
@@ -18,10 +16,9 @@ public:
 
 private:
   void StartWriteReply() override;
-  // bool WriteQuery() override;
-  void update_check_query_recv_complete() override;
+  void check_query_recv_complete() override;
 
-  bool ContinueWriteQuery() override;
+  // bool ContinueWriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool) override;
 

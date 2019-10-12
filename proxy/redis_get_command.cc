@@ -15,25 +15,20 @@ namespace yarmproxy {
 RedisGetCommand::RedisGetCommand(std::shared_ptr<ClientConnection> client,
                                  const redis::BulkArray& ba)
     : Command(client, ProtocolType::REDIS)
-    , cmd_data_(ba.raw_data())
+    , cmd_data_(ba.raw_data()) // TODO : remove cmd_data_ & cmd_bytes_
     , cmd_bytes_(ba.total_size())
 {
-  backend_endpoint_ = backend_locator()->Locate(
-      ba[1].payload_data(), ba[1].payload_size(), ProtocolType::REDIS);
+  auto ep = backend_locator()->Locate(ba[1].payload_data(),
+                 ba[1].payload_size(), ProtocolType::REDIS);
+  LOG_DEBUG << "RedisSetCommand key=" << ba[1].to_string()
+            << " ep=" << ep;
+  replying_backend_ = backend_pool()->Allocate(ep);
 }
 
 RedisGetCommand::~RedisGetCommand() {
   if (replying_backend_) {
     backend_pool()->Release(replying_backend_);
   }
-}
-
-bool RedisGetCommand::WriteQuery() {
-  assert(!replying_backend_);
-  replying_backend_ = AllocateBackend(backend_endpoint_);
-  client_conn_->buffer()->inc_recycle_lock();
-  replying_backend_->WriteQuery(cmd_data_, cmd_bytes_);
-  return false;
 }
 
 void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,

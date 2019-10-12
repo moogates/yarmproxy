@@ -31,61 +31,22 @@ RedisSetCommand::~RedisSetCommand() {
   }
 }
 
-bool RedisSetCommand::ContinueWriteQuery() {
-  return WriteQuery();
-}
-
-void RedisSetCommand::update_check_query_recv_complete() {
+void RedisSetCommand::check_query_recv_complete() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0 &&
       unparsed_bulks_ == 0) {
     query_recv_complete_ = true;
   }
 }
-/*
-bool RedisSetCommand::WriteQuery() {
-  if (first_write_query_) {
-    replying_backend_->SetReadWriteCallback(
-        WeakBind(&Command::OnWriteQueryFinished, replying_backend_),
-        WeakBind(&Command::OnBackendReplyReceived, replying_backend_));
-    first_write_query_ = false;
-  }
 
-  update_check_query_recv_complete();
-
-  if (replying_backend_ && replying_backend_->error()) {
-    if (!query_recv_complete()) {
-      return true; // no callback, try read more query directly
-    }
-    if (client_conn_->IsFirstCommand(shared_from_this())) {
-      // write reply
-      TryWriteReply(replying_backend_);
-    } else {
-      // wait to write reply
-    }
-    return false;
-  }
-
-  assert(replying_backend_);
-  LOG_DEBUG << "RedisSetCommand " << this << " WriteQuery data, backend=" << replying_backend_
-           << " ep=" << replying_backend_->remote_endpoint()
-           << " client_buff=" << client_conn_->buffer()
-           << " PRE-client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
-           << " bytes=" << client_conn_->buffer()->unprocessed_bytes();
-  auto buffer = client_conn_->buffer();
-  buffer->inc_recycle_lock();
-  replying_backend_->WriteQuery(buffer->unprocessed_data(),
-                            buffer->unprocessed_bytes());
-  return false;
-}
-*/
 void RedisSetCommand::StartWriteReply() {
   if (query_recv_complete_) {
     TryWriteReply(replying_backend_);
   }
 }
 
+// TODO : add it into base class
 void RedisSetCommand::RotateReplyingBackend(bool) {
-  assert(query_recv_complete_);
+  assert(query_recv_complete());
   client_conn_->RotateReplyingCommand();
 }
 

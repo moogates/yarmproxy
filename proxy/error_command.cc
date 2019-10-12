@@ -21,7 +21,7 @@ ErrorCommand::ErrorCommand(std::shared_ptr<ClientConnection> client,
 ErrorCommand::~ErrorCommand() {
 }
 
-bool ErrorCommand::WriteQuery() {
+bool ErrorCommand::StartWriteQuery() {
   if (client_conn_->IsFirstCommand(shared_from_this())) {
     StartWriteReply();
   }

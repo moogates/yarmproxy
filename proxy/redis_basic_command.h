@@ -1,14 +1,10 @@
 #ifndef _YARMPROXY_REDIS_BASIC_COMMAND_H_
 #define _YARMPROXY_REDIS_BASIC_COMMAND_H_
 
-#include <boost/asio/ip/tcp.hpp>
-
 #include "command.h"
 #include "redis_protocol.h"
 
 namespace yarmproxy {
-
-using Endpoint = boost::asio::ip::tcp::endpoint;
 
 class RedisBasicCommand: public Command {
 public:
@@ -18,10 +14,14 @@ public:
   virtual ~RedisBasicCommand();
 
 private:
+  bool ContinueWriteQuery() override {
+    assert(false);
+    return false;
+  }
+
   void StartWriteReply() override;
   // void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
-
-  bool WriteQuery() override;
+  // bool WriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool) override;
 
@@ -33,8 +33,6 @@ private:
   }
 
   size_t ParseQuery(const char* cmd_line, size_t cmd_len);
-private:
-  Endpoint backend_endpoint_;
 };
 
 }

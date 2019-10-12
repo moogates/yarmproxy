@@ -15,8 +15,9 @@ namespace yarmproxy {
 RedisBasicCommand::RedisBasicCommand(std::shared_ptr<ClientConnection> client,
                                      const redis::BulkArray& ba)
     : Command(client, ProtocolType::REDIS) {
-  backend_endpoint_ = backend_locator()->Locate(
+  auto ep = backend_locator()->Locate(
       ba[1].payload_data(), ba[1].payload_size(), ProtocolType::REDIS);
+  replying_backend_ = backend_pool()->Allocate(ep);
 }
 
 RedisBasicCommand::~RedisBasicCommand() {
@@ -25,11 +26,18 @@ RedisBasicCommand::~RedisBasicCommand() {
   }
 }
 
+/*
 bool RedisBasicCommand::WriteQuery() {
-  assert(replying_backend_ == nullptr);
-  if (!replying_backend_) {
-    replying_backend_ = AllocateBackend(backend_endpoint_);
-    LOG_DEBUG << "RedisBasicCommand::WriteQuery backend=" << replying_backend_;
+  assert(replying_backend_);
+  update_check_query_recv_complete();
+
+  if (first_write_query_) {
+    replying_backend_->SetReadWriteCallback(
+        WeakBind(&Command::OnWriteQueryFinished, replying_backend_),
+        WeakBind(&Command::OnBackendReplyReceived, replying_backend_));
+    first_write_query_ = false;
+  } else {
+    assert(false);
   }
 
   auto buffer = client_conn_->buffer();
@@ -38,7 +46,7 @@ bool RedisBasicCommand::WriteQuery() {
                             buffer->unprocessed_bytes());
   return false;
 }
-
+*/
 /*
 void RedisBasicCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {

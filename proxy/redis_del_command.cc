@@ -131,10 +131,10 @@ bool RedisDelCommand::query_recv_complete() {
 }
 
 bool RedisDelCommand::ContinueWriteQuery() {
-  return WriteQuery();
+  return StartWriteQuery();
 }
 
-bool RedisDelCommand::WriteQuery() {
+bool RedisDelCommand::StartWriteQuery() {
   assert(init_write_query_);
   init_write_query_ = false;
   ActivateWaitingSubquery();

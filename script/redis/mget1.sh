@@ -4,9 +4,7 @@ query="*3\r\n\$4\r\nmget\r\n\$7\r\nkey2019\r\n\$7\r\nkey2018\r\n"
 query="*3\r\n\$4\r\nmget\r\n\$4\r\nkey1\r\n\$7\r\nkey2118\r\n"
 echo "--------- $query -----------"
 #printf "$query" | nc 127.0.0.1 6379
-printf "$query" | nc 127.0.0.1 11311
-echo
-
+printf "$query" | nc 127.0.0.1 11311 | grep "^\\$\|^*"
 exit
 
 query="*9\r\n\$4\r\nmget\r\n\$4\r\nkey1\r\n\$4\r\nkey1\r\n\$4\r\nkey2\r\n\$4\r\nkey3\r\n\$4\r\nkey1\r\n\$4\r\nkey1\r\n\$4\r\nkey2\r\n\$4\r\nkey3\r\n"

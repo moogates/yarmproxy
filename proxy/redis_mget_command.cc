@@ -102,7 +102,7 @@ RedisMgetCommand::~RedisMgetCommand() {
   LOG_DEBUG << "RedisMgetCommand " << this << " dtor, count=" << --redis_mget_cmd_count;
 }
 
-bool RedisMgetCommand::WriteQuery() {
+bool RedisMgetCommand::StartWriteQuery() {
   for(auto& query : subqueries_) {
     assert(!query->backend_);
     if (!query->backend_) {
@@ -112,7 +112,7 @@ bool RedisMgetCommand::WriteQuery() {
       waiting_reply_queue_.push_back(query->backend_);
       backend_subqueries_.emplace(query->backend_, query);
     }
-    LOG_DEBUG << "RedisMgetCommand " << this << " WriteQuery "
+    LOG_DEBUG << "RedisMgetCommand " << this << " StartWriteQuery"
               << " backend=" << query->backend_<< ", query=("
               << query->query_data_.substr(0, query->query_data_.size() - 2) << ")";
     query->backend_->WriteQuery(query->query_data_.data(),

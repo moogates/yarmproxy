@@ -16,9 +16,13 @@ public:
   virtual ~MemcBasicCommand();
 
 private:
-  void StartWriteReply() override;
+  bool StartWriteQuery() override;
+  bool ContinueWriteQuery() override {
+    assert(false);
+    return false;
+  }
 
-  bool WriteQuery() override;
+  void StartWriteReply() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool) override;
 

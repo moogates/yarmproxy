@@ -180,7 +180,7 @@ void ClientConnection::ProcessUnparsedQuery() {
     buffer_->update_parsed_bytes(parsed_bytes);
 
     active_cmd_queue_.push_back(command);
-    bool no_callback = command->WriteQuery(); // rename to StartWriteQuery
+    bool no_callback = command->StartWriteQuery(); // rename to StartWriteQuery
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
     // TODO : check the precondition very carefully

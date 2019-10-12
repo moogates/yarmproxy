@@ -21,29 +21,27 @@ StatsCommand::StatsCommand(std::shared_ptr<ClientConnection> client,
     reply_message_ = "+";
   }
   reply_message_.reserve(256);
-  reply_message_.append("start_since ")
+  reply_message_.append("start_since=")
       .append(std::to_string(g_stats_.start_since_))
-      .append("\tclient_conns ")
+      .append(",client_conns=")
       .append(std::to_string(g_stats_.client_conns_))
-      .append("\tbackend_conns ")
+      .append(",backend_conns=")
       .append(std::to_string(g_stats_.backend_conns_))
-      .append("\tbytes_from_clients ")
+      .append(",bytes_from_clients=")
       .append(std::to_string(g_stats_.bytes_from_clients_))
-      .append("\tbytes_to_clients ")
+      .append(",bytes_to_clients=")
       .append(std::to_string(g_stats_.bytes_to_clients_))
-      .append("\tbytes_from_backends ")
+      .append(",bytes_from_backends=")
       .append(std::to_string(g_stats_.bytes_from_backends_))
-      .append("\tbytes_to_backends ")
-      .append(std::to_string(g_stats_.bytes_to_backends_));
-  if (protocol == ProtocolType::MEMCACHED) {
-    reply_message_.append("\r\n");
-  }
+      .append(",bytes_to_backends=")
+      .append(std::to_string(g_stats_.bytes_to_backends_))
+      .append("\r\n");
 }
 
 StatsCommand::~StatsCommand() {
 }
 
-bool StatsCommand::WriteQuery() {
+bool StatsCommand::StartWriteQuery() {
   if (client_conn_->IsFirstCommand(shared_from_this())) {
     StartWriteReply();
   }
@@ -61,7 +59,7 @@ void StatsCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
   assert(backend == nullptr);
   LOG_DEBUG << "StatsCommand OnWriteReplyFinished, backend=" << backend
             << " ec=" << ErrorCodeString(ec);
-  client_conn_->Abort();
+  RotateReplyingBackend(false);
 }
 
 

@@ -10,8 +10,8 @@
 
 #include "worker_pool.h"
 #include "client_conn.h"
-#include "backend_locator.h"
 #include "backend_conn.h"
+#include "backend_locator.h"
 #include "backend_pool.h"
 #include "read_buffer.h"
 
@@ -24,19 +24,17 @@
 
 #include "redis_protocol.h"
 #include "redis_basic_command.h"
-#include "redis_set_command.h"
-#include "redis_mset_command.h"
-#include "redis_get_command.h"
-#include "redis_mget_command.h"
 #include "redis_del_command.h"
+#include "redis_get_command.h"
+#include "redis_mset_command.h"
+#include "redis_mget_command.h"
+#include "redis_set_command.h"
 
 namespace yarmproxy {
 
-std::atomic_int x_cmd_count;
 //存储命令 : <command name> <key> <flags> <exptime> <bytes>\r\n
 Command::Command(std::shared_ptr<ClientConnection> client, ProtocolType protocol)
-    : client_conn_(client)
-    , protocol_(protocol) {
+    : client_conn_(client), protocol_(protocol) {
 };
 
 Command::~Command() {
@@ -282,17 +280,29 @@ bool Command::BackendErrorRecoverable(std::shared_ptr<BackendConn>, ErrorCode) {
   return !has_written_some_reply_;
 }
 
-bool Command::WriteQuery() {
-  if (first_write_query_) {
-    replying_backend_->SetReadWriteCallback(
-        WeakBind(&Command::OnWriteQueryFinished, replying_backend_),
-        WeakBind(&Command::OnBackendReplyReceived, replying_backend_));
-    first_write_query_ = false;
-  }
+bool Command::StartWriteQuery() {
+  assert(replying_backend_);
+  check_query_recv_complete();
 
-  update_check_query_recv_complete();
+  assert(first_write_query_);
+  replying_backend_->SetReadWriteCallback(
+      WeakBind(&Command::OnWriteQueryFinished, replying_backend_),
+      WeakBind(&Command::OnBackendReplyReceived, replying_backend_));
+  first_write_query_ = false; // TODO : remove this var
 
-  if (replying_backend_ && replying_backend_->error()) {
+  LOG_DEBUG << "Command " << this << " StartWriteQuery backend=" << replying_backend_
+           << " ep=" << replying_backend_->remote_endpoint();
+  client_conn_->buffer()->inc_recycle_lock();
+  replying_backend_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
+                            client_conn_->buffer()->unprocessed_bytes());
+  return false;
+}
+
+bool Command::ContinueWriteQuery() {
+  check_query_recv_complete();
+  assert(!first_write_query_);
+
+  if (replying_backend_->error()) {
     if (!query_recv_complete()) {
       return true; // no callback, try read more query directly
     }
@@ -305,16 +315,9 @@ bool Command::WriteQuery() {
     return false;
   }
 
-  assert(replying_backend_);
-  LOG_DEBUG << "RedisSetCommand " << this << " WriteQuery data, backend=" << replying_backend_
-           << " ep=" << replying_backend_->remote_endpoint()
-           << " client_buff=" << client_conn_->buffer()
-           << " PRE-client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
-           << " bytes=" << client_conn_->buffer()->unprocessed_bytes();
-  auto buffer = client_conn_->buffer();
-  buffer->inc_recycle_lock();
-  replying_backend_->WriteQuery(buffer->unprocessed_data(),
-                            buffer->unprocessed_bytes());
+  client_conn_->buffer()->inc_recycle_lock();
+  replying_backend_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
+                                client_conn_->buffer()->unprocessed_bytes());
   return false;
 }
 

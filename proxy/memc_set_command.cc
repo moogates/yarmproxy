@@ -47,18 +47,14 @@ MemcSetCommand::~MemcSetCommand() {
   }
 }
 
-bool MemcSetCommand::ContinueWriteQuery() {
-  return WriteQuery();
-}
-
-void MemcSetCommand::update_check_query_recv_complete() {
+void MemcSetCommand::check_query_recv_complete() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
     query_recv_complete_ = true;
   }
 }
 /*
 bool MemcSetCommand::WriteQuery() {
-  update_check_query_recv_complete();
+  check_query_recv_complete();
 
   if (replying_backend_ && replying_backend_->error()) {
     LOG_DEBUG << "WriteQuery backend_error, query_recv_complete="

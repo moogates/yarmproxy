@@ -6,7 +6,7 @@ gunzip -c $data_files >  shuffle.data.tmp
 driver=nc
 driver=../yarmnc
 
-cat shuffle.data.tmp | $driver 127.0.0.1 11311 | grep -v "^00"
+cat shuffle.data.tmp | $driver 127.0.0.1 11311 | grep -v "^00" > shuffle.result.tmp
 #cat shuffle.data.tmp | nc 127.0.0.1 11311
 #cat shuffle.data.tmp | $driver 127.0.0.1 6379 | grep -v "^00"
 #cat shuffle.data.tmp | nc 127.0.0.1 6379

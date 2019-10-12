@@ -13,7 +13,7 @@ public:
   virtual ~ErrorCommand();
 
 private:
-  bool WriteQuery() override;
+  bool StartWriteQuery() override;
   void StartWriteReply() override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                               ErrorCode ec) override {

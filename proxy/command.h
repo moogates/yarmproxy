@@ -30,22 +30,21 @@ protected: // TODO : best practice ?
   Command(std::shared_ptr<ClientConnection> client, ProtocolType protocol);
 public:
   virtual ~Command();
-  virtual bool WriteQuery(); // TODO : split into StartWriteQuery & ContinueWriteQuery
-  virtual bool ContinueWriteQuery() {
-    assert(false);
-    return false;
-  }
-  virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+  virtual bool StartWriteQuery(); // TODO : split into StartWriteQuery & ContinueWriteQuery
+  virtual bool ContinueWriteQuery();
+  virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
+                                      ErrorCode ec);
   virtual void StartWriteReply() = 0;
 
-  virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
-  virtual void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec);
+  virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
+                                    ErrorCode ec);
+  virtual void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
+                                    ErrorCode ec);
 
   virtual bool query_parsing_complete() {
     return true;
   }
-
-  virtual void update_check_query_recv_complete() {
+  virtual void check_query_recv_complete() {
   }
   virtual bool query_recv_complete() {
     return true;
@@ -59,7 +58,7 @@ protected:
   BackendConnPool* backend_pool();
   std::shared_ptr<BackendLocator> backend_locator();
 
-  std::shared_ptr<BackendConn> AllocateBackend(const Endpoint& ep);
+  std::shared_ptr<BackendConn> AllocateBackend(const Endpoint& ep); // remove it
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
   // void OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   virtual void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec);

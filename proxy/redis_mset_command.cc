@@ -125,16 +125,63 @@ bool RedisMsetCommand::query_recv_complete() {
 
 bool RedisMsetCommand::ContinueWriteQuery() {
   assert(!init_write_query_);
-  return WriteQuery();
-}
-
-bool RedisMsetCommand::WriteQuery() {
   assert(tail_query_);
+
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
     LOG_DEBUG << "RedisMsetCommand WriteQuery query_recv_complete_ is true";
     tail_query_->query_recv_complete_ = true;
   }
 
+  //if (tail_query_->backend_error_ || // TODO : connect error if not enough. mset has the same bug
+  //    (tail_query_->backend_ && tail_query_->backend_->closed())) {
+    if (tail_query_->backend_ && tail_query_->backend_->error()) {
+      if (tail_query_->query_recv_complete_) {
+        if (unparsed_bulks_ == 0 &&
+            waiting_subqueries_.size() == 0 &&
+            pending_subqueries_.size() == 1) {
+          // should write reply in this subquery
+          if (client_conn_->IsFirstCommand(shared_from_this())) {
+            LOG_DEBUG << "last pending, try write reply";
+            TryWriteReply(tail_query_->backend_);
+          } else {
+            LOG_DEBUG << "last pending, wait to write reply";
+            replying_backend_ = tail_query_->backend_;
+          }
+        } else {
+          // not last pending, don't write reply in this subquery
+          pending_subqueries_.erase(tail_query_->backend_);
+          backend_pool()->Release(tail_query_->backend_);
+        }
+        return false;
+      } else {
+        return true; // no callback, try read more query directly
+      }
+    }
+
+    LOG_DEBUG << "mset ContinueWriteQuery tail_query_ phase " << tail_query_->phase_
+            << " backend=" << tail_query_->backend_
+            << " query=" << tail_query_
+            << " cmd=" << this
+            << " bytes=" << client_conn_->buffer()->unprocessed_bytes();
+
+    assert(tail_query_->phase_ == Subquery::WAITING_MORE_QUERY ||
+           tail_query_->phase_ == Subquery::READING_MORE_QUERY);
+    if (tail_query_->phase_ == Subquery::WAITING_MORE_QUERY) {
+      tail_query_->phase_ = Subquery::READING_MORE_QUERY;
+    }
+    client_conn_->buffer()->inc_recycle_lock();
+    tail_query_->backend_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
+        client_conn_->buffer()->unprocessed_bytes());
+    return false;
+}
+
+bool RedisMsetCommand::StartWriteQuery() {
+  assert(tail_query_);
+  if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
+    LOG_DEBUG << "RedisMsetCommand WriteQuery query_recv_complete_ is true";
+    tail_query_->query_recv_complete_ = true;
+  }
+  assert(init_write_query_);
   if (!init_write_query_) {
   //if (tail_query_->backend_error_ || // TODO : connect error if not enough. mset has the same bug
   //    (tail_query_->backend_ && tail_query_->backend_->closed())) {

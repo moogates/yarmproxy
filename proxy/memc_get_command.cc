@@ -61,7 +61,7 @@ void MemcGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
   }
 }
 
-bool MemcGetCommand::WriteQuery() {
+bool MemcGetCommand::StartWriteQuery() {
   for(auto& query : subqueries_) {
     assert(!query->backend_);
     query->backend_ = AllocateBackend(query->backend_endpoint_);
