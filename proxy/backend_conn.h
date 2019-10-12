@@ -43,7 +43,7 @@ private:
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
 public:
-  void Close();
+  void Abort();
   void Reset();
   ReadBuffer* buffer() {
     return buffer_;
@@ -88,7 +88,7 @@ private:
   bool reply_recv_complete_ = false;
   bool no_recycle_          = false;
 
-  bool closed_ = false;
+  bool aborted_ = false;
 
   boost::asio::steady_timer write_timer_;
   bool write_timer_canceled_ = false;

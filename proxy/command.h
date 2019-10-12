@@ -23,7 +23,7 @@ typedef std::function<void(ErrorCode ec)> WriteReplyCallback;
 
 class Command : public std::enable_shared_from_this<Command> {
 public:
-  static int CreateCommand(std::shared_ptr<ClientConnection> client,
+  static size_t CreateCommand(std::shared_ptr<ClientConnection> client,
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* cmd);
 protected: // TODO : best practice ?

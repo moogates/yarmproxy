@@ -35,9 +35,12 @@ BackendConn::~BackendConn() {
   delete buffer_;
 }
 
-void BackendConn::Close() {
-  LOG_DEBUG << "BackendConn Close, backend=" << this;
-  closed_ = true;
+void BackendConn::Abort() {
+  if (aborted_) {
+    return;
+  }
+  LOG_DEBUG << "BackendConn Abort, backend=" << this;
+  aborted_ = true;
   no_recycle_  = true;
   is_reading_reply_ = false;
 
@@ -88,7 +91,7 @@ void BackendConn::TryReadMoreReply() {
 
 void BackendConn::WriteQuery(const char* data, size_t bytes) {
   if (!socket_.is_open()) {
-    assert(!closed_);
+    assert(!aborted_);
     UpdateTimer(write_timer_, ErrorCode::E_BACKEND_CONNECT_TIMEOUT);
     write_timer_canceled_ = false;
 
@@ -107,7 +110,7 @@ void BackendConn::WriteQuery(const char* data, size_t bytes) {
 
 void BackendConn::HandleWrite(const char * data, const size_t bytes,
     const boost::system::error_code& error, size_t bytes_transferred) {
-  if (closed_) {
+  if (aborted_) {
     return;
   }
   write_timer_.cancel();
@@ -139,7 +142,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes,
 
 void BackendConn::HandleRead(const boost::system::error_code& error,
                              size_t bytes_transferred) {
-  if (closed_) {
+  if (aborted_) {
     return;
   }
   read_timer_.cancel();
@@ -166,7 +169,7 @@ void BackendConn::HandleRead(const boost::system::error_code& error,
 
 void BackendConn::HandleConnect(const char * data, size_t bytes,
                                 const boost::system::error_code& connect_ec) {
-  if (closed_) {
+  if (aborted_) {
     return;
   }
   write_timer_.cancel();
@@ -207,7 +210,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
 // TODO : connection_base
 void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeout_code) {
-  if (closed_) {
+  if (aborted_) {
     LOG_INFO << "BackendConn " << this << " ep=" << remote_endpoint()
              << " timeout after closed."
              << " code=" << ErrorCodeString(timeout_code);
@@ -227,21 +230,16 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeo
 
   switch(timeout_code) {
   case ErrorCode::E_BACKEND_CONNECT_TIMEOUT:
-    if (!write_timer_canceled_) {
-      query_sent_callback_(timeout_code);
-      Close();
-    }
-    break;
   case ErrorCode::E_BACKEND_WRITE_TIMEOUT:
     if (!write_timer_canceled_) {
       query_sent_callback_(timeout_code);
-      Close();
+      Abort();
     }
-      break;
+    break;
   case ErrorCode::E_BACKEND_READ_TIMEOUT:
     if (!read_timer_canceled_) {
       reply_received_callback_(timeout_code);
-      Close();
+      Abort();
     }
     break;
   default:

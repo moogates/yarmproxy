@@ -50,10 +50,9 @@ void ClientConnection::UpdateTimer() {
   // TODO : 细致的超时处理, 包括connect/read/write/command
   ++timer_ref_count_;
 
-  int timeout = active_cmd_queue_.empty() && 
-      buffer_->unparsed_received_bytes() == 0 ?
-          Config::Instance().client_idle_timeout() :
-          (Config::Instance().command_exec_timeout() + 10);
+  int timeout = buffer_->unparsed_received_bytes() == 0 ?
+                  Config::Instance().client_idle_timeout() :
+                  (Config::Instance().command_exec_timeout() + 10);
   size_t canceled = timer_.expires_after(std::chrono::milliseconds(timeout));
   LOG_DEBUG << "client UpdateTimer timeout=" << timeout
            << " canceled=" << canceled;
@@ -69,11 +68,7 @@ void ClientConnection::UpdateTimer() {
 void ClientConnection::RevokeTimer() {
   assert(timer_ref_count_ > 0);
   if (--timer_ref_count_ == 0) {
-    try {
     timer_.cancel();
-    } catch(...) {
-      abort();
-    }
   }
 }
 
@@ -92,34 +87,25 @@ void ClientConnection::StartRead() {
 }
 
 void ClientConnection::TryReadMoreQuery(const char* caller) {
-  // TODO : checking preconditions
   LOG_DEBUG << "client TryReadMoreQuery caller=" << caller
-           << " buffer_lock=" << buffer_->recycle_lock_count();
+       << " buffer_lock=" << buffer_->recycle_lock_count()
+       << " is_reading_query=" << is_reading_query_
+       << " has_much_free_space=" << buffer_->has_much_free_space()
+       << " free_space=" << buffer_->free_space_size();
+  if (is_reading_query_ || !buffer_->has_much_free_space()) {
+    return;
+  }
   AsyncRead();
 }
 
 void ClientConnection::AsyncRead() {
-  if (is_reading_query_) {
-    LOG_DEBUG << "client AsyncRead busy, do nothing";
-    return;
-  }
-  if (buffer_->free_space_size() < 512) {
-    LOG_DEBUG << "client AsyncRead no free space, do nothing"
-               << " lock=" << buffer_->recycle_lock_count()
-               << " received_bytes=" << buffer_->received_bytes();
-    return;
-  }
-  LOG_DEBUG << "client AsyncRead begin, lock=" << buffer_->recycle_lock_count()
-            << " received_unprocess_bytes=" << buffer_->received_bytes();
-
   is_reading_query_ = true;
   buffer_->inc_recycle_lock();
 
-  LOG_DEBUG << "ClientConnection::AsyncRead begin, free_space_size="
-            << buffer_->free_space_size()
-            << " buffer=" << buffer_;
+  LOG_DEBUG << "client AsyncRead, buffer=" << buffer_
+            << " free_space=" << buffer_->free_space_size()
+            << " lock=" << buffer_->recycle_lock_count();
 
-  assert(buffer_->recycle_locked());
   UpdateTimer();
   socket_.async_read_some(boost::asio::buffer(
       buffer_->free_space_begin(), buffer_->free_space_size()),
@@ -129,21 +115,19 @@ void ClientConnection::AsyncRead() {
 
 void ClientConnection::RotateReplyingCommand() {
   if (active_cmd_queue_.size() == 1) {
-    LOG_DEBUG << "client RotateReplyingCommand when all commands processed";
+    // read before pop to avoid deref
     TryReadMoreQuery("client_conn_5");
   }
 
-  LOG_DEBUG << "RotateReplyingCommand old_command=" << active_cmd_queue_.front();
   active_cmd_queue_.pop_front();
+
   if (!active_cmd_queue_.empty()) {
-    // active_cmd_queue_.front()->StartWriteReply();
-    auto& next = active_cmd_queue_.front();
-    next->StartWriteReply();
+    active_cmd_queue_.front()->StartWriteReply();
 
     if (!active_cmd_queue_.back()->query_recv_complete()) {
       if (!buffer_->recycle_locked()) {
-        // TODO : reading next query might be interruptted by previous lock,
-        // so try to restart the reading here
+        // TODO : reading next query might be blocked by previous
+        // command's lock, so try to restart the reading here
         TryReadMoreQuery("client_conn_1");
       }
     } else {
@@ -178,48 +162,37 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
-bool ClientConnection::ProcessUnparsedQuery() {
+void ClientConnection::ProcessUnparsedQuery() {
   // TODO : pipeline中多个请求的时序问题,即后面的command可能先
   // 被执行. 参考 del_pipeline_1.sh
-  static const size_t PIPELINE_ACTIVE_LIMIT = 4;
+  static const size_t PIPELINE_ACTIVE_LIMIT = 4; // TODO : config
   while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
         && buffer_->unparsed_received_bytes() > 0) {
     std::shared_ptr<Command> command;
-    int parsed_bytes = Command::CreateCommand(shared_from_this(),
+    size_t parsed_bytes = Command::CreateCommand(shared_from_this(),
                buffer_->unprocessed_data(), buffer_->received_bytes(),
                &command);
 
-    if (parsed_bytes < 0) {
-      Abort();
-      return false;
-    }  else if (parsed_bytes == 0) {
-      if (buffer_->unparsed_received_bytes() > 2048) {
-        LOG_WARN << "Too long unparsable command line";
-        // Abort(); // TODO : test it
-        return false;
-      }
+    if (parsed_bytes == 0) {
       TryReadMoreQuery("client_conn_2");
-      return true;
-    } else {
-      buffer_->update_parsed_bytes(parsed_bytes);
+      break;
+    }
+    buffer_->update_parsed_bytes(parsed_bytes);
 
-      active_cmd_queue_.push_back(command);
-      bool no_callback = command->WriteQuery(); // rename to StartWriteQuery
-      buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
+    active_cmd_queue_.push_back(command);
+    bool no_callback = command->WriteQuery(); // rename to StartWriteQuery
+    buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
-      // TODO : check the precondition very carefully
-      if (buffer_->parsed_unreceived_bytes() > 0 ||
-          !command->query_parsing_complete()) {
-        if (no_callback) {
-          TryReadMoreQuery("client_conn_3");
-        }
-        LOG_DEBUG << "ProcessUnparsedQuery break. parsed_bytes=" << parsed_bytes;
-        break;
+    // TODO : check the precondition very carefully
+    if (buffer_->parsed_unreceived_bytes() > 0 ||
+        !command->query_parsing_complete()) {
+      if (no_callback) {
+        TryReadMoreQuery("client_conn_3");
       }
+      LOG_DEBUG << "ProcessUnparsedQuery break. parsed_bytes=" << parsed_bytes;
+      break;
     }
   }
-  // TryReadMoreQuery();
-  return true;
 }
 
 void ClientConnection::HandleRead(const boost::system::error_code& error,
@@ -254,30 +227,25 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
     back_cmd = active_cmd_queue_.back();
   }
 
-//if (!active_cmd_queue_.empty() &&
-//    !active_cmd_queue_.back()->query_recv_complete()) {
   if (back_cmd && !back_cmd->query_recv_complete()) {
-    LOG_DEBUG << "client ParseUnparsedPart";
     if (!back_cmd->ParseUnparsedPart()) {
-      LOG_DEBUG << "client ParseUnparsedPart Abort";
+      LOG_DEBUG << "client ParseUnparsedPart error";
       Abort();
       return;
     }
   }
 
-  // TODO :  add var back_cmd
   if (buffer_->parsed_unprocessed_bytes() > 0) {
-    // assert(!active_cmd_queue_.empty());
     assert(back_cmd);
 
-    // TODO : split to WriteNewParsedQuery()/WriteEarlierParsedQuery()
+    // TODO : split to StartWriteQuery()/WriteEarlierParsedQuery()
     bool no_callback = back_cmd->ContinueWriteQuery();
-    // bool no_callback = back_cmd->WriteQuery();
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
-      // TODO : 这里不继续read, 而是在ContinueWriteQuery的回调函数里面才继续read
-      // (or ContinueWriteQuery has no callback). 理论上这并不是最佳方式
+      // 这里不继续read, 而是在ContinueWriteQuery的回调函数里面才
+      // 继续read (or read directly if ContinueWriteQuery has no
+      // callback). 理论上这并不是最佳方式.
       if (no_callback) {
         TryReadMoreQuery("client_conn_4");
       }
@@ -294,7 +262,6 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
       return;
     }
   }
-
 
   if (!back_cmd || back_cmd->query_parsing_complete()) {
     ProcessUnparsedQuery();

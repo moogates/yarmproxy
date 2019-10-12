@@ -111,13 +111,7 @@ RedisMsetCommand::~RedisMsetCommand() {
            << " pending_subqueries_.size=" << pending_subqueries_.size();
 
   if (pending_subqueries_.size() != 1) {
-    LOG_ERROR << "RedisMsetCommand not aborted bad pending size."
-        << " client=" << client_conn_
-        << " aborted=" << client_conn_->aborted()
-        << " pending_subqueries_.size=" << pending_subqueries_.size();
-    if (!client_conn_->aborted()) {
-       assert(false);
-    }
+    assert(client_conn_->aborted());
   }
 
   for(auto& it : pending_subqueries_) {

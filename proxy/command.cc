@@ -51,16 +51,23 @@ std::shared_ptr<BackendLocator> Command::backend_locator() {
 }
 
 
-// 0 : ok, 数据不够解析
-// >0 : ok, 解析成功，返回已解析的字节数
-// <0 : error, 未知命令
-int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
+// return : bytes parsed, 0 if no adequate data to parse
+size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* command) {
   const char * p = static_cast<const char *>(memchr(buf, '\n', size));
   if (p == nullptr) {
-    LOG_DEBUG << "CreateCommand need more data";
-    return 0;
+    if (size > 2048) {
+      std::string err_desc(*buf == '*' ? "-" : "");
+      err_desc.append("ERR Too long unparsable data:[")
+              .append(std::string(buf, size))
+              .append("]\r\n");
+      command->reset(new ErrorCommand(client, std::move(err_desc)));
+      return size;
+    } else {
+      LOG_DEBUG << "CreateCommand need more data";
+      return 0;
+    }
   }
 
   if (strncmp(buf, "*", 1) == 0) {
@@ -68,7 +75,11 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     if (ba.total_bulks() == 0) {
       LOG_WARN << "CreateCommand data_size=" << size
                << " bad_data=[" << std::string(buf, size) << "]";
-      return -1;
+
+      command->reset(new ErrorCommand(client,
+          std::string("-ERR Bulk Array Parse Error:[") +
+              std::string(buf, size) + "]\r\n"));
+      return size;
     }
     if (ba.present_bulks() == 0 || ba[0].absent_size() > 0) {
       return 0;
@@ -169,7 +180,10 @@ int Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     command->reset(new MemcachedSetCommand(client, buf, cmd_line_bytes,
                                            &body_bytes));
     if (body_bytes <= 2) {
-      return -1;
+      command->reset(new ErrorCommand(client,
+          std::string("ERR Protocol Error:[") +
+              std::string(buf, cmd_line_bytes) + "]\r\n"));
+      return cmd_line_bytes;
     }
     return cmd_line_bytes + body_bytes;
   } else if (strncmp(buf, "delete ", sizeof("delete ") - 1) == 0 ||
