@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_MEMCACHED_GET_COMMAND_H_
-#define _YARMPROXY_MEMCACHED_GET_COMMAND_H_
+#ifndef _YARMPROXY_MEMC_GET_COMMAND_H_
+#define _YARMPROXY_MEMC_GET_COMMAND_H_
 
 #include <map>
 #include <set>
@@ -8,12 +8,12 @@
 
 namespace yarmproxy {
 
-class MemcachedGetCommand : public Command {
+class MemcGetCommand : public Command {
 public:
-  MemcachedGetCommand(std::shared_ptr<ClientConnection> client,
+  MemcGetCommand(std::shared_ptr<ClientConnection> client,
                      const char* cmd_data, size_t cmd_size);
 
-  virtual ~MemcachedGetCommand();
+  virtual ~MemcGetCommand();
 
   bool WriteQuery() override;
 
@@ -56,5 +56,5 @@ private:
 
 }
 
-#endif  // _YARMPROXY_MEMCACHED_GET_COMMAND_H_
+#endif  // _YARMPROXY_MEMC_GET_COMMAND_H_
 

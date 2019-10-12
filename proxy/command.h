@@ -63,7 +63,7 @@ protected:
 
   const std::string& ErrorReply(ErrorCode ec);
   static const std::string& RedisErrorReply(ErrorCode ec);
-  static const std::string& MemcachedErrorReply(ErrorCode ec);
+  static const std::string& MemcErrorReply(ErrorCode ec);
 
   typedef void(Command::*BackendCallback)(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   WriteReplyCallback WeakBind(BackendCallback mem_func, std::shared_ptr<BackendConn> backend) {

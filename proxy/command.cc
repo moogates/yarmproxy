@@ -18,9 +18,9 @@
 #include "error_command.h"
 #include "stats_command.h"
 
-#include "mc_basic_command.h"
-#include "mc_get_command.h"
-#include "mc_set_command.h"
+#include "memc_basic_command.h"
+#include "memc_get_command.h"
+#include "memc_set_command.h"
 
 #include "redis_protocol.h"
 #include "redis_basic_command.h"
@@ -49,7 +49,6 @@ BackendConnPool* Command::backend_pool() {
 std::shared_ptr<BackendLocator> Command::backend_locator() {
   return client_conn_->context().backend_locator_;
 }
-
 
 // return : bytes parsed, 0 if no adequate data to parse
 size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
@@ -168,7 +167,7 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   if (strncmp(buf, "get ", sizeof("get ") - 1) == 0 ||
       strncmp(buf, "gets ", sizeof("gets ") - 1) == 0) {
     // TODO : strict protocol check
-    command->reset(new MemcachedGetCommand(client, buf, cmd_line_bytes));
+    command->reset(new MemcGetCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;
   } else if (strncmp(buf, "set ", sizeof("set ") - 1) == 0 ||
              strncmp(buf, "add ", sizeof("add ") - 1) == 0 ||
@@ -177,7 +176,7 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
              strncmp(buf, "prepend ", sizeof("prepend ") - 1) == 0 ||
              strncmp(buf, "cas", sizeof("cas ") - 1) == 0) {
     size_t body_bytes = 0;
-    command->reset(new MemcachedSetCommand(client, buf, cmd_line_bytes,
+    command->reset(new MemcSetCommand(client, buf, cmd_line_bytes,
                                            &body_bytes));
     if (body_bytes <= 2) {
       command->reset(new ErrorCommand(client,
@@ -192,7 +191,7 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       strncmp(buf, "incr ", sizeof("incr ") - 1) == 0 ||
       strncmp(buf, "touch ", sizeof("touch ") - 1) == 0) {
     // TODO : strict protocol check
-    command->reset(new MemcachedBasicCommand(client, buf, cmd_line_bytes));
+    command->reset(new MemcBasicCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;
   } else if (strncmp(buf, "yarmstats\r", sizeof("yarmstats\r") - 1) == 0) {
     command->reset(new StatsCommand(client, ProtocolType::MEMCACHED));
@@ -216,7 +215,7 @@ std::shared_ptr<BackendConn> Command::AllocateBackend(const Endpoint& ep) {
 }
 
 // TODO : merge
-const std::string& Command::MemcachedErrorReply(ErrorCode ec) {
+const std::string& Command::MemcErrorReply(ErrorCode ec) {
   static const std::string kErrorConnect("ERROR Backend Connect Error\r\n");
   static const std::string kErrorWriteQuery("ERROR Backend Write Error\r\n");
   static const std::string kErrorReadReply("ERROR Backend Read Error\r\n");
@@ -390,7 +389,7 @@ const std::string& Command::ErrorReply(ErrorCode ec) {
     return RedisErrorReply(ec);
   case ProtocolType::MEMCACHED:
   default:
-    return MemcachedErrorReply(ec);
+    return MemcErrorReply(ec);
   }
 }
 void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
