@@ -44,7 +44,6 @@ private:
   bool init_write_query_ = true; // TODO : remove it
   std::map<Endpoint, std::shared_ptr<DelSubquery>> waiting_subqueries_;
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<DelSubquery>> pending_subqueries_;
-  std::shared_ptr<BackendConn> replying_backend_;
 
   int total_del_count_ = 0;
 private:

@@ -27,8 +27,8 @@ size_t MemcSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   const char *q = p;
   while(*(++q) != ' ');
 
-  backend_endpoint_ = backend_locator()->Locate(p, q - p,
-                          ProtocolType::MEMCACHED);
+  auto ep = backend_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
+  replying_backend_ = backend_pool()->Allocate(ep);
 
   p = cmd_data + cmd_len - 2;
   while(*(p - 1) != ' ') {
@@ -42,8 +42,8 @@ size_t MemcSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
 }
 
 MemcSetCommand::~MemcSetCommand() {
-  if (backend_conn_) {
-    backend_pool()->Release(backend_conn_);
+  if (replying_backend_) {
+    backend_pool()->Release(replying_backend_);
   }
 }
 
@@ -51,42 +51,42 @@ bool MemcSetCommand::ContinueWriteQuery() {
   return WriteQuery();
 }
 
-bool MemcSetCommand::WriteQuery() {
+void MemcSetCommand::update_check_query_recv_complete() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
     query_recv_complete_ = true;
   }
+}
+/*
+bool MemcSetCommand::WriteQuery() {
+  update_check_query_recv_complete();
 
-  if (backend_conn_ && backend_conn_->error()) {
+  if (replying_backend_ && replying_backend_->error()) {
     LOG_DEBUG << "WriteQuery backend_error, query_recv_complete="
              << query_recv_complete();
-    if (query_recv_complete()) {
-      if (client_conn_->IsFirstCommand(shared_from_this())) {
-        LOG_DEBUG << "RedisSetCommand WriteQuery backend_error write reply";
-        // query_recv_complete完毕才可以write reply, 因而这里backend一定尚未finished()
-        assert(!backend_conn_->finished());
-        TryWriteReply(backend_conn_);
-      } else {
-        LOG_DEBUG << "RedisSetCommand WriteQuery backend_error wait to write reply";
-      }
-    } else {
+    if (!query_recv_complete()) {
       LOG_DEBUG << "RedisSetCommand WriteQuery backend_error read more query";
       return true; // no callback, try read more query directly
+    }
+    if (client_conn_->IsFirstCommand(shared_from_this())) {
+      // write reply
+      TryWriteReply(replying_backend_);
+    } else {
+      // wait to write reply
     }
     return false;
   }
 
-  if (!backend_conn_) {
-    backend_conn_ = AllocateBackend(backend_endpoint_);
-    LOG_DEBUG << "MemcSetCommand::WriteQuery backend=" << backend_conn_;
+  if (!replying_backend_) {
+    replying_backend_ = AllocateBackend(backend_endpoint_);
   }
 
   auto buffer = client_conn_->buffer();
   buffer->inc_recycle_lock();
-  backend_conn_->WriteQuery(buffer->unprocessed_data(),
+  replying_backend_->WriteQuery(buffer->unprocessed_data(),
                             buffer->unprocessed_bytes());
   return false;
 }
-
+*/
 /*
 void MemcSetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   auto& err_reply(MemcErrorReply(ec));
@@ -110,7 +110,7 @@ void MemcSetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> back
 void MemcSetCommand::StartWriteReply() {
   // TODO : report error & rotate if connection refused
   if (query_recv_complete_) {
-    TryWriteReply(backend_conn_);
+    TryWriteReply(replying_backend_);
   }
 }
 
@@ -124,15 +124,15 @@ bool MemcSetCommand::query_recv_complete() {
 }
 
 bool MemcSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
-  assert(backend_conn_ == backend);
-  const char * entry = backend_conn_->buffer()->unparsed_data();
+  assert(replying_backend_== backend);
+  const char * entry = replying_backend_->buffer()->unparsed_data();
   const char * p = static_cast<const char *>(memchr(entry, '\n',
-                       backend_conn_->buffer()->unparsed_bytes()));
+                       replying_backend_->buffer()->unparsed_bytes()));
   if (p == nullptr) {
     return true;
   }
 
-  backend_conn_->buffer()->update_parsed_bytes(p - entry + 1);
+  replying_backend_->buffer()->update_parsed_bytes(p - entry + 1);
   backend->set_reply_recv_complete();
   return true;
 }

@@ -30,7 +30,7 @@ protected: // TODO : best practice ?
   Command(std::shared_ptr<ClientConnection> client, ProtocolType protocol);
 public:
   virtual ~Command();
-  virtual bool WriteQuery() = 0; // TODO : split into StartWriteQuery & ContinueWriteQuery
+  virtual bool WriteQuery(); // TODO : split into StartWriteQuery & ContinueWriteQuery
   virtual bool ContinueWriteQuery() {
     assert(false);
     return false;
@@ -43,6 +43,9 @@ public:
 
   virtual bool query_parsing_complete() {
     return true;
+  }
+
+  virtual void update_check_query_recv_complete() {
   }
   virtual bool query_recv_complete() {
     return true;
@@ -83,8 +86,10 @@ private:
   virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
 
 protected:
+  std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<ClientConnection> client_conn_;
   bool has_written_some_reply_ = false;
+  bool first_write_query_ = true;
 private:
   bool is_writing_reply_ = false;
   ProtocolType protocol_;

@@ -278,9 +278,46 @@ const std::string& Command::RedisErrorReply(ErrorCode ec) {
   }
 }
 
-bool Command::BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+bool Command::BackendErrorRecoverable(std::shared_ptr<BackendConn>, ErrorCode) {
   return !has_written_some_reply_;
 }
+
+bool Command::WriteQuery() {
+  if (first_write_query_) {
+    replying_backend_->SetReadWriteCallback(
+        WeakBind(&Command::OnWriteQueryFinished, replying_backend_),
+        WeakBind(&Command::OnBackendReplyReceived, replying_backend_));
+    first_write_query_ = false;
+  }
+
+  update_check_query_recv_complete();
+
+  if (replying_backend_ && replying_backend_->error()) {
+    if (!query_recv_complete()) {
+      return true; // no callback, try read more query directly
+    }
+    if (client_conn_->IsFirstCommand(shared_from_this())) {
+      // write reply
+      TryWriteReply(replying_backend_);
+    } else {
+      // wait to write reply
+    }
+    return false;
+  }
+
+  assert(replying_backend_);
+  LOG_DEBUG << "RedisSetCommand " << this << " WriteQuery data, backend=" << replying_backend_
+           << " ep=" << replying_backend_->remote_endpoint()
+           << " client_buff=" << client_conn_->buffer()
+           << " PRE-client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
+           << " bytes=" << client_conn_->buffer()->unprocessed_bytes();
+  auto buffer = client_conn_->buffer();
+  buffer->inc_recycle_lock();
+  replying_backend_->WriteQuery(buffer->unprocessed_data(),
+                            buffer->unprocessed_bytes());
+  return false;
+}
+
 
 void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) {
@@ -330,7 +367,7 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
 
 void Command::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {
-  // assert(backend == backend_conn_);
+  // assert(backend == replying_backend_);
   if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
     ec = ErrorCode::E_PROTOCOL;
   }

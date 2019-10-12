@@ -41,7 +41,6 @@ private:
   const char* cmd_data_;
   size_t cmd_bytes_;
   Endpoint backend_endpoint_;
-  std::shared_ptr<BackendConn> backend_conn_;
 };
 
 }

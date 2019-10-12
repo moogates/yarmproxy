@@ -29,7 +29,7 @@ struct RedisMgetCommand::BackendQuery {
 
   size_t key_count_;
   size_t reply_absent_bulks_ = 0;
-  std::shared_ptr<BackendConn> backend_conn_;
+  std::shared_ptr<BackendConn> backend_;
 };
 
 bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
@@ -92,11 +92,11 @@ RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
 
 RedisMgetCommand::~RedisMgetCommand() {
   for(auto& query : subqueries_) {
-    if (!query->backend_conn_) {
+    if (!query->backend_) {
       LOG_DEBUG << "RedisMgetCommand dtor Release null backend";
     } else {
       LOG_DEBUG << "RedisMgetCommand dtor Release backend";
-      backend_pool()->Release(query->backend_conn_);
+      backend_pool()->Release(query->backend_);
     }
   }
   LOG_DEBUG << "RedisMgetCommand " << this << " dtor, count=" << --redis_mget_cmd_count;
@@ -104,18 +104,18 @@ RedisMgetCommand::~RedisMgetCommand() {
 
 bool RedisMgetCommand::WriteQuery() {
   for(auto& query : subqueries_) {
-    assert(!query->backend_conn_);
-    if (!query->backend_conn_) {
-      query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
+    assert(!query->backend_);
+    if (!query->backend_) {
+      query->backend_= AllocateBackend(query->backend_endpoint_);
 
       // redis mget special
-      waiting_reply_queue_.push_back(query->backend_conn_);
-      backend_subqueries_.emplace(query->backend_conn_, query);
+      waiting_reply_queue_.push_back(query->backend_);
+      backend_subqueries_.emplace(query->backend_, query);
     }
     LOG_DEBUG << "RedisMgetCommand " << this << " WriteQuery "
-              << " backend=" << query->backend_conn_ << ", query=("
+              << " backend=" << query->backend_<< ", query=("
               << query->query_data_.substr(0, query->query_data_.size() - 2) << ")";
-    query->backend_conn_->WriteQuery(query->query_data_.data(),
+    query->backend_->WriteQuery(query->query_data_.data(),
                                      query->query_data_.size());
   }
   if (client_conn_->IsFirstCommand(shared_from_this())) {

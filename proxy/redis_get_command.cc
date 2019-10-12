@@ -23,22 +23,22 @@ RedisGetCommand::RedisGetCommand(std::shared_ptr<ClientConnection> client,
 }
 
 RedisGetCommand::~RedisGetCommand() {
-  if (backend_conn_) {
-    backend_pool()->Release(backend_conn_);
+  if (replying_backend_) {
+    backend_pool()->Release(replying_backend_);
   }
 }
 
 bool RedisGetCommand::WriteQuery() {
-  assert(!backend_conn_);
-  backend_conn_ = AllocateBackend(backend_endpoint_);
+  assert(!replying_backend_);
+  replying_backend_ = AllocateBackend(backend_endpoint_);
   client_conn_->buffer()->inc_recycle_lock();
-  backend_conn_->WriteQuery(cmd_data_, cmd_bytes_);
+  replying_backend_->WriteQuery(cmd_data_, cmd_bytes_);
   return false;
 }
 
 void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
         ErrorCode ec) {
-  assert(backend == backend_conn_);
+  assert(backend == replying_backend_);
   if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
     ec = ErrorCode::E_PROTOCOL;
   }
@@ -65,7 +65,7 @@ void RedisGetCommand::RotateReplyingBackend(bool) {
 }
 
 void RedisGetCommand::StartWriteReply() {
-  TryWriteReply(backend_conn_);
+  TryWriteReply(replying_backend_);
 }
 
 bool RedisGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {

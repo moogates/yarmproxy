@@ -6,7 +6,6 @@
 #include "command.h"
 
 namespace yarmproxy {
-using Endpoint = boost::asio::ip::tcp::endpoint;
 
 class MemcSetCommand : public Command {
 public:
@@ -19,10 +18,9 @@ public:
 
 private:
   void StartWriteReply() override;
-//void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend,
-//                               ErrorCode ec) override;
+  // bool WriteQuery() override;
+  void update_check_query_recv_complete() override;
 
-  bool WriteQuery() override;
   bool ContinueWriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool) override;
@@ -34,9 +32,6 @@ private:
 
   size_t ParseQuery(const char* cmd_line, size_t cmd_len);
 private:
-  Endpoint backend_endpoint_;
-  std::shared_ptr<BackendConn> backend_conn_;
-
   bool query_recv_complete_ = false;
 };
 

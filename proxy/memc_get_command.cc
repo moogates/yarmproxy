@@ -20,7 +20,7 @@ struct MemcGetCommand::BackendQuery {
   }
   std::string query_data_;
   Endpoint backend_endpoint_;
-  std::shared_ptr<BackendConn> backend_conn_;
+  std::shared_ptr<BackendConn> backend_;
 };
 
 MemcGetCommand::MemcGetCommand(std::shared_ptr<ClientConnection> client,
@@ -32,8 +32,8 @@ MemcGetCommand::MemcGetCommand(std::shared_ptr<ClientConnection> client,
 
 MemcGetCommand::~MemcGetCommand() {
   for(auto& query : subqueries_) {
-    if (query->backend_conn_) {
-      backend_pool()->Release(query->backend_conn_);
+    if (query->backend_) {
+      backend_pool()->Release(query->backend_);
     }
   }
 }
@@ -63,9 +63,9 @@ void MemcGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
 
 bool MemcGetCommand::WriteQuery() {
   for(auto& query : subqueries_) {
-    assert(!query->backend_conn_);
-    query->backend_conn_ = AllocateBackend(query->backend_endpoint_);
-    query->backend_conn_->WriteQuery(query->query_data_.data(),
+    assert(!query->backend_);
+    query->backend_ = AllocateBackend(query->backend_endpoint_);
+    query->backend_->WriteQuery(query->query_data_.data(),
                                      query->query_data_.size());
   }
   return false;

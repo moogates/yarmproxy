@@ -35,7 +35,6 @@ private:
   size_t ParseQuery(const char* cmd_line, size_t cmd_len);
 private:
   Endpoint backend_endpoint_;
-  std::shared_ptr<BackendConn> backend_conn_;
 };
 
 }

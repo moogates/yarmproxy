@@ -47,7 +47,6 @@ private:
   std::vector<std::unique_ptr<BackendQuery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
 
-  std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<BackendConn> last_backend_;
 
   size_t completed_backends_ = 0;

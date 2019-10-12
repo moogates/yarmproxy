@@ -20,21 +20,21 @@ RedisBasicCommand::RedisBasicCommand(std::shared_ptr<ClientConnection> client,
 }
 
 RedisBasicCommand::~RedisBasicCommand() {
-  if (backend_conn_) {
-    backend_pool()->Release(backend_conn_);
+  if (replying_backend_) {
+    backend_pool()->Release(replying_backend_);
   }
 }
 
 bool RedisBasicCommand::WriteQuery() {
-  assert(backend_conn_ == nullptr);
-  if (!backend_conn_) {
-    backend_conn_ = AllocateBackend(backend_endpoint_);
-    LOG_DEBUG << "RedisBasicCommand::WriteQuery backend=" << backend_conn_;
+  assert(replying_backend_ == nullptr);
+  if (!replying_backend_) {
+    replying_backend_ = AllocateBackend(backend_endpoint_);
+    LOG_DEBUG << "RedisBasicCommand::WriteQuery backend=" << replying_backend_;
   }
 
   auto buffer = client_conn_->buffer();
   buffer->inc_recycle_lock();
-  backend_conn_->WriteQuery(buffer->unprocessed_data(),
+  replying_backend_->WriteQuery(buffer->unprocessed_data(),
                             buffer->unprocessed_bytes());
   return false;
 }
@@ -42,7 +42,7 @@ bool RedisBasicCommand::WriteQuery() {
 /*
 void RedisBasicCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                         ErrorCode ec) {
-  assert(backend == backend_conn_);
+  assert(backend == replying_backend_);
   if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
     ec = ErrorCode::E_PROTOCOL;
   }
@@ -77,7 +77,7 @@ void RedisBasicCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> back
 */
 void RedisBasicCommand::StartWriteReply() {
   // TODO : report error & rotate if connection refused
-  TryWriteReply(backend_conn_);
+  TryWriteReply(replying_backend_);
 }
 
 void RedisBasicCommand::RotateReplyingBackend(bool) {

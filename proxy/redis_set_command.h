@@ -6,7 +6,6 @@
 #include "command.h"
 
 namespace yarmproxy {
-using Endpoint = boost::asio::ip::tcp::endpoint;
 
 namespace redis {
 class BulkArray;
@@ -23,7 +22,9 @@ private:
   void StartWriteReply() override;
   bool ParseUnparsedPart() override;
 
-  bool WriteQuery() override;
+  // bool WriteQuery() override;
+  void update_check_query_recv_complete() override;
+
   bool ContinueWriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend(bool) override;
@@ -36,9 +37,6 @@ private:
   }
 
 private:
-  Endpoint backend_endpoint_;
-  std::shared_ptr<BackendConn> backend_conn_;
-
   size_t unparsed_bulks_;
   bool query_recv_complete_ = false;
 };

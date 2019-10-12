@@ -46,7 +46,6 @@ private:
   std::map<Endpoint, std::shared_ptr<Subquery>> waiting_subqueries_;
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> pending_subqueries_;
   std::shared_ptr<Subquery> tail_query_;
-  std::shared_ptr<BackendConn> replying_backend_;
 private:
   void ActivateWaitingSubquery();
   void PushSubquery(const Endpoint& ep, const char* data, size_t bytes);

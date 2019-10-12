@@ -59,7 +59,6 @@ private:
 
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<BackendQuery>> backend_subqueries_;
 
-  std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<BackendConn> last_backend_;
 
   size_t completed_backends_ = 0;
