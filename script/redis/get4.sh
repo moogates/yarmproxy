@@ -1,3 +1,9 @@
+printf "Setting up ... "
+body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
+echo body_size=$body_size
+./set_100.sh $body_size > /dev/null
+echo "Done."
+
 gunzip -c get4.data.gz | nc 127.0.0.1 11311 | grep "^\\$\|^*\|^-"  > get4.tmp
 # cat get4.tmp
 

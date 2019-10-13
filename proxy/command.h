@@ -53,12 +53,9 @@ public:
 
   virtual bool ParseUnparsedPart() { return true; }
   virtual bool ProcessUnparsedPart() { return true; }
-
 protected:
   BackendConnPool* backend_pool();
   std::shared_ptr<BackendLocator> backend_locator();
-
-  // std::shared_ptr<BackendConn> AllocateBackend(const Endpoint& ep); // remove it
 
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
   virtual void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec);
@@ -79,10 +76,12 @@ protected:
         };
   }
   virtual void RotateReplyingBackend();
+  virtual bool ParseReply(std::shared_ptr<BackendConn> backend);
 private:
   virtual bool query_data_zero_copy() = 0;
-  virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
 
+  static bool ParseRedisSimpleReply(std::shared_ptr<BackendConn> backend);
+  static bool ParseMemcSimpleReply(std::shared_ptr<BackendConn> backend);
 protected:
   std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<ClientConnection> client_conn_;

@@ -29,7 +29,7 @@ private:
 
   bool StartWriteQuery() override;
   bool ContinueWriteQuery() override;
-  bool ParseReply(std::shared_ptr<BackendConn> backend) override;
+  // bool ParseReply(std::shared_ptr<BackendConn> backend) override;
 
   bool query_data_zero_copy() override {
     return true;

@@ -16,14 +16,13 @@ private:
     assert(false);
     return false;
   }
-  bool ParseReply(std::shared_ptr<BackendConn> backend) override;
+  // bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   bool query_data_zero_copy() override {
     return true;
   }
   bool query_recv_complete() override {
     return true;
   }
-  size_t ParseQuery(const char* cmd_line, size_t cmd_len);
 };
 
 }

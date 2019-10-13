@@ -22,10 +22,10 @@ public:
     return false;
   }
 #endif
-  void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
+  // void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
 private:
-  bool ParseReply(std::shared_ptr<BackendConn> backend) override;
+  // bool ParseReply(std::shared_ptr<BackendConn> backend) override;
 
 private:
   bool query_data_zero_copy() override {

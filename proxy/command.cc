@@ -455,6 +455,72 @@ void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, Er
   }
 }
 
+// TODO : put this into redis_protocol.h
+bool Command::ParseRedisSimpleReply(std::shared_ptr<BackendConn> backend) {
+  size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
+  if (unparsed_bytes == 0) { // bottom-half of a bulk string
+    if (backend->buffer()->parsed_unreceived_bytes() == 0) {
+      backend->set_reply_recv_complete();
+    }
+    return true;
+  }
+
+  const char * entry = backend->buffer()->unparsed_data();
+  if (entry[0] != ':' && entry[0] != '+' &&
+      entry[0] != '-' && entry[0] != '$') {
+    LOG_WARN << "RedisBasicCommand ParseReply error ["
+             << std::string(entry, unparsed_bytes) << "]";
+    return false;
+  }
+
+  const char * p = static_cast<const char *>(
+                       memchr(entry, '\n', unparsed_bytes));
+  if (p == nullptr) {
+    return true;
+  }
+
+  if (entry[0] == '$') {
+    redis::Bulk bulk(entry, unparsed_bytes);
+    if (bulk.present_size() < 0) {
+      return false;
+    }
+    if (bulk.present_size() == 0) {
+      return true;
+    }
+    if (bulk.completed()) {
+      LOG_DEBUG << "ParseReply bulk completed";
+      backend->set_reply_recv_complete();
+    }
+    backend->buffer()->update_parsed_bytes(bulk.total_size());
+  } else {
+    backend->set_reply_recv_complete();
+    backend->buffer()->update_parsed_bytes(p - entry + 1);
+  }
+
+  LOG_DEBUG << "Command ParseReply ok, resp.size=" << p - entry + 1
+            << " backend=" << backend;
+  return true;
+}
+
+bool Command::ParseMemcSimpleReply(std::shared_ptr<BackendConn> backend) {
+  const char * entry = backend->buffer()->unparsed_data();
+  const char * p = static_cast<const char *>(memchr(entry, '\n',
+                       backend->buffer()->unparsed_bytes()));
+  if (p != nullptr) {
+    backend->buffer()->update_parsed_bytes(p - entry + 1);
+    backend->set_reply_recv_complete();
+  }
+  return true;
+}
+
+bool Command::ParseReply(std::shared_ptr<BackendConn> backend) {
+  if (protocol_ == ProtocolType::REDIS) {
+    return ParseRedisSimpleReply(backend);
+  } else {
+    return ParseMemcSimpleReply(backend);
+  }
+}
+
 void Command::StartWriteReply() {
   if (query_recv_complete() && replying_backend_) {
     TryWriteReply(replying_backend_);

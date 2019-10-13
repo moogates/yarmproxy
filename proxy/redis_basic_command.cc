@@ -10,6 +10,8 @@
 #include "read_buffer.h"
 #include "worker_pool.h"
 
+#include "redis_protocol.h"
+
 namespace yarmproxy {
 
 RedisBasicCommand::RedisBasicCommand(std::shared_ptr<ClientConnection> client,
@@ -26,12 +28,13 @@ RedisBasicCommand::~RedisBasicCommand() {
   }
 }
 
+/*
 bool RedisBasicCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   size_t unparsed = backend->buffer()->unparsed_bytes();
   assert(unparsed > 0);
   const char * entry = backend->buffer()->unparsed_data();
-  if (entry[0] != ':' && entry[0] != '+' && entry[0] != '-' &&
-      entry[0] != '$') { // TODO : fix the $ reply (aka. bulk)
+  if (entry[0] != ':' && entry[0] != '+' &&
+      entry[0] != '-' && entry[0] != '$') {
     LOG_WARN << "RedisBasicCommand ParseReply error ["
              << std::string(entry, unparsed) << "]";
     return false;
@@ -41,19 +44,17 @@ bool RedisBasicCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   if (p == nullptr) {
     return true;
   }
-  if (entry[0] == '$' && entry[1] != '-') {
-    p = static_cast<const char *>(memchr(p + 1, '\n', entry + unparsed - p));
-    if (p == nullptr) {
-      return true;
-    }
+  if (entry[0] == '$' && !redis::Bulk(entry, unparsed).completed()) {
+    return true;
   }
 
   backend->buffer()->update_parsed_bytes(p - entry + 1);
-  LOG_DEBUG << "RedisBasicCommand ParseReply complete, resp.size=" << p - entry + 1
+  LOG_DEBUG << "Command ParseReply ok, resp.size=" << p - entry + 1
             << " backend=" << backend;
   backend->set_reply_recv_complete();
   return true;
 }
+*/
 
 }
 

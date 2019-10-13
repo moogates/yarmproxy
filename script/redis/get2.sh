@@ -1,3 +1,9 @@
+printf "Setting up ... "
+body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
+echo body_size=$body_size
+./set_100.sh $body_size > /dev/null
+echo "Done."
+
 query="*2\r\n\$3\r\nget\r\n\$4\r\nkey1\r\n*2\r\n\$3\r\nget\r\n\$4\r\nkey2\r\n"
 # echo "--------- $query -----------"
 printf "$query" | nc 127.0.0.1 11311 | grep "^\\$\|^*\|^-" > get2.tmp

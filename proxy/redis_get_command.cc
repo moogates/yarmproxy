@@ -30,7 +30,7 @@ RedisGetCommand::~RedisGetCommand() {
     backend_pool()->Release(replying_backend_);
   }
 }
-
+/*
 void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
         ErrorCode ec) {
   assert(backend == replying_backend_);
@@ -54,10 +54,10 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
   }
   backend->TryReadMoreReply();
 }
-
+*/
+/*
 bool RedisGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
-
   if (unparsed_bytes == 0) {
     if (backend->buffer()->parsed_unreceived_bytes() == 0) {
       backend->set_reply_recv_complete();
@@ -84,6 +84,7 @@ bool RedisGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   backend->buffer()->update_parsed_bytes(bulk.total_size());
   return true;
 }
+*/
 
 }
 

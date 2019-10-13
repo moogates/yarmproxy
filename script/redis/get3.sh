@@ -1,3 +1,9 @@
+printf "Setting up ... "
+body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
+echo body_size=$body_size
+./set_100.sh $body_size > /dev/null
+echo "Done."
+
 driver=nc
 driver=../yarmnc
 gunzip -c get3.data.gz | $driver 127.0.0.1 11311 | grep "^\\$\|^*\|^-"  > get3.tmp

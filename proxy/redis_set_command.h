@@ -15,19 +15,17 @@ public:
                   const redis::BulkArray& ba);
   virtual ~RedisSetCommand();
 
-  virtual bool query_parsing_complete() override;
-
 private:
   bool ParseUnparsedPart() override;
-  void check_query_recv_complete() override;
-  // bool ContinueWriteQuery() override;
-  bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   bool query_data_zero_copy() override {
     return true;
   }
+  virtual bool query_parsing_complete() override;
+  void check_query_recv_complete() override;
   bool query_recv_complete() override {
     return query_recv_complete_;
   }
+  // bool ParseReply(std::shared_ptr<BackendConn> backend) override;
 private:
   size_t unparsed_bulks_;
   bool query_recv_complete_ = false;

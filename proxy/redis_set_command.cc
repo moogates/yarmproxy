@@ -62,6 +62,7 @@ bool RedisSetCommand::ParseUnparsedPart() {
   return true;
 }
 
+/*
 bool RedisSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(replying_backend_ == backend);
   size_t unparsed = replying_backend_->buffer()->unparsed_bytes();
@@ -95,6 +96,7 @@ bool RedisSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   backend->set_reply_recv_complete();
   return true;
 }
+*/
 
 }
 

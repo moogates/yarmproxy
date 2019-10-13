@@ -13,9 +13,9 @@
 namespace yarmproxy {
 
 MemcSetCommand::MemcSetCommand(std::shared_ptr<ClientConnection> client,
-          const char* buf, size_t cmd_len, size_t* body_bytes) 
+          const char* cmd_data, size_t cmd_len, size_t* body_bytes) 
     : Command(client, ProtocolType::MEMCACHED) {
-  *body_bytes = ParseQuery(buf, cmd_len);
+  *body_bytes = ParseQuery(cmd_data, cmd_len);
 }
 
 size_t MemcSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
@@ -52,42 +52,9 @@ void MemcSetCommand::check_query_recv_complete() {
     query_recv_complete_ = true;
   }
 }
-/*
-void MemcSetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  auto& err_reply(MemcErrorReply(ec));
-  backend->SetReplyData(err_reply.data(), err_reply.size());
-  backend->set_reply_recv_complete();
-  backend->set_no_recycle();
-
-  if (query_recv_complete()) {
-    if (client_conn_->IsFirstCommand(shared_from_this())) {
-      // write reply
-      TryWriteReply(backend);
-    } else {
-      // waiting to write reply
-    }
-  } else {
-    // wait for more query data
-  }
-}
-*/
 
 bool MemcSetCommand::query_recv_complete() {
   return query_recv_complete_;
-}
-
-bool MemcSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
-  assert(replying_backend_== backend);
-  const char * entry = replying_backend_->buffer()->unparsed_data();
-  const char * p = static_cast<const char *>(memchr(entry, '\n',
-                       replying_backend_->buffer()->unparsed_bytes()));
-  if (p == nullptr) {
-    return true;
-  }
-
-  replying_backend_->buffer()->update_parsed_bytes(p - entry + 1);
-  backend->set_reply_recv_complete();
-  return true;
 }
 
 }

@@ -506,6 +506,7 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
   return true;
 }
 
+/*
 bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   size_t unparsed = backend->buffer()->unparsed_bytes();
   assert(unparsed > 0);
@@ -532,6 +533,7 @@ bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   backend->set_reply_recv_complete();
   return true;
 }
+*/
 
 }
 
