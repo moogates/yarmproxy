@@ -26,8 +26,8 @@ size_t MemcBasicCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   const char *q = p;
   while(*(++q) != ' ' && *q != '\r');
 
-  backend_endpoint_ = backend_locator()->Locate(p, q - p,
-                          ProtocolType::MEMCACHED);
+  auto ep = backend_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
+  replying_backend_ = backend_pool()->Allocate(ep);
   return 0; // 2 is length of the ending "\r\n"
 }
 
@@ -37,17 +37,27 @@ MemcBasicCommand::~MemcBasicCommand() {
   }
 }
 
+/*
 bool MemcBasicCommand::StartWriteQuery() {
-  assert(replying_backend_ == nullptr);
-  replying_backend_ = AllocateBackend(backend_endpoint_);
   LOG_DEBUG << "MemcBasicCommand::StartWriteQuery backend=" << replying_backend_;
+  return Command::StartWriteQuery();
 
-  auto buffer = client_conn_->buffer();
-  buffer->inc_recycle_lock();
-  replying_backend_->WriteQuery(buffer->unprocessed_data(),
-                            buffer->unprocessed_bytes());
+  assert(replying_backend_);
+  check_query_recv_complete();
+
+  assert(first_write_query_);
+  replying_backend_->SetReadWriteCallback(
+      WeakBind(&Command::OnWriteQueryFinished, replying_backend_),
+      WeakBind(&Command::OnBackendReplyReceived, replying_backend_));
+  first_write_query_ = false; // TODO : remove this var
+  assert(replying_backend_ == nullptr);
+
+  client_conn_->buffer()->inc_recycle_lock();
+  replying_backend_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
+                            client_conn_->buffer()->unprocessed_bytes());
   return false;
 }
+*/
 
 void MemcBasicCommand::StartWriteReply() {
   // TODO : report error & rotate if connection refused

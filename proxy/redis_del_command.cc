@@ -14,14 +14,14 @@
 
 namespace yarmproxy {
 
-struct RedisDelCommand::DelSubquery {
-  DelSubquery(const Endpoint& ep, const char* data, size_t present_bytes)
-      : backend_endpoint_(ep)
+struct RedisDelCommand::Subquery {
+  Subquery(std::shared_ptr<BackendConn> backend,
+              const char* data, size_t present_bytes)
+      : backend_(backend)
       , keys_count_(1) {
     segments_.emplace_back(data, present_bytes);
   }
 
-  Endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_;
 
   size_t keys_count_;
@@ -30,7 +30,7 @@ struct RedisDelCommand::DelSubquery {
   std::list<std::pair<const char*, size_t>> segments_;
 };
 
-static const std::string& ComposePrefix(const std::string& cmd_name,
+static const std::string& RedisDelPrefix(const std::string& cmd_name,
                                         size_t keys_count) {
   static std::map<size_t, std::string> del_prefix_cache {
         {1, "*2\r\n$3\r\ndel\r\n"},
@@ -68,13 +68,14 @@ static const std::string& ComposePrefix(const std::string& cmd_name,
 std::atomic_int redis_del_cmd_count;
 // TODO : 系统调用 vs. redis_key内存拷贝，哪个代价更大呢？
 void RedisDelCommand::PushSubquery(const Endpoint& ep, const char* data,
-                                   size_t bytes) {
+       size_t bytes) {
   const auto& it = waiting_subqueries_.find(ep);
   if (it == waiting_subqueries_.cend()) {
     LOG_DEBUG << "PushSubquery inc_recycle_lock add new endpoint " << ep
               << " , key=" << redis::Bulk(data, bytes).to_string();
     client_conn_->buffer()->inc_recycle_lock();
-    std::shared_ptr<DelSubquery> query(new DelSubquery(ep, data, bytes));
+    auto backend = backend_pool()->Allocate(ep);
+    std::shared_ptr<Subquery> query(new Subquery(backend, data, bytes));
     waiting_subqueries_.emplace(ep, query);
     return;
   }
@@ -131,7 +132,8 @@ bool RedisDelCommand::query_recv_complete() {
 }
 
 bool RedisDelCommand::ContinueWriteQuery() {
-  return StartWriteQuery();
+  assert(false);
+  return false;
 }
 
 bool RedisDelCommand::StartWriteQuery() {
@@ -185,18 +187,17 @@ void RedisDelCommand::OnBackendReplyReceived(
     return;
   }
 
-  assert(waiting_subqueries_.size() == 0);
   if (unparsed_bulks_ == 0 && pending_subqueries_.size() == 1) {
     SetBackendReplyCount(backend, total_del_count_);
     if (client_conn_->IsFirstCommand(shared_from_this())) {
       LOG_DEBUG << "OnBackendReplyReceived query="
-               << pending_subqueries_[backend]->backend_endpoint_
+               << backend->remote_endpoint()
                << " command=" << this
                << " write reply, backend=" << backend;
       TryWriteReply(backend);
     } else {
       LOG_DEBUG << "OnBackendReplyReceived query="
-               << pending_subqueries_[backend]->backend_endpoint_
+               << backend->remote_endpoint()
                << " command=" << this
                << " waiting to write reply, backend=" << backend;
       replying_backend_ = backend;
@@ -282,17 +283,20 @@ bool RedisDelCommand::query_parsing_complete() {
 
 void RedisDelCommand::ActivateWaitingSubquery() {
   for(auto& it : waiting_subqueries_) {  // TODO : 能否直接遍历values?
-    auto& query = it.second;
-    assert(query->backend_ == nullptr);
-    query->backend_ = AllocateBackend(query->backend_endpoint_);
-    pending_subqueries_[query->backend_] = query;
+    auto query = it.second;
+    auto backend = query->backend_;
+    assert(backend);
+    backend->SetReadWriteCallback(
+        WeakBind(&Command::OnWriteQueryFinished, backend),
+        WeakBind(&Command::OnBackendReplyReceived, backend));
 
+    pending_subqueries_[backend] = query;
     LOG_DEBUG << "ActivateWaitingSubquery client=" << client_conn_
              << " cmd=" << this << " query=" << query
              << " phase=" << query->phase_
-             << " backend=" << query->backend_;
-    const auto& mset_prefix = ComposePrefix(cmd_name_, query->keys_count_);
-    query->backend_->WriteQuery(mset_prefix.data(), mset_prefix.size());
+             << " backend=" << backend;
+    const auto& mset_prefix = RedisDelPrefix(cmd_name_, query->keys_count_);
+    backend->WriteQuery(mset_prefix.data(), mset_prefix.size());
   }
   waiting_subqueries_.clear();
 }

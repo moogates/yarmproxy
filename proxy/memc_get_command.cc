@@ -14,13 +14,12 @@
 namespace yarmproxy {
 
 struct MemcGetCommand::BackendQuery {
-  BackendQuery(const Endpoint& ep, std::string&& query_data)
-      : query_data_(query_data)
-      , backend_endpoint_(ep) {
+  BackendQuery(std::shared_ptr<BackendConn> backend, std::string&& query_data)
+      : backend_(backend)
+      , query_data_(query_data) {
   }
-  std::string query_data_;
-  Endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_;
+  std::string query_data_;
 };
 
 MemcGetCommand::MemcGetCommand(std::shared_ptr<ClientConnection> client,
@@ -57,16 +56,20 @@ void MemcGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
   }
   for(auto& it : ep_keys) {
     it.second.append("\r\n"); // TODO : may I only iterate over values?
-    subqueries_.emplace_back(new BackendQuery(it.first, std::move(it.second)));
+    auto backend = backend_pool()->Allocate(it.first);
+    subqueries_.emplace_back(new BackendQuery(backend, std::move(it.second)));
   }
 }
 
 bool MemcGetCommand::StartWriteQuery() {
   for(auto& query : subqueries_) {
-    assert(!query->backend_);
-    query->backend_ = AllocateBackend(query->backend_endpoint_);
-    query->backend_->WriteQuery(query->query_data_.data(),
-                                     query->query_data_.size());
+    auto backend = query->backend_;
+    assert(backend);
+    // query->backend_ = AllocateBackend(query->backend_endpoint_);
+    backend->SetReadWriteCallback(
+        WeakBind(&Command::OnWriteQueryFinished, backend),
+        WeakBind(&Command::OnBackendReplyReceived, backend));
+    backend->WriteQuery(query->query_data_.data(), query->query_data_.size());
   }
   return false;
 }

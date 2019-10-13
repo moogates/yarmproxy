@@ -58,9 +58,9 @@ protected:
   BackendConnPool* backend_pool();
   std::shared_ptr<BackendLocator> backend_locator();
 
-  std::shared_ptr<BackendConn> AllocateBackend(const Endpoint& ep); // remove it
+  // std::shared_ptr<BackendConn> AllocateBackend(const Endpoint& ep); // remove it
+
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
-  // void OnBackendError(std::shared_ptr<BackendConn> backend, ErrorCode ec);
   virtual void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec);
 
   const std::string& ErrorReply(ErrorCode ec);

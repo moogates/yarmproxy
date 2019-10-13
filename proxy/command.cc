@@ -204,6 +204,7 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   return size;
 }
 
+/*
 std::shared_ptr<BackendConn> Command::AllocateBackend(const Endpoint& ep) {
   auto backend = backend_pool()->Allocate(ep);
   backend->SetReadWriteCallback(
@@ -211,7 +212,7 @@ std::shared_ptr<BackendConn> Command::AllocateBackend(const Endpoint& ep) {
       WeakBind(&Command::OnBackendReplyReceived, backend));
   return backend;
 }
-
+*/
 // TODO : merge
 const std::string& Command::MemcErrorReply(ErrorCode ec) {
   static const std::string kErrorConnect("ERROR Backend Connect Error\r\n");

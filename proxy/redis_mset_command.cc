@@ -17,11 +17,9 @@ namespace yarmproxy {
 std::atomic_int redis_mset_cmd_count;
 
 struct RedisMsetCommand::Subquery {
-  Subquery(const Endpoint& ep, size_t keys_count, const char* data,
-           size_t present_bytes)
-      : backend_endpoint_(ep)
-      , keys_count_(keys_count)
-  {
+  Subquery(std::shared_ptr<BackendConn> backend,
+           const char* data, size_t present_bytes)
+      : backend_(backend) {
     segments_.emplace_back(data, present_bytes);
   }
 
@@ -33,17 +31,16 @@ struct RedisMsetCommand::Subquery {
     READING_REPLY      = 4, // read reply
   };
 
-  Endpoint backend_endpoint_;
   std::shared_ptr<BackendConn> backend_;
 
-  size_t keys_count_;
+  size_t keys_count_ = 1;
   Phase phase_ = INIT_SEND_QUERY;
   bool query_recv_complete_ = false;
   bool backend_error_ = false; // remove it
   std::list<std::pair<const char*, size_t>> segments_;
 };
 
-static const std::string& MsetPrefix(size_t keys_count) {
+static const std::string& RedisMsetPrefix(size_t keys_count) {
   static std::map<size_t, std::string> prefix_cache {
         {1, "*3\r\n$4\r\nmset\r\n"},
         {2, "*5\r\n$4\r\nmset\r\n"},
@@ -68,7 +65,8 @@ void RedisMsetCommand::PushSubquery(const Endpoint& ep, const char* data,
     LOG_DEBUG << "PushSubquery inc_recycle_lock add new endpoint " << ep
               << " , key=" << redis::Bulk(data, bytes).to_string();
     client_conn_->buffer()->inc_recycle_lock();
-    std::shared_ptr<Subquery> query(new Subquery(ep, 1, data, bytes));
+    auto backend = backend_pool()->Allocate(ep);
+    std::shared_ptr<Subquery> query(new Subquery(backend, data, bytes));
     auto res = waiting_subqueries_.emplace(ep, query);
     tail_query_ = res.first->second;
     return;
@@ -247,16 +245,16 @@ void RedisMsetCommand::OnBackendRecoverableError(
     if (unparsed_bulks_ == 0 && pending_subqueries_.size() == 1) {
       if (client_conn_->IsFirstCommand(shared_from_this())) {
         LOG_DEBUG << "redismset OnBackendConnectError write reply, ep="
-                  << subquery->backend_endpoint_;
+                  << subquery->backend_->remote_endpoint();
         TryWriteReply(backend);
       } else {
         LOG_DEBUG << "redismset OnBackendConnectError waiting to write reply, ep="
-                  << subquery->backend_endpoint_;
+                  << subquery->backend_->remote_endpoint();
         replying_backend_ = backend;
       }
     } else {
       LOG_DEBUG << "RedisMsetCommand OnBackendConnectError need not reply, ep="
-                << subquery->backend_endpoint_
+                << subquery->backend_->remote_endpoint()
                 << " is_tail=" << (subquery == tail_query_)
                 << " pending_subqueries_.size=" << pending_subqueries_.size();
       backend->set_reply_recv_complete();
@@ -267,7 +265,7 @@ void RedisMsetCommand::OnBackendRecoverableError(
   } else {
     subquery->backend_error_ = true; // waiting for more query
     LOG_DEBUG << "RedisMsetCommand OnBackendConnectError backend_error_, waiting for more query, ep="
-              << subquery->backend_endpoint_;
+              << subquery->backend_->remote_endpoint();
   }
 }
 
@@ -290,13 +288,13 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
   if (unparsed_bulks_ == 0 && pending_subqueries_.size() == 1) {
     if (client_conn_->IsFirstCommand(shared_from_this())) {
       LOG_DEBUG << "OnBackendReplyReceived query="
-               << pending_subqueries_[backend]->backend_endpoint_
+               << backend->remote_endpoint()
                << " command=" << this
                << " write reply, backend=" << backend;
       TryWriteReply(backend);
     } else {
       LOG_DEBUG << "OnBackendReplyReceived query="
-               << pending_subqueries_[backend]->backend_endpoint_
+               << backend->remote_endpoint()
                << " command=" << this
                << " waiting to write reply, backend=" << backend;
       replying_backend_ = backend;
@@ -365,8 +363,8 @@ void RedisMsetCommand::OnWriteQueryFinished(
     assert(!query->segments_.empty());
     query->backend_->WriteQuery(query->segments_.front().first,
                                 query->segments_.front().second);
-    LOG_DEBUG << "OnWriteQueryFinished query=" << query->backend_endpoint_
-              << " backend=" << query->backend_
+    LOG_DEBUG << "OnWriteQueryFinished backend=" << query->backend_
+              << " ep=" << query->backend_->remote_endpoint()
               << " phase 1 finished, phase 2 launched";
     return;
   case Subquery::SENDING_MORE_QUERY:
@@ -430,17 +428,20 @@ bool RedisMsetCommand::query_parsing_complete() {
 void RedisMsetCommand::ActivateWaitingSubquery() {
   for(auto& it : waiting_subqueries_) {
     auto& query = it.second;
-    assert(query->backend_ == nullptr);
-    query->backend_ = AllocateBackend(query->backend_endpoint_);
-    pending_subqueries_[query->backend_] = query;
+    auto backend = query->backend_;
+    assert(backend);
 
+    backend->SetReadWriteCallback(
+        WeakBind(&Command::OnWriteQueryFinished, backend),
+        WeakBind(&Command::OnBackendReplyReceived, backend));
+
+    pending_subqueries_[backend] = query;
     if (query != tail_query_ ||
         client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
       query->query_recv_complete_ = true;
     }
-
-    const std::string& mset_prefix = MsetPrefix(query->keys_count_);
-    query->backend_->WriteQuery(mset_prefix.data(), mset_prefix.size());
+    const std::string& mset_prefix = RedisMsetPrefix(query->keys_count_);
+    backend->WriteQuery(mset_prefix.data(), mset_prefix.size());
   }
   waiting_subqueries_.clear();
 }

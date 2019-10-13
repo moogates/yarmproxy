@@ -47,7 +47,7 @@ private:
   }
   bool ParseQuery(const redis::BulkArray& ba);
 private:
-  struct BackendQuery;
+  struct Subquery;
   std::string reply_prefix_;
   bool reply_prefix_complete() const {
     return reply_prefix_.empty();
@@ -56,10 +56,10 @@ private:
     reply_prefix_.clear();
   }
 
-  std::vector<std::shared_ptr<BackendQuery>> subqueries_;
+  std::vector<std::shared_ptr<Subquery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
 
-  std::map<std::shared_ptr<BackendConn>, std::shared_ptr<BackendQuery>> backend_subqueries_;
+  std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> backend_subqueries_;
 
   std::shared_ptr<BackendConn> last_backend_;
 

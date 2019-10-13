@@ -39,11 +39,11 @@ private:
 
 private:
   std::string cmd_name_;
-  struct DelSubquery;
+  struct Subquery;
   size_t unparsed_bulks_;
   bool init_write_query_ = true; // TODO : remove it
-  std::map<Endpoint, std::shared_ptr<DelSubquery>> waiting_subqueries_;
-  std::map<std::shared_ptr<BackendConn>, std::shared_ptr<DelSubquery>> pending_subqueries_;
+  std::map<Endpoint, std::shared_ptr<Subquery>> waiting_subqueries_;
+  std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> pending_subqueries_;
 
   int total_del_count_ = 0;
 private:

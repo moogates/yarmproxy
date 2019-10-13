@@ -18,18 +18,18 @@ namespace yarmproxy {
 
 std::atomic_int redis_mget_cmd_count;
 
-struct RedisMgetCommand::BackendQuery {
-  BackendQuery(const Endpoint& ep, std::string&& query_data, size_t key_count)
-      : backend_endpoint_(ep)
+struct RedisMgetCommand::Subquery {
+  Subquery(std::shared_ptr<BackendConn> backend,
+           std::string&& query_data, size_t key_count)
+      : backend_(backend)
       , query_data_(query_data)
       , key_count_(key_count) {
   }
-  Endpoint backend_endpoint_;
+  std::shared_ptr<BackendConn> backend_;
   std::string query_data_;
 
   size_t key_count_;
   size_t reply_absent_bulks_ = 0;
-  std::shared_ptr<BackendConn> backend_;
 };
 
 bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
@@ -55,7 +55,8 @@ bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
         subquery.append("$4\r\nmget\r\n"); // (ba[0].raw_data(), ba[0].total_size())
         subquery.append(current_bulks_data, current_bulks_bytes);
 
-        subqueries_.emplace_back(new BackendQuery(last_endpoint, std::move(subquery), current_bulks_count));
+        auto backend = backend_pool()->Allocate(last_endpoint);
+        subqueries_.emplace_back(new Subquery(backend, std::move(subquery), current_bulks_count));
 
         current_bulks_data = nullptr;
       }
@@ -70,8 +71,8 @@ bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
     std::string subquery(redis::BulkArray::SerializePrefix(current_bulks_count + 1));
     subquery.append("$4\r\nmget\r\n"); // (ba[0].raw_data(), ba[0].total_size())
     subquery.append(current_bulks_data, current_bulks_bytes);
-    // endpoint_keys_list->emplace_back(last_endpoint, std::move(subquery));
-    subqueries_.emplace_back(new BackendQuery(last_endpoint, std::move(subquery), current_bulks_count));
+    auto backend = backend_pool()->Allocate(last_endpoint);
+    subqueries_.emplace_back(new Subquery(backend, std::move(subquery), current_bulks_count));
 
     LOG_DEBUG << "ParseQuery create last subquery ep=" << last_endpoint
               << " bulks_count=" << current_bulks_count;
@@ -104,14 +105,18 @@ RedisMgetCommand::~RedisMgetCommand() {
 
 bool RedisMgetCommand::StartWriteQuery() {
   for(auto& query : subqueries_) {
-    assert(!query->backend_);
-    if (!query->backend_) {
-      query->backend_= AllocateBackend(query->backend_endpoint_);
+    auto backend = query->backend_;
+    assert(backend);
+    backend->SetReadWriteCallback(
+        WeakBind(&Command::OnWriteQueryFinished, backend),
+        WeakBind(&Command::OnBackendReplyReceived, backend));
 
+    {
       // redis mget special
       waiting_reply_queue_.push_back(query->backend_);
       backend_subqueries_.emplace(query->backend_, query);
     }
+
     LOG_DEBUG << "RedisMgetCommand " << this << " StartWriteQuery"
               << " backend=" << query->backend_<< ", query=("
               << query->query_data_.substr(0, query->query_data_.size() - 2) << ")";

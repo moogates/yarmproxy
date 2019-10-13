@@ -53,37 +53,6 @@ void MemcSetCommand::check_query_recv_complete() {
   }
 }
 /*
-bool MemcSetCommand::WriteQuery() {
-  check_query_recv_complete();
-
-  if (replying_backend_ && replying_backend_->error()) {
-    LOG_DEBUG << "WriteQuery backend_error, query_recv_complete="
-             << query_recv_complete();
-    if (!query_recv_complete()) {
-      LOG_DEBUG << "RedisSetCommand WriteQuery backend_error read more query";
-      return true; // no callback, try read more query directly
-    }
-    if (client_conn_->IsFirstCommand(shared_from_this())) {
-      // write reply
-      TryWriteReply(replying_backend_);
-    } else {
-      // wait to write reply
-    }
-    return false;
-  }
-
-  if (!replying_backend_) {
-    replying_backend_ = AllocateBackend(backend_endpoint_);
-  }
-
-  auto buffer = client_conn_->buffer();
-  buffer->inc_recycle_lock();
-  replying_backend_->WriteQuery(buffer->unprocessed_data(),
-                            buffer->unprocessed_bytes());
-  return false;
-}
-*/
-/*
 void MemcSetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   auto& err_reply(MemcErrorReply(ec));
   backend->SetReplyData(err_reply.data(), err_reply.size());
