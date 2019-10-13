@@ -46,8 +46,8 @@ private:
   static size_t ParseReplyBodyBytes(const char * data, const char * end);
   void ParseQuery(const char* cmd_data, size_t cmd_size);
 
-  struct BackendQuery;
-  std::vector<std::unique_ptr<BackendQuery>> subqueries_;
+  struct Subquery;
+  std::vector<std::unique_ptr<Subquery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
 
   std::shared_ptr<BackendConn> last_backend_;

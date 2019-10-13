@@ -6,8 +6,9 @@
 
 #include <arpa/inet.h>
 
-#include "logging.h"
 #include "backend_locator.h"
+#include "logging.h"
+#include "protocol_type.h"
 
 namespace yarmproxy {
 

@@ -1,15 +1,10 @@
 #include "redis_set_command.h"
 
 #include "logging.h"
-
-#include "backend_conn.h"
 #include "backend_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
-#include "error_code.h"
 #include "read_buffer.h"
-#include "worker_pool.h"
-
 #include "redis_protocol.h"
 
 namespace yarmproxy {

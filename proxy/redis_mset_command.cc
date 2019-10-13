@@ -8,8 +8,6 @@
 #include "client_conn.h"
 #include "error_code.h"
 #include "read_buffer.h"
-#include "worker_pool.h"
-
 #include "redis_protocol.h"
 
 namespace yarmproxy {

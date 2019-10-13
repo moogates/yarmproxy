@@ -6,18 +6,15 @@
 #include <string>
 #include <memory>
 
-#include <boost/asio/ip/tcp.hpp>
-
+#include "protocol_type.h"
 namespace yarmproxy {
 
-using Endpoint = boost::asio::ip::tcp::endpoint;
 class BackendConn;
 class BackendConnPool;
 class BackendLocator;
 class ClientConnection;
 
 enum class ErrorCode;
-enum class ProtocolType;
 
 typedef std::function<void(ErrorCode ec)> WriteReplyCallback;
 

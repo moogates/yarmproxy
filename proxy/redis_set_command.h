@@ -25,7 +25,6 @@ private:
   bool query_recv_complete() override {
     return query_recv_complete_;
   }
-  // bool ParseReply(std::shared_ptr<BackendConn> backend) override;
 private:
   size_t unparsed_bulks_;
   bool query_recv_complete_ = false;

@@ -3,12 +3,8 @@
 #include "logging.h"
 
 #include "stats.h"
-#include "backend_conn.h"
-#include "backend_locator.h"
 #include "client_conn.h"
 #include "error_code.h"
-// #include "read_buffer.h"
-// #include "worker_pool.h"
 
 namespace yarmproxy {
 

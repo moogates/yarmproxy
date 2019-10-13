@@ -8,7 +8,6 @@
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "read_buffer.h"
-#include "worker_pool.h"
 
 namespace yarmproxy {
 

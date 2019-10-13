@@ -6,6 +6,7 @@
 #include "logging.h"
 
 #include "error_code.h"
+#include "protocol_type.h"
 #include "backend_locator.h"
 
 #include "worker_pool.h"
@@ -25,7 +26,7 @@
 #include "redis_protocol.h"
 #include "redis_basic_command.h"
 #include "redis_del_command.h"
-#include "redis_get_command.h"
+// #include "redis_get_command.h"
 #include "redis_mset_command.h"
 #include "redis_mget_command.h"
 #include "redis_set_command.h"
@@ -81,19 +82,22 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
     if (ba.present_bulks() == 0 || ba[0].absent_size() > 0) {
       return 0;
     }
+
+    // TODO : speed up hot command
     if (ba[0].equals("get", sizeof("get") - 1) ||
         ba[0].equals("getset", sizeof("getset") - 1) ||
-        ba[0].equals("getrange", sizeof("getrange") - 1)) {
+        ba[0].equals("getrange", sizeof("getrange") - 1) ||
+        ba[0].equals("ttl", sizeof("ttl") - 1) ||
+        ba[0].equals("incr", sizeof("incr") - 1) ||
+        ba[0].equals("incrby", sizeof("incrby") - 1) ||
+        ba[0].equals("incrbyfloat", sizeof("incrbyfloat") - 1) ||
+        ba[0].equals("decr", sizeof("decr") - 1) ||
+        ba[0].equals("decrby", sizeof("decrby") - 1) ||
+        ba[0].equals("strlen", sizeof("strlen") - 1)) {
       if (!ba.completed()) {
         return 0;
       }
-      command->reset(new RedisGetCommand(client, ba));
-      return ba.total_size();
-    } else if (ba[0].equals("mget", sizeof("mget") - 1)) {
-      if (!ba.completed()) { // TODO : allow incomplete mget bulk_array
-        return 0;
-      }
-      command->reset(new RedisMgetCommand(client, ba));
+      command->reset(new RedisBasicCommand(client, ba));
       return ba.total_size();
     } else if (ba[0].equals("set", sizeof("set") - 1) ||
         ba[0].equals("append", sizeof("append") - 1) ||
@@ -117,6 +121,12 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       } else {
         return ba.parsed_size();
       }
+    } else if (ba[0].equals("mget", sizeof("mget") - 1)) {
+      if (!ba.completed()) { // TODO : allow incomplete mget bulk_array
+        return 0;
+      }
+      command->reset(new RedisMgetCommand(client, ba));
+      return ba.total_size();
     } else if (ba[0].equals("del", sizeof("del") - 1) ||
                ba[0].iequals("exists", sizeof("exists") - 1) ||
                ba[0].iequals("touch", sizeof("touch") - 1)) {
@@ -129,19 +139,6 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       } else {
         return ba.parsed_size() - ba.back().total_size();
       }
-    } else if (ba[0].equals("ttl", sizeof("ttl") - 1) ||
-        ba[0].equals("incr", sizeof("incr") - 1) ||
-        ba[0].equals("incrby", sizeof("incrby") - 1) ||
-        ba[0].equals("incrbyfloat", sizeof("incrbyfloat") - 1) ||
-        ba[0].equals("decr", sizeof("decr") - 1) ||
-        ba[0].equals("decrby", sizeof("decrby") - 1) ||
-        ba[0].equals("strlen", sizeof("strlen") - 1) ||
-        false) {
-      if (!ba.completed()) {
-        return 0;
-      }
-      command->reset(new RedisBasicCommand(client, ba));
-      return ba.total_size();
     } else if (ba[0].equals("yarmstats", sizeof("yarmstats") - 1)) {
       if (!ba.completed()) {
         return 0;

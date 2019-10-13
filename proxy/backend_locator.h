@@ -10,11 +10,7 @@ namespace yarmproxy {
 using Endpoint = boost::asio::ip::tcp::endpoint;
 
 class BackendContinuum;
-enum class ProtocolType {
-  NONE      = 0,
-  REDIS     = 1,
-  MEMCACHED = 2,
-};
+enum class ProtocolType;
 
 class BackendLocator {
 public:

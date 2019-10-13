@@ -9,12 +9,11 @@
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "read_buffer.h"
-#include "worker_pool.h"
 
 namespace yarmproxy {
 
-struct MemcGetCommand::BackendQuery {
-  BackendQuery(std::shared_ptr<BackendConn> backend, std::string&& query_data)
+struct MemcGetCommand::Subquery {
+  Subquery(std::shared_ptr<BackendConn> backend, std::string&& query_data)
       : backend_(backend)
       , query_data_(query_data) {
   }
@@ -57,7 +56,7 @@ void MemcGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
   for(auto& it : ep_keys) {
     it.second.append("\r\n"); // TODO : may I only iterate over values?
     auto backend = backend_pool()->Allocate(it.first);
-    subqueries_.emplace_back(new BackendQuery(backend, std::move(it.second)));
+    subqueries_.emplace_back(new Subquery(backend, std::move(it.second)));
   }
 }
 
@@ -90,7 +89,8 @@ bool MemcGetCommand::TryActivateReplyingBackend(
   return backend == replying_backend_;
 }
 
-void MemcGetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend) {
+void MemcGetCommand::BackendReadyToReply(
+    std::shared_ptr<BackendConn> backend) {
   if (client_conn_->IsFirstCommand(shared_from_this())
       && TryActivateReplyingBackend(backend)) {
     if (backend->finished()) {
@@ -132,7 +132,8 @@ void MemcGetCommand::OnBackendReplyReceived(
   backend->TryReadMoreReply();
 }
 
-bool MemcGetCommand::BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+bool MemcGetCommand::BackendErrorRecoverable(
+    std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   return !backend->has_read_some_reply();
 }
 
