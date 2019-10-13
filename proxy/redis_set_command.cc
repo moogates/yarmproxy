@@ -38,18 +38,6 @@ void RedisSetCommand::check_query_recv_complete() {
   }
 }
 
-void RedisSetCommand::StartWriteReply() {
-  if (query_recv_complete_) {
-    TryWriteReply(replying_backend_);
-  }
-}
-
-// TODO : add it into base class
-void RedisSetCommand::RotateReplyingBackend(bool) {
-  assert(query_recv_complete());
-  client_conn_->RotateReplyingCommand();
-}
-
 bool RedisSetCommand::query_parsing_complete() {
   return unparsed_bulks_ == 0;
 }

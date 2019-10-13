@@ -26,7 +26,6 @@ private:
   }
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                                    ErrorCode ec) override;
-  void RotateReplyingBackend(bool) override;
 
   bool query_data_zero_copy() override {
     return true;

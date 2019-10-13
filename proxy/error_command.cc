@@ -42,10 +42,5 @@ void ErrorCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
   client_conn_->Abort();
 }
 
-
-void ErrorCommand::RotateReplyingBackend(bool) {
-  client_conn_->RotateReplyingCommand();
-}
-
 }
 

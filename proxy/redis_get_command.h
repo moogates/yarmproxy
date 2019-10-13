@@ -22,13 +22,10 @@ public:
     return false;
   }
 #endif
-
-  void StartWriteReply() override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
 private:
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
-  void RotateReplyingBackend(bool success) override;
 
 private:
   bool query_data_zero_copy() override {

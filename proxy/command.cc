@@ -417,7 +417,7 @@ void Command::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
     assert(!backend->buffer()->recycle_locked());
     // write_reply开始时须recv_query结束, 包括connect error时也要遵守这一约定
     assert(query_recv_complete());
-    RotateReplyingBackend(backend->recyclable());
+    RotateReplyingBackend();
   } else {
     backend->TryReadMoreReply(); // 这里必须继续try
     TryWriteReply(backend); // 可能已经有新读到的数据，因而要尝试转发更多
@@ -455,6 +455,12 @@ void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, Er
   }
 }
 
+void Command::StartWriteReply() {
+  if (query_recv_complete() && replying_backend_) {
+    TryWriteReply(replying_backend_);
+  }
+}
+
 void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
   size_t unprocessed = backend->buffer()->unprocessed_bytes();
   LOG_DEBUG << "Command::TryWriteReply backend=" << backend
@@ -472,6 +478,11 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
         unprocessed, WeakBind(&Command::OnWriteReplyFinished, backend));
     backend->buffer()->update_processed_bytes(unprocessed);
   }
+}
+
+void Command::RotateReplyingBackend() {
+  assert(query_recv_complete());
+  client_conn_->RotateReplyingCommand();
 }
 
 }

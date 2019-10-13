@@ -72,18 +72,6 @@ void MemcSetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> back
 }
 */
 
-void MemcSetCommand::StartWriteReply() {
-  // TODO : report error & rotate if connection refused
-  if (query_recv_complete_) {
-    TryWriteReply(replying_backend_);
-  }
-}
-
-void MemcSetCommand::RotateReplyingBackend(bool) {
-  assert(query_recv_complete_);
-  client_conn_->RotateReplyingCommand();
-}
-
 bool MemcSetCommand::query_recv_complete() {
   return query_recv_complete_;
 }

@@ -219,19 +219,6 @@ void RedisDelCommand::OnBackendReplyReceived(
   }
 }
 
-void RedisDelCommand::StartWriteReply() {
-  if (replying_backend_) {
-    // TODO : 如何模拟触发这个调用?
-    TryWriteReply(replying_backend_);
-    LOG_DEBUG << "StartWriteReply TryWriteReply called";
-  }
-}
-
-void RedisDelCommand::RotateReplyingBackend(bool success) {
-  assert(unparsed_bulks_ == 0);
-  client_conn_->RotateReplyingCommand();
-}
-
 // try to keep pace with parent class impl
 void RedisDelCommand::OnWriteQueryFinished(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {

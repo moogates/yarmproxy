@@ -55,14 +55,6 @@ void RedisGetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backen
   backend->TryReadMoreReply();
 }
 
-void RedisGetCommand::RotateReplyingBackend(bool) {
-  client_conn_->RotateReplyingCommand();
-}
-
-void RedisGetCommand::StartWriteReply() {
-  TryWriteReply(replying_backend_);
-}
-
 bool RedisGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
 

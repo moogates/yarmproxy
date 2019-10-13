@@ -21,7 +21,7 @@ public:
   void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
 private:
-  void StartWriteReply() override;
+  // void StartWriteReply() override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
@@ -30,7 +30,6 @@ private:
   bool StartWriteQuery() override;
   bool ContinueWriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
-  void RotateReplyingBackend(bool) override;
 
   bool query_data_zero_copy() override {
     return true;

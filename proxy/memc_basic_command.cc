@@ -59,15 +59,6 @@ bool MemcBasicCommand::StartWriteQuery() {
 }
 */
 
-void MemcBasicCommand::StartWriteReply() {
-  // TODO : report error & rotate if connection refused
-  TryWriteReply(replying_backend_);
-}
-
-void MemcBasicCommand::RotateReplyingBackend(bool) {
-  client_conn_->RotateReplyingCommand();
-}
-
 bool MemcBasicCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   assert(replying_backend_ == backend);
   const char * entry = replying_backend_->buffer()->unparsed_data();

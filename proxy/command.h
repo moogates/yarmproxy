@@ -34,7 +34,7 @@ public:
   virtual bool ContinueWriteQuery();
   virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                       ErrorCode ec);
-  virtual void StartWriteReply() = 0;
+  virtual void StartWriteReply();
 
   virtual void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
                                     ErrorCode ec);
@@ -78,10 +78,9 @@ protected:
           }
         };
   }
+  virtual void RotateReplyingBackend();
 private:
   virtual bool query_data_zero_copy() = 0;
-
-  virtual void RotateReplyingBackend(bool success) = 0;
   virtual bool ParseReply(std::shared_ptr<BackendConn> backend) = 0;
 
 protected:

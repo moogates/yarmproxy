@@ -16,9 +16,7 @@ private:
     assert(false);
     return false;
   }
-  void StartWriteReply() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
-  void RotateReplyingBackend(bool) override;
   bool query_data_zero_copy() override {
     return true;
   }

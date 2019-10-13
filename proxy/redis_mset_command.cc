@@ -320,18 +320,14 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
   }
 }
 
+/*
 void RedisMsetCommand::StartWriteReply() {
   if (replying_backend_) {
     TryWriteReply(replying_backend_);
     LOG_DEBUG << "StartWriteReply TryWriteReply called";
   }
 }
-
-void RedisMsetCommand::RotateReplyingBackend(bool success) {
-  assert(unparsed_bulks_ == 0);
-  client_conn_->RotateReplyingCommand();
-}
-
+*/
 // try to keep pace with parent class impl
 void RedisMsetCommand::OnWriteQueryFinished(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {

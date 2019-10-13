@@ -59,12 +59,7 @@ void StatsCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
   assert(backend == nullptr);
   LOG_DEBUG << "StatsCommand OnWriteReplyFinished, backend=" << backend
             << " ec=" << ErrorCodeString(ec);
-  RotateReplyingBackend(false);
-}
-
-
-void StatsCommand::RotateReplyingBackend(bool) {
-  client_conn_->RotateReplyingCommand();
+  RotateReplyingBackend();
 }
 
 }

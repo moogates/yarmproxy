@@ -15,12 +15,9 @@ public:
   virtual ~MemcSetCommand();
 
 private:
-  void StartWriteReply() override;
   void check_query_recv_complete() override;
 
-  // bool ContinueWriteQuery() override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
-  void RotateReplyingBackend(bool) override;
 
   bool query_data_zero_copy() override {
     return true;

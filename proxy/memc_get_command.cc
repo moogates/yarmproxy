@@ -65,7 +65,6 @@ bool MemcGetCommand::StartWriteQuery() {
   for(auto& query : subqueries_) {
     auto backend = query->backend_;
     assert(backend);
-    // query->backend_ = AllocateBackend(query->backend_endpoint_);
     backend->SetReadWriteCallback(
         WeakBind(&Command::OnWriteQueryFinished, backend),
         WeakBind(&Command::OnBackendReplyReceived, backend));
@@ -96,7 +95,7 @@ void MemcGetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend) {
       && TryActivateReplyingBackend(backend)) {
     if (backend->finished()) {
       // newly received data might needn't forwarding, eg. some "END\r\n"
-      RotateReplyingBackend(backend->recyclable());
+      RotateReplyingBackend();
     } else {
       TryWriteReply(backend);
     }
@@ -179,7 +178,7 @@ void MemcGetCommand::NextBackendStartReply() {
               << " completed_backends_=" << completed_backends_
               << " backend=" << next_backend;
     if (next_backend->finished()) {
-      RotateReplyingBackend(next_backend->recyclable());
+      RotateReplyingBackend();
     } else {
       TryWriteReply(next_backend);
       replying_backend_ = next_backend;
@@ -193,7 +192,7 @@ bool MemcGetCommand::HasUnfinishedBanckends() const {
   return completed_backends_ < subqueries_.size();
 }
 
-void MemcGetCommand::RotateReplyingBackend(bool) {
+void MemcGetCommand::RotateReplyingBackend() {
   ++completed_backends_;
   if (HasUnfinishedBanckends()) {
   // if (HasUnfinishedBanckends() || waiting_reply_queue_.size() > 0) {

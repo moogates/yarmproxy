@@ -284,7 +284,7 @@ bool RedisMgetCommand::BackendErrorRecoverable(std::shared_ptr<BackendConn> back
   return !backend->has_read_some_reply();
 }
 
-void RedisMgetCommand::RotateReplyingBackend(bool recyclable) {
+void RedisMgetCommand::RotateReplyingBackend() {
   ++completed_backends_;
   LOG_DEBUG << "RotateReplyingBackend ++completed_backends_";
 
