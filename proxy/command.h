@@ -1,6 +1,7 @@
 #ifndef _YARMPROXY_COMMAND_H_
 #define _YARMPROXY_COMMAND_H_
 
+#include <cassert>
 #include <list>
 #include <vector>
 #include <string>

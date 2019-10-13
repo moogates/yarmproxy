@@ -90,8 +90,11 @@ void BackendConn::TryReadMoreReply() {
 }
 
 void BackendConn::WriteQuery(const char* data, size_t bytes) {
+  if (aborted_) {
+    query_sent_callback_(ErrorCode::E_WRITE_QUERY);
+    return;
+  }
   if (!socket_.is_open()) {
-    assert(!aborted_);
     UpdateTimer(write_timer_, ErrorCode::E_BACKEND_CONNECT_TIMEOUT);
     write_timer_canceled_ = false;
 
@@ -211,10 +214,6 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 // TODO : connection_base
 void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeout_code) {
   if (aborted_) {
-    LOG_INFO << "BackendConn " << this << " ep=" << remote_endpoint()
-             << " timeout after closed."
-             << " code=" << ErrorCodeString(timeout_code);
-    // assert(false);
     return;
   }
 
@@ -222,7 +221,8 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeo
     // timer was cancelled, take no action.
     return;
   }
-  LOG_INFO << "BackendConn " << this << " timeout. timeout_code=" << ErrorCodeString(timeout_code)
+
+  LOG_WARN << "BackendConn " << this << " timeout. timeout_code=" << ErrorCodeString(timeout_code)
            << " endpoint=" << remote_endpoint_
            << " read_timer_canceled_=" << read_timer_canceled_
            << " write_timer_canceled_=" << write_timer_canceled_
