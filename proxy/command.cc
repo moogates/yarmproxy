@@ -332,11 +332,16 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
     if (!BackendErrorRecoverable(backend, ec)) {
       client_conn_->Abort();
     } else {
-      OnBackendRecoverableError(backend, ec);
       // TODO : no duplicate code
       if (query_data_zero_copy()) {
         client_conn_->buffer()->dec_recycle_lock();
-        if (!query_recv_complete()) {
+      }
+      OnBackendRecoverableError(backend, ec);
+      if (false) {
+        if (!client_conn_->buffer()->recycle_locked() &&
+            !query_recv_complete()) {
+      //if (!query_recv_complete()) {
+          assert(!client_conn_->buffer()->recycle_locked());
           client_conn_->TryReadMoreQuery("command_1");
         }
       }
@@ -352,10 +357,6 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
 
   if (query_data_zero_copy()) {
     client_conn_->buffer()->dec_recycle_lock();
-    if (!query_recv_complete()) {
-      client_conn_->TryReadMoreQuery("command_2");
-      return;
-    }
   }
 
   if (query_recv_complete()) {
@@ -363,6 +364,10 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
     backend->ReadReply();
   } else {
     // need more query
+    if (!client_conn_->buffer()->recycle_locked()) {
+      // LOG_ERROR << "TryReadMoreQuery command_4";
+      client_conn_->TryReadMoreQuery("command_4");
+    }
   }
 }
 
@@ -449,6 +454,14 @@ void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, Er
     }
   } else {
     // wait for more query data
+    // assert(client_conn_->buffer()->recycle_locked());
+    LOG_ERROR << "TryReadMoreQuery command_3"
+              << " is_reading_query=" << client_conn_->is_reading_query()
+              << " lock_count=" << client_conn_->buffer()->recycle_lock_count()
+              << " has_much_space=" << client_conn_->buffer()->has_much_free_space();
+    if (!client_conn_->buffer()->recycle_locked()) {
+      client_conn_->TryReadMoreQuery("command_3");
+    }
   }
 }
 

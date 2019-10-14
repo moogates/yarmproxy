@@ -63,6 +63,7 @@ void RedisMsetCommand::PushSubquery(const Endpoint& ep, const char* data,
     LOG_DEBUG << "PushSubquery inc_recycle_lock add new endpoint " << ep
               << " , key=" << redis::Bulk(data, bytes).to_string();
     client_conn_->buffer()->inc_recycle_lock();
+
     auto backend = backend_pool()->Allocate(ep);
     std::shared_ptr<Subquery> query(new Subquery(backend, data, bytes));
     auto res = waiting_subqueries_.emplace(ep, query);
@@ -167,6 +168,7 @@ bool RedisMsetCommand::ContinueWriteQuery() {
     tail_query_->phase_ = Subquery::READING_MORE_QUERY;
   }
   client_conn_->buffer()->inc_recycle_lock();
+
   tail_query_->backend_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
       client_conn_->buffer()->unprocessed_bytes());
   return false;
@@ -266,6 +268,7 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
 
     if (unparsed_bulks_ > 0 &&
         !client_conn_->buffer()->recycle_locked()) {
+      assert(!query_recv_complete());
       client_conn_->TryReadMoreQuery("redis_mset_6");
     }
 
@@ -333,9 +336,17 @@ void RedisMsetCommand::OnWriteQueryFinished(
       if (query->query_recv_complete_) {
         query->phase_ = Subquery::READING_REPLY;
         backend->ReadReply();
+        if (!client_conn_->buffer()->recycle_locked()
+            && !query_recv_complete()) {
+          // assert(false);
+          // TODO : 似乎这里也该 TryReadMoreQuery
+          LOG_WARN << "TryReadMoreQuery redis_mset_8";
+          client_conn_->TryReadMoreQuery("redis_mset_8");
+        }
       } else {
         if (!client_conn_->buffer()->recycle_locked()) {
           query->phase_ = Subquery::READING_MORE_QUERY;
+          assert(!query_recv_complete());
           client_conn_->TryReadMoreQuery("redis_mset_2");
         } else {
           assert(query->phase_ == Subquery::SENDING_MORE_QUERY);
@@ -345,6 +356,7 @@ void RedisMsetCommand::OnWriteQueryFinished(
     } else {
       query->phase_ = Subquery::READING_REPLY;
       backend->ReadReply();
+
       if (!client_conn_->buffer()->recycle_locked()) {
         if (!tail_query_->query_recv_complete_) {
           tail_query_->phase_ = Subquery::READING_MORE_QUERY;
@@ -355,9 +367,17 @@ void RedisMsetCommand::OnWriteQueryFinished(
     return;
   case Subquery::READING_MORE_QUERY:
     client_conn_->buffer()->dec_recycle_lock();
+
     if (query->query_recv_complete_) {
       query->phase_ = Subquery::READING_REPLY;
       backend->ReadReply();
+
+      if (!client_conn_->buffer()->recycle_locked() &&
+          !query_recv_complete()) {
+        // assert(false);
+        LOG_WARN << "TryReadMoreQuery redis_mset_7";
+        client_conn_->TryReadMoreQuery("redis_mset_7");
+      }
     } else {
       assert(query == tail_query_);
       assert(client_conn_->buffer()->recycle_lock_count() == 0);
@@ -437,6 +457,7 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
   if (new_bulks.size() == 0) {
     // assert(client_conn_->buffer()->recycle_lock_count() == 0);
     if (!client_conn_->buffer()->recycle_locked()) {
+      assert(!query_recv_complete());
       client_conn_->TryReadMoreQuery("redis_mset_5");
     }
     return true;

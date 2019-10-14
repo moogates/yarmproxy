@@ -1,4 +1,4 @@
-gunzip -c ./mset_pipeline_2.data.gz | nc 127.0.0.1 11311 > mset_pipeline_2.tmp
+gunzip -c ./mset_pipeline_2.data.gz | ../yarmnc 127.0.0.1 11311 > mset_pipeline_2.tmp
 
 cat mset_pipeline_2.tmp
 

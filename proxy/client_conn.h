@@ -55,6 +55,9 @@ public:
   bool is_writing_reply() const {
     return is_writing_reply_;
   }
+  bool is_reading_query() const { // TODO : for debug only
+    return is_reading_query_;
+  }
 
 private:
   boost::asio::ip::tcp::socket socket_;
