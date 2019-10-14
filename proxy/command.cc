@@ -458,6 +458,9 @@ void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, Er
     LOG_ERROR << "TryReadMoreQuery command_3"
               << " is_reading_query=" << client_conn_->is_reading_query()
               << " lock_count=" << client_conn_->buffer()->recycle_lock_count()
+              << " unparsed=" << client_conn_->buffer()->unparsed_bytes()
+              << " unprocessed=" << client_conn_->buffer()->unprocessed_bytes()
+              << " free_space_size=" << client_conn_->buffer()->free_space_size()
               << " has_much_space=" << client_conn_->buffer()->has_much_free_space();
     if (!client_conn_->buffer()->recycle_locked()) {
       client_conn_->TryReadMoreQuery("command_3");

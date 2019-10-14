@@ -3,3 +3,5 @@ for id in `seq 2 9`; do
   ./set${id}.sh
   sleep 0.01
 done
+
+./set_pipeline_1.sh
