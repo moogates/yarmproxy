@@ -9,8 +9,6 @@
 
 #include <boost/asio.hpp>
 
-using namespace boost::asio;
-
 namespace yarmproxy {
 
 class BackendConnPool;
@@ -20,7 +18,6 @@ class ReadBuffer;
 
 enum class ErrorCode;
 
-// typedef std::function<void(const boost::system::error_code& error)> WriteReplyCallback;
 typedef std::function<void(ErrorCode ec)> WriteReplyCallback;
 
 class ClientConnection : public std::enable_shared_from_this<ClientConnection> {
@@ -32,7 +29,7 @@ public:
     return context_;
   }
 
-  ip::tcp::socket& socket() {
+  boost::asio::ip::tcp::socket& socket() {
     return socket_;
   }
   void StartRead();
@@ -48,13 +45,22 @@ public:
   }
   void RotateReplyingCommand();
 
-  void TryReadMoreQuery();
+  void TryReadMoreQuery(const char* caller = ""); // TODO : call param for debug only
   ReadBuffer* buffer() {
     return buffer_;
   }
+  bool aborted() const { // TODO : for debug only
+    return aborted_;
+  }
+  bool is_writing_reply() const {
+    return is_writing_reply_;
+  }
+  bool is_reading_query() const { // TODO : for debug only
+    return is_reading_query_;
+  }
 
 private:
-  ip::tcp::socket socket_;
+  boost::asio::ip::tcp::socket socket_;
   ReadBuffer* buffer_;
 
 protected:
@@ -63,15 +69,23 @@ protected:
 private:
   std::list<std::shared_ptr<Command>> active_cmd_queue_;
   bool is_reading_query_ = false;
+  bool is_writing_reply_ = false;
+  bool aborted_ = false;
 
   void AsyncRead();
 
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  bool ProcessUnparsedQuery();
+  void ProcessUnparsedQuery();
 
-  void IdleTimeout(const boost::system::error_code& error);
-  void UpdateTimer();
-  boost::asio::steady_timer timer_; // TODO : system_timer or steady_timer?
+  enum TimerType {
+    READ_TIMER,
+    WRITE_TIMER,
+  };
+  boost::asio::steady_timer read_timer_;
+  boost::asio::steady_timer write_timer_;
+
+  void UpdateTimer(TimerType type);
+  void OnTimeout(const boost::system::error_code& error, TimerType type);
 };
 
 }

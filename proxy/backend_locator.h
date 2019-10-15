@@ -2,27 +2,23 @@
 #define _YARMPROXY_BACKEND_LOCATOR_H_
 
 #include <string>
-#include <boost/asio.hpp>
+#include <memory>
+#include <boost/asio/ip/tcp.hpp>
 
 namespace yarmproxy {
 
-class Continuum;
+using Endpoint = boost::asio::ip::tcp::endpoint;
 
-extern const char DEFAULT_GROUP[];
+class BackendContinuum;
+enum class ProtocolType;
 
-class BackendLoactor {
-private:
-  BackendLoactor() {}
+class BackendLocator {
 public:
-  static BackendLoactor& Instance() {
-    static BackendLoactor locator;
-    return locator;
-  }
+  BackendLocator() {}
   bool Initialize();
-  boost::asio::ip::tcp::endpoint Locate(const char * key, size_t len, const char* group = DEFAULT_GROUP);
-  boost::asio::ip::tcp::endpoint Locate(const std::string& key, const char* group = DEFAULT_GROUP);
+  Endpoint Locate(const char * key, size_t len, ProtocolType protocol);
 private:
-  std::map<std::string, Continuum *> clusters_continum_;
+  std::map<std::string, std::shared_ptr<BackendContinuum>> namespace_continum_;
 };
 
 }

@@ -1,89 +1,78 @@
 #include "backend_locator.h"
 
-#include "base/logging.h"
+#include "logging.h"
 
-#include "consist_hash.h"
-
-using namespace boost::asio;
+#include "config.h"
+#include "backend_continuum.h"
+#include "protocol_type.h"
 
 namespace yarmproxy {
-const char DEFAULT_GROUP[] = "DEFAULT";
 
-// static const char * backend_nodes = "127.0.0.1:21211=2000;127.0.0.1:21212=2000;127.0.0.1:21213=2000;127.0.0.1:21214=2000;127.0.0.1:21215=2000;";
-static const char * backend_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000;127.0.0.1:11213=2000;127.0.0.1:11214=2000;127.0.0.1:11215=2000;";
-// static const char * backend_nodes = "127.0.0.1:11211=2000;127.0.0.1:11212=2000";
-// static const char * backend_nodes = "127.0.0.1:11211=2000";
+static const char * ProtocolNs(ProtocolType protocol) {
+  switch(protocol) {
+  case ProtocolType::MEMCACHED:
+    return "m";
+  case ProtocolType::REDIS:
+    return "r";
+  default:
+    return "";
+  }
+}
 
-//static const char * backend_nodes = "10.3.22.42:11211=6800;"
-//                              "10.3.22.43:11211=6800;"
-//                              "10.3.22.119:11211=6800;"
-//                              "10.3.22.120:11211=6800;"
-//                              "10.3.22.121:11211=6800;"
-//                              "10.3.22.122:11211=6800;"
-//                              "10.3.22.123:11211=6800;"
-//                              "10.3.22.124:11211=6800;"
-//                              "10.3.22.125:11211=6800;"
-//                              "10.3.22.126:11211=6800";
-
-bool BackendLoactor::Initialize() {
-  {
-    // static const char redis_backend_nodes[] = "127.0.0.1:6379=2000;127.0.0.1:6380=2000;127.0.0.1:6381=2000";
-    // static const char redis_backend_nodes[] = "127.0.0.1:6379=2000";
-    // static const char redis_backend_nodes[] = "127.0.0.1:16379=2000";
-    static const char redis_backend_nodes[] = "127.0.0.1:6379=2000;127.0.0.1:11111=2000;127.0.0.1:22222=2000";
-
-    char group[] = "REDIS_bj";
-    Continuum * continuum = new Continuum;
-    // if (continuum->SetCacheNodes(FEED_nodes)) {
-    if (continuum->SetCacheNodes(redis_backend_nodes)) {
-      clusters_continum_.insert(std::make_pair(group, continuum));
-    } else {
-      LOG_WARN << "加载 Continuum 失败 gruop=" << group << "-" << redis_backend_nodes;
-      delete continuum;
+bool BackendLocator::Initialize() {
+  if (Config::Instance().clusters().empty()) {
+    return false;
+  }
+  for(auto& cluster : Config::Instance().clusters()) {
+    std::shared_ptr<BackendContinuum> continuum(
+        new BackendContinuum(cluster.backends_));
+    for(auto& ns : cluster.namespaces_) {
+      std::ostringstream oss;
+      oss << ProtocolNs(cluster.protocol_) << "/" << (ns == "_" ? "" : ns.c_str());
+      namespace_continum_.emplace(oss.str(), continuum);
+      LOG_DEBUG << "BackendLocator ns=" << oss.str()
+                << " continium=" << continuum;
     }
   }
-
-  {
-    char group[] = "MEMCACHED_bj";
-    Continuum * continuum = new Continuum;
-    if (continuum->SetCacheNodes(backend_nodes)) {
-      clusters_continum_.insert(std::make_pair(group, continuum));
-    } else {
-      LOG_WARN << "加载 Continuum 失败, group=" << group << "-" << backend_nodes;
-      delete continuum;
-    }
-  }
-
-  {
-    Continuum * continuum = new Continuum;
-    if (continuum->SetCacheNodes(backend_nodes)) {
-      clusters_continum_.insert(std::make_pair(DEFAULT_GROUP, continuum));
-    } else {
-      LOG_WARN << "加载 Continuum 失败 : group=" << DEFAULT_GROUP << "-" << backend_nodes;
-      delete continuum;
-    }
-  }
-
   return true;
 }
 
-ip::tcp::endpoint BackendLoactor::Locate(const std::string& key, const char* group) {
-  return Locate(key.c_str(), key.size(), group);
+static const std::string& DefaultNamespace(ProtocolType protocol) {
+  static std::string REDIS_NS_DEFAULT = "0/";
+  static std::string MEMCACHED_NS_DEFAULT = "1/";
+  switch(protocol) {
+  case ProtocolType::REDIS:
+    return REDIS_NS_DEFAULT;
+  case ProtocolType::MEMCACHED:
+    return MEMCACHED_NS_DEFAULT;
+  default:
+    assert(false);
+    return REDIS_NS_DEFAULT;
+  }
 }
 
-ip::tcp::endpoint BackendLoactor::Locate(const char * key, size_t len, const char* group) {
-  Continuum * continuum = nullptr;
+static std::string KeyNamespace(const char * key, size_t len, ProtocolType protocol) {
+  std::ostringstream oss;
+  oss << ProtocolNs(protocol) << "/";
+  const char * p = static_cast<const char *>(memchr(key, '#',
+        std::min(int(len), Config::Instance().max_namespace_length() + 1)));
+  if (p != nullptr) {
+    oss << std::string(key, p - key);
+  }
+  return oss.str();
+}
 
-  auto it = clusters_continum_.find(group);
-  if (it == clusters_continum_.end()) {
-    continuum = clusters_continum_[DEFAULT_GROUP];
+Endpoint BackendLocator::Locate(const char * key, size_t len, ProtocolType protocol) {
+  std::shared_ptr<BackendContinuum> continuum;  // use shared_ptr
+  auto it = namespace_continum_.find(KeyNamespace(key, len, protocol));
+  if (it == namespace_continum_.end()) {
+    // TODO : optional drop user request
+    continuum = namespace_continum_[DefaultNamespace(protocol)];
   } else {
     continuum = it->second;
   }
-  
-  ip::tcp::endpoint ep = continuum->LocateCacheNode(key, len);
-  // LOG_DEBUG << "BackendLoactor::Locate key=" << std::string(key, len) << " cache_node=" << ep;
 
+  Endpoint ep = continuum->LocateCacheNode(key, len);
   return ep;
 }
 

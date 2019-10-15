@@ -1,2 +1,2 @@
-redis-server `readlink -f ./redis.conf`
+redis-server ./redis_6379.conf
 

@@ -2,14 +2,15 @@
 
 #include <iostream>
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "allocator.h"
+#include "backend_locator.h"
 #include "backend_pool.h"
 
 namespace yarmproxy {
 
-#define SLAB_SIZE (4*1024) // TODO : use c++11 enum
+#define SLAB_SIZE (4*1024) // TODO : use g_config_.buffer_size
 
 WorkerContext::WorkerContext()
     : work_(io_service_)
@@ -24,21 +25,31 @@ BackendConnPool* WorkerContext::backend_conn_pool() {
   return backend_conn_pool_;
 }
 
+void WorkerPool::OnLocatorUpdated(std::shared_ptr<BackendLocator> locator) {
+  for(size_t i = 0; i < concurrency_; ++i) {
+    WorkerContext& worker = workers_[i];
+    worker.io_service_.post([&worker, locator]() {
+          worker.backend_locator_ = locator;
+        });
+  }
+}
+
 void WorkerPool::StartDispatching() {
   for(size_t i = 0; i < concurrency_; ++i) {
     WorkerContext& woker = workers_[i];
     std::atomic_bool& stopped(stopped_);
     std::thread th([&woker, &stopped, i]() {
         while(!stopped) {
-        //try {
+          try {
             woker.io_service_.run();
-        //} catch (std::exception& e) {
-        //  LOG_ERROR << "WorkerThread " << i << " io_service.run error:" << e.what();
-        //}
+          } catch (std::exception& e) {
+            LOG_ERROR << "WorkerThread " << i
+                      << " io_service.run error " << e.what();
+          }
         }
-        LOG_WARN << "WorkerThread " << i << " stopped.";
+        LOG_ERROR << "WorkerThread " << i << " stopped.";
       });
-    woker.thread_ = std::move(th); // what to to with this thread handle?
+    woker.thread_ = std::move(th);
   }
 }
 
@@ -48,8 +59,8 @@ void WorkerPool::StopDispatching() {
     workers_[i].io_service_.stop();
   }
   for(size_t i = 0; i < concurrency_; ++i) {
-    LOG_WARN << "WorkerPool StopDispatching join " << i;
     workers_[i].thread_.join();
+    LOG_WARN << "StopDispatching joined WorkerThread " << i;
   }
 }
 

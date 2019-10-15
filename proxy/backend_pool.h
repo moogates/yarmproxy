@@ -5,10 +5,11 @@
 #include <memory>
 #include <queue>
 
-#include <boost/asio.hpp>
-using namespace boost::asio; // TODO : minimize endpoint dependency
+#include <boost/asio/ip/tcp.hpp>
 
 namespace yarmproxy {
+
+using Endpoint = boost::asio::ip::tcp::endpoint;
 
 class BackendConn;
 class WorkerContext;
@@ -17,13 +18,13 @@ class BackendConnPool {
 public:
   BackendConnPool(WorkerContext& context) : context_(context) {}
 
-  std::shared_ptr<BackendConn> Allocate(const ip::tcp::endpoint & ep);
+  std::shared_ptr<BackendConn> Allocate(const Endpoint & ep);
   void Release(std::shared_ptr<BackendConn> conn);
 
 private:
   WorkerContext& context_;
-  std::map<ip::tcp::endpoint, std::queue<std::shared_ptr<BackendConn>>> conn_map_;  // rename to idle_conns_
-  std::map<std::shared_ptr<BackendConn>, ip::tcp::endpoint> active_conns_;
+  std::map<Endpoint, std::queue<std::shared_ptr<BackendConn>>> conn_map_;  // rename to idle_conns_
+  std::map<std::shared_ptr<BackendConn>, Endpoint> active_conns_;
 };
 
 }

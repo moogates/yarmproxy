@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 2.8.9)
 project(yarmproxy)
 set (YARM_ROOT_DIR "..")
 
-SET (CMAKE_CXX_COMPILER "clang++")
+#SET (CMAKE_CXX_COMPILER "clang++")
+SET (CMAKE_CXX_COMPILER "g++")
 
 #set (CMAKE_BUILD_TYPE "Debug")
 set (CMAKE_BUILD_TYPE "Release")
@@ -16,14 +17,17 @@ include_directories(${YARM_ROOT_DIR})
 add_definitions(-DLOGURU_WITH_STREAMS=1) 
 
 aux_source_directory(. SOURCES)
-aux_source_directory(${YARM_ROOT_DIR}/base BASE_SOURCES)
 #file(GLOB SOURCES "*.cc")
 #set(SOURCES src/main.cc src/proxy_server.cc)
 link_directories(/usr/local/lib)
 message(${SOURCES})
-message(${BASE_SOURCES})
 
-add_executable(yarmproxy ${BASE_SOURCES} ${SOURCES})
+add_executable(yarmproxy ${SOURCES})
 
 target_link_libraries(yarmproxy boost_system boost_thread pthread dl)
+
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+  MESSAGE(STATUS "this is Linux")
+  # target_link_libraries(yarmproxy atomic)
+endif (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 

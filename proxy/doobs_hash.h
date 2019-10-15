@@ -33,7 +33,7 @@ acceptable.  Do NOT use for cryptographic purposes.
 --------------------------------------------------------------------
 */
 
-//k:        the key 
+//k:        the key
 //length:   the length of the key
 //initval:  the previous hash, or an arbitrary value
 

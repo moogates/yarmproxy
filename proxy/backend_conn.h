@@ -4,12 +4,14 @@
 #include <functional>
 #include <memory>
 
-#include <boost/asio.hpp>
-using namespace boost::asio;
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #include "read_buffer.h"
 
 namespace yarmproxy {
+using Endpoint = boost::asio::ip::tcp::endpoint;
+
 class WorkerContext;
 class ReadBuffer;
 
@@ -20,7 +22,7 @@ typedef std::function<void(ErrorCode ec)> BackendQuerySentCallback;
 
 class BackendConn : public std::enable_shared_from_this<BackendConn> {
 public:
-  BackendConn(WorkerContext& context, const ip::tcp::endpoint& endpoint);
+  BackendConn(WorkerContext& context, const Endpoint& endpoint);
   ~BackendConn();
 
   void WriteQuery(const char* data, size_t bytes);
@@ -41,7 +43,7 @@ private:
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
 public:
-  void Close();
+  void Abort(ErrorCode ec);
   void Reset();
   ReadBuffer* buffer() {
     return buffer_;
@@ -51,7 +53,7 @@ public:
     return reply_recv_complete_ && buffer_->unprocessed_bytes() == 0;
   }
 
-  const ip::tcp::endpoint& remote_endpoint() const {
+  const Endpoint& remote_endpoint() const {
     return remote_endpoint_;
   }
   void set_reply_recv_complete() {
@@ -66,18 +68,34 @@ public:
   bool recyclable() const {
     return !no_recycle_ && finished();
   }
+  bool has_read_some_reply() const {
+    return has_read_some_reply_;
+  }
+  bool error() const {
+    return no_recycle_;
+  }
 private:
   WorkerContext& context_;
   ReadBuffer* buffer_;
-  ip::tcp::endpoint remote_endpoint_;
-  ip::tcp::socket socket_;
+  Endpoint remote_endpoint_;
+  boost::asio::ip::tcp::socket socket_;
 
   BackendReplyReceivedCallback reply_received_callback_;
-  BackendQuerySentCallback query_sent_callback_;
+  BackendQuerySentCallback query_sent_callback_; // TODO :rename
 
-  bool is_reading_reply_    = false;
+  bool is_reading_reply_    = false; // TODO : merge into a flag
+  bool has_read_some_reply_ = false;
   bool reply_recv_complete_ = false;
-  bool no_recycle_          = false;
+  bool no_recycle_          = false; // is it redundant with aborted_?
+  bool aborted_             = false;
+
+  boost::asio::steady_timer write_timer_;
+  bool write_timer_canceled_ = false;
+  boost::asio::steady_timer read_timer_;
+  bool read_timer_canceled_ = false;
+
+  void UpdateTimer(boost::asio::steady_timer& timer, ErrorCode timeout_code);
+  void OnTimeout(const boost::system::error_code& error, ErrorCode timeout_code);
 };
 
 }

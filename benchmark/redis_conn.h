@@ -37,7 +37,7 @@ public:
     keepalive_ = time(NULL);
   }
 
-  void Write(const uint8_t* data, size_t len);
+  void Write(const char* data, size_t len);
 
   boost::asio::io_service & io_service() {
     return io_service_;
@@ -48,7 +48,6 @@ public:
   virtual bool is_publisher() const  { return false; }
   virtual void OnKeepaliveTimer(const boost::system::error_code& error);
 private:
-  int ProcessPacket();
   void SetSocketOptions();
   RedisConnection(boost::asio::io_service& io_service, 
                                   const std::string& host,
@@ -71,15 +70,18 @@ private:
     ST_SUBSCRIBING = 5,
     ST_SUBSCRIBE_OK = 6,
   };
+
+  std::string query_data_;
+  size_t query_sent_counter_ = 0;
   
   std::set<std::string> subscribed_topics_;
   
   enum { kReadBufLength = 64 * 1024 };
-  uint8_t read_buf_[kReadBufLength];
+  char read_buf_[kReadBufLength];
   size_t read_buf_begin_, read_buf_end_;
 
   enum { kWriteBufLength = 4 * 1024 };
-  uint8_t write_buf_[kWriteBufLength];
+  char write_buf_[kWriteBufLength];
   size_t write_buf_begin_, write_buf_end_;
   std::string extended_write_buf_;
   bool is_writing_;

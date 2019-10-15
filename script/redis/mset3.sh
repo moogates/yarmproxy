@@ -1,10 +1,15 @@
-res=$(cat ./mset3.data | nc 127.0.0.1 11311 | head -n1)
-echo $res
-exit
+gunzip -c ./mset3.data.gz | nc 127.0.0.1 11311 > mset3.tmp
 
-if [ $? -ne 0 ]; then
-  echo -e "\033[33m fail \033[0m"
+cat mset3.tmp
+
+expected="+OK"
+res=$(cat mset3.tmp | tr -d '\r\n')
+
+if [ $res == $expected ]; then
+  echo -e "\033[32mSuccess \033[0m"
+  exit 0
 else
-  echo -e "\033[32m success \033[0m"
+  echo -e "\033[33mFail \033[0m"
+  exit 1
 fi
-echo
+

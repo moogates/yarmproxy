@@ -4,223 +4,286 @@
 #include <chrono>
 #include <memory>
 
-#include "base/logging.h"
+#include "logging.h"
 
 #include "allocator.h"
+#include "config.h"
 #include "command.h"
 #include "error_code.h"
 #include "read_buffer.h"
+#include "stats.h"
 #include "worker_pool.h"
-
-using namespace boost::asio;
 
 namespace yarmproxy {
 
-// TODO : gracefully close connections
-
 ClientConnection::ClientConnection(WorkerContext& context)
-  : socket_(context.io_service_)
-  , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
-  , context_(context)
-  , timer_(context.io_service_)
-{
+    : socket_(context.io_service_)
+    , buffer_(new ReadBuffer(context.allocator_->Alloc(),
+                      context.allocator_->slab_size()))
+    , context_(context)
+    , read_timer_(context.io_service_)
+    , write_timer_(context.io_service_) {
+  ++g_stats_.client_conns_;
+  LOG_DEBUG << "client ctor. count=" << g_stats_.client_conns_;
 }
 
 ClientConnection::~ClientConnection() {
   if (socket_.is_open()) {
-    LOG_DEBUG << "ClientConnection destroyed close socket.";
+    LOG_DEBUG << "client destroyed close socket.";
     socket_.close();
   }
   context_.allocator_->Release(buffer_->data());
   delete buffer_;
+  --g_stats_.client_conns_;
+  LOG_DEBUG << "client dtor. count=" << g_stats_.client_conns_;
 }
 
-void ClientConnection::IdleTimeout(const boost::system::error_code& ec) {
-  if (ec == boost::asio::error::operation_aborted) {
-    LOG_WARN << "ClientConnection IdleTimeout canceled.";
-  } else {
-    LOG_WARN << "ClientConnection IdleTimeout.";
+void ClientConnection::OnTimeout(const boost::system::error_code& ec,
+                                 TimerType timer_type) {
+  if (ec != boost::asio::error::operation_aborted) {
     // timer was not cancelled, take necessary action.
+    LOG_WARN << "client OnTimeout, timer=" << timer_type;
+    if (timer_type == READ_TIMER) {
+      ++g_stats_.client_read_timeouts_;
+    } else {
+      ++g_stats_.client_write_timeouts_;
+    }
+    Abort();
   }
 }
 
-void ClientConnection::UpdateTimer() {
-  // TODO : config timeout
-  // timer_.expires_after(std::chrono::milliseconds(60000));
-  // timer_.async_wait(std::bind(&ClientConnection::IdleTimeout, shared_from_this(), std::placeholders::_1));
+void ClientConnection::UpdateTimer(TimerType timer_type) {
+  if (aborted_) {
+    return;
+  }
+  boost::asio::steady_timer& timer = 
+      timer_type == READ_TIMER ? read_timer_ : write_timer_;
+
+  int timeout = (timer_type == READ_TIMER && 
+      buffer_->unparsed_received_bytes() == 0) ?
+      Config::Instance().client_idle_timeout() :
+      Config::Instance().socket_rw_timeout();
+
+  timer.expires_after(std::chrono::milliseconds(timeout));
+  LOG_DEBUG << "client UpdateTimer " << timer_type << " timeout=" << timeout;
+
+  std::weak_ptr<ClientConnection> wptr(shared_from_this());
+  timer.async_wait([wptr, timer_type](const boost::system::error_code& ec) {
+        if (auto ptr = wptr.lock()) {
+          ptr->OnTimeout(ec, timer_type);
+        }
+      });
 }
 
 void ClientConnection::StartRead() {
   boost::system::error_code ec;
-  ip::tcp::no_delay nodelay(true);
+  boost::asio::ip::tcp::no_delay nodelay(true);
   socket_.set_option(nodelay, ec);
-  LOG_ERROR << "ClientConnection StartRead ===================================";
-
-  UpdateTimer();
-
-  // if (!ec) {
-  //   boost::asio::socket_base::linger linger(true, 0);
-  //   socket_.set_option(linger, ec); // don't disable linger here
-  // }
 
   if (ec) {
+    LOG_WARN << "client StartRead set socket option error";
     socket_.close();
   } else {
+    LOG_ERROR << "client StartRead ===================================";
     AsyncRead();
   }
 }
 
-void ClientConnection::TryReadMoreQuery() {
-  // TODO : checking preconditions
+void ClientConnection::TryReadMoreQuery(const char* caller) {
+  LOG_DEBUG << "client TryReadMoreQuery caller=" << caller
+       << " buffer_lock=" << buffer_->recycle_lock_count()
+       << " is_reading_query=" << is_reading_query_
+       << " has_much_free_space=" << buffer_->has_much_free_space()
+       << " free_space=" << buffer_->free_space_size();
+  if (is_reading_query_ || !buffer_->has_much_free_space()) {
+    return;
+  }
   AsyncRead();
 }
 
 void ClientConnection::AsyncRead() {
-  if (is_reading_query_) {
-    LOG_DEBUG << "ClientConnection::AsyncRead do nothing";
-    return;
-  }
   is_reading_query_ = true;
   buffer_->inc_recycle_lock();
 
-  LOG_DEBUG << "ClientConnection::AsyncRead begin, free_space_size=" << buffer_->free_space_size()
-            << " buffer=" << buffer_;
+  LOG_DEBUG << "client AsyncRead, buffer=" << buffer_
+            << " free_space=" << buffer_->free_space_size()
+            << " lock=" << buffer_->recycle_lock_count();
 
-  assert(buffer_->recycle_locked());
-  socket_.async_read_some(boost::asio::buffer(buffer_->free_space_begin(),
-          buffer_->free_space_size()),
+  UpdateTimer(READ_TIMER);
+  socket_.async_read_some(boost::asio::buffer(
+      buffer_->free_space_begin(), buffer_->free_space_size()),
       std::bind(&ClientConnection::HandleRead, shared_from_this(),
           std::placeholders::_1, std::placeholders::_2));
 }
 
 void ClientConnection::RotateReplyingCommand() {
   if (active_cmd_queue_.size() == 1) {
-    LOG_DEBUG << "RotateReplyingCommand AsyncRead when all commands processed";
-    AsyncRead();
+    // read before pop to avoid deref
+    TryReadMoreQuery("client_conn_5");
   }
 
   active_cmd_queue_.pop_front();
+
   if (!active_cmd_queue_.empty()) {
     active_cmd_queue_.front()->StartWriteReply();
-    ProcessUnparsedQuery();
+
+    if (!active_cmd_queue_.back()->query_recv_complete()) {
+      if (!buffer_->recycle_locked()) {
+        // TODO : reading next query might be blocked by previous
+        // command's lock, so try to restart the reading here
+        TryReadMoreQuery("client_conn_1");
+      }
+    } else {
+      ProcessUnparsedQuery();
+    }
   }
 }
 
 void ClientConnection::WriteReply(const char* data, size_t bytes,
                                   const WriteReplyCallback& callback) {
+  if (is_writing_reply_) {
+    assert(false);
+  }
   std::shared_ptr<ClientConnection> client_conn(shared_from_this());
   auto cb_wrap = [client_conn, data, bytes, callback](
       const boost::system::error_code& error, size_t bytes_transferred) {
+    client_conn->write_timer_.cancel();
+    if (!error) {
+      g_stats_.bytes_to_clients_ += bytes_transferred;
+    }
     if (!error && bytes_transferred < bytes) {
       client_conn->WriteReply(data + bytes_transferred,
                               bytes - bytes_transferred, callback);
     } else {
+      client_conn->is_writing_reply_ = false;
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
     }
   };
 
+  is_writing_reply_ = true;
+  UpdateTimer(WRITE_TIMER);
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
-bool ClientConnection::ProcessUnparsedQuery() {
-  static const size_t PIPELINE_ACTIVE_LIMIT = 4;
+void ClientConnection::ProcessUnparsedQuery() {
+  // TODO : pipeline中多个请求的时序问题,即后面的command可能先
+  // 被执行. 参考 del_pipeline_1.sh
+  static const size_t PIPELINE_ACTIVE_LIMIT = 4; // TODO : config
   while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
         && buffer_->unparsed_received_bytes() > 0) {
-    // TODO : close the conn if command line is  too long
     std::shared_ptr<Command> command;
-    int parsed_bytes = Command::CreateCommand(shared_from_this(),
+    size_t parsed_bytes = Command::CreateCommand(shared_from_this(),
                buffer_->unprocessed_data(), buffer_->received_bytes(),
                &command);
 
-    if (parsed_bytes < 0) {
-      Abort();
-      return false;
-    }  else if (parsed_bytes == 0) {
-      if (buffer_->unparsed_received_bytes() > 2048) {
-        LOG_WARN << "Too long unparsable command line";
-        return false;
-      }
-      TryReadMoreQuery();
-      LOG_DEBUG << "ProcessUnparsedQuery waiting for more data";
-      return true;
-    } else {
-      LOG_DEBUG << "ProcessUnparsedQuery parsed_bytes=" << parsed_bytes;
-      buffer_->update_parsed_bytes(parsed_bytes);
+    if (parsed_bytes == 0) {
+      TryReadMoreQuery("client_conn_2");
+      break;
+    }
+    buffer_->update_parsed_bytes(parsed_bytes);
 
-      command->WriteQuery();
-      active_cmd_queue_.push_back(command);
-      buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
+    active_cmd_queue_.push_back(command);
+    bool no_callback = command->StartWriteQuery(); // rename to StartWriteQuery
+    buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
-      if (!command->query_parsing_complete()) {
-        break;
+    // TODO : check the precondition very carefully
+    if (buffer_->parsed_unreceived_bytes() > 0 ||
+        !command->query_parsing_complete()) {
+      if (no_callback) {
+        TryReadMoreQuery("client_conn_3");
       }
+      LOG_DEBUG << "ProcessUnparsedQuery break. parsed_bytes=" << parsed_bytes;
+      break;
     }
   }
-  // TryReadMoreQuery();
-  return true;
 }
 
 void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
+  read_timer_.cancel();
+  if (aborted_) {
+    return;
+  }
   is_reading_query_ = false;
 
   if (error) {
     if (error == boost::asio::error::eof) {
       // TODO : gracefully shutdown
-      LOG_DEBUG << "ClientConnection::HandleRead eof error, conn=" << this;
+      LOG_DEBUG << "client HandleRead eof error, conn=" << this;
     } else {
-      LOG_WARN << "ClientConnection::HandleRead error=" << error.message()
+      LOG_DEBUG << "client HandleRead error=" << error.message()
                << " conn=" << this;
       Abort();
     }
     return;
   }
 
-  UpdateTimer();
-
+  g_stats_.bytes_from_clients_ += bytes_transferred;
   buffer_->update_received_bytes(bytes_transferred);
   buffer_->dec_recycle_lock();
 
-  LOG_DEBUG << "HandleRead bytes_transferred=" << bytes_transferred
-            << " buffer=" << buffer_
+  LOG_DEBUG << "client HandleRead buffer=" << buffer_
+            << " bytes_transferred=" << bytes_transferred
             << " parsed_unprocessed=" << buffer_->parsed_unprocessed_bytes();
-            // << " unparsed_data=" << std::string(buffer_->unparsed_data(), buffer_->unparsed_received_bytes());
+  std::shared_ptr<Command> back_cmd;
+  if (!active_cmd_queue_.empty()) {
+    back_cmd = active_cmd_queue_.back();
+  }
+
+  if (back_cmd && !back_cmd->query_recv_complete()) {
+    if (!back_cmd->ParseUnparsedPart()) {
+      LOG_DEBUG << "client ParseUnparsedPart error";
+      Abort();
+      return;
+    }
+  }
 
   if (buffer_->parsed_unprocessed_bytes() > 0) {
-    assert(!active_cmd_queue_.empty());
+    assert(back_cmd);
 
-    bool no_callback = active_cmd_queue_.back()->WriteQuery(); // TODO : WriteQuery is finished
+    // TODO : split to StartWriteQuery()/WriteEarlierParsedQuery()
+    bool no_callback = back_cmd->ContinueWriteQuery();
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
-      // TODO : 现在的做法是，这里不继续read, 而是在WriteQuery
-      // 的回调函数里面才继续read(or WriteQuery has no callback). 这并不是最佳方式
+      // 这里不继续read, 而是在ContinueWriteQuery的回调函数里面才
+      // 继续read (or read directly if ContinueWriteQuery has no
+      // callback). 理论上这并不是最佳方式.
       if (no_callback) {
-         TryReadMoreQuery(); 
+        TryReadMoreQuery("client_conn_4");
       }
       return;
     }
   }
 
   // process the big bulk arrays in redis query
-  if (!active_cmd_queue_.empty() &&
-      !active_cmd_queue_.back()->query_parsing_complete()) {
-    LOG_DEBUG << "ClientConnection::HandleRead ParseIncompleteQuery";
-    active_cmd_queue_.back()->ParseIncompleteQuery();
+  if (back_cmd && !back_cmd->query_parsing_complete()) {
+    LOG_DEBUG << "client HandleRead ProcessUnparsedPart";
+    if (!back_cmd->ProcessUnparsedPart()) {
+      LOG_DEBUG << "client HandleRead ProcessUnparsedPart Abort";
+      Abort();
+      return;
+    }
   }
 
-  if (active_cmd_queue_.empty() ||
-      active_cmd_queue_.back()->query_parsing_complete()) {
+  if (!back_cmd || back_cmd->query_parsing_complete()) {
     ProcessUnparsedQuery();
   }
-  return;
 }
 
 void ClientConnection::Abort() {
-  LOG_WARN << "ClientConnection::Abort client=" << this;
-  timer_.cancel();
-  active_cmd_queue_.clear();
+  if (aborted_) {
+    return;
+  }
+  LOG_WARN << "client " << this << " Abort";
+
+  aborted_ = true;
+  read_timer_.cancel();
+  write_timer_.cancel();
   socket_.close();
+
+  // keep this line at end to avoid earyly deref.
+  active_cmd_queue_.clear();
 }
 
 }

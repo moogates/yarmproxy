@@ -1,0 +1,14 @@
+*.tmp
+proxy/build
+benchmark/build
+script/sink_server
+script/slow_server
+script/yarmnc
+test/config_test
+test/redis_protocol_test
+test/yarmproxy.conf
+script/memcached/data_gen
+script/redis/data_gen
+script/redis/dump.rdb
+script/redis/marshal_mset
+proxy/reload_backend_conf.sh

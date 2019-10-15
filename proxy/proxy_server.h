@@ -7,14 +7,14 @@
 
 namespace yarmproxy {
 
-using namespace boost::asio;
-
 class ClientConnection;
 class WorkerPool;
 
+using SignalHandler = std::function<void(int sigid)>;
+
 class ProxyServer {
 public:
-  explicit ProxyServer(const std::string & addr, size_t worker_concurrency = 0);
+  explicit ProxyServer(const std::string & addr, size_t worker_threads);
   ~ProxyServer();
 
   void Run();
@@ -28,13 +28,16 @@ private:
   void HandleAccept(std::shared_ptr<ClientConnection> conn, const boost::system::error_code& error);
 
 private:
-  io_service io_service_;
-  io_service::work work_;
-  ip::tcp::acceptor acceptor_;
+  boost::asio::io_service io_service_;
+  boost::asio::io_service::work work_;
+  boost::asio::ip::tcp::acceptor acceptor_;
   std::string listen_addr_;
   bool stopped_;
 
   std::unique_ptr<WorkerPool> worker_pool_;
+
+  // SignalHandler WrapThreadSafeHandler(SignalHandler handler);
+  SignalHandler WrapThreadSafeHandler(std::function<void()> handler);
 };
 
 }

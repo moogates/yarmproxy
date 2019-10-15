@@ -6,9 +6,8 @@
 #include <string>
 #include <vector>
 #include <cassert>
-#include <iostream>
 
-#include "base/logging.h"
+#include "logging.h"
 
 namespace yarmproxy {
 namespace redis {
@@ -125,8 +124,24 @@ public:
     return true;
   }
 
+ // ignoring case compare
+  bool iequals(const char* str, size_t size) const {
+    assert(absent_size() == 0);
+    if (size != payload_size()) {
+      return false;
+    }
+    const char* p = str;
+    const char* q = payload_data();
+    while(size_t(p - str) < size) {
+      if (std::tolower(*p++) != std::tolower(*q++)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   bool completed() const {
-    return absent_size() == 0; 
+    return absent_size() == 0;
   }
 
   size_t absent_size() const {

@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-#include "base/logging.h"
+#include "logging.h"
 
 namespace yarmproxy {
 
@@ -34,6 +34,9 @@ size_t ReadBuffer::unprocessed_bytes() const {  // 已经接收，且已经解�
   return std::min(received_offset_, parsed_offset_) - processed_offset_;
 }
 
+void ReadBuffer::update_processed_offset(size_t processed) {
+  processed_offset_ += processed;
+}
 void ReadBuffer::update_processed_bytes(size_t processed) {
   processed_offset_ += processed;
   try_recycle_buffer();
@@ -44,12 +47,12 @@ bool ReadBuffer::recycle_locked() const {
 }
 
 void ReadBuffer::inc_recycle_lock() {
-  // LOG_WARN << "ReadBuffer inc_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
+  // LOG_DEBUG << "ReadBuffer inc_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
   ++recycle_lock_count_;
 }
 void ReadBuffer::dec_recycle_lock() {
+  // LOG_DEBUG << "ReadBuffer dec_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
   assert(recycle_lock_count_ > 0);
-  // LOG_WARN << "ReadBuffer dec_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
   if (recycle_lock_count_ > 0) {
     --recycle_lock_count_;
   }

@@ -1,21 +1,20 @@
 #include "proxy_server.h"
 
-#include <iostream>
+#include "logging.h"
 
-#include "base/logging.h"
-
-#include "client_conn.h"
-#include "worker_pool.h"
 #include "backend_locator.h"
+#include "client_conn.h"
+#include "config.h"
 #include "signal_watcher.h"
+#include "worker_pool.h"
 
 namespace yarmproxy {
 
-static ip::tcp::endpoint ParseEndpoint(const std::string & ep) {
+static Endpoint ParseEndpoint(const std::string & ep) {
   size_t pos = ep.find(':');
   std::string host = ep.substr(0, pos);
   int port = std::stoi(ep.substr(pos + 1));
-  return ip::tcp::endpoint(ip::address::from_string(host), port);
+  return Endpoint(boost::asio::ip::address::from_string(host), port);
 }
 
 static size_t DefaultConcurrency() {
@@ -24,12 +23,13 @@ static size_t DefaultConcurrency() {
   return hd_concurrency == 0 ? 4 : hd_concurrency;
 }
 
-ProxyServer::ProxyServer(const std::string & addr, size_t concurrency)
+ProxyServer::ProxyServer(const std::string & addr, size_t worker_threads)
     : work_(io_service_)
     , acceptor_(io_service_)
     , listen_addr_(addr)
     , stopped_(false)
-    , worker_pool_(new WorkerPool(concurrency > 0 ? concurrency : DefaultConcurrency())) {
+    , worker_pool_(new WorkerPool(worker_threads > 0 ? worker_threads
+                                      : DefaultConcurrency())) {
 }
 
 ProxyServer::~ProxyServer() {
@@ -38,36 +38,58 @@ ProxyServer::~ProxyServer() {
   }
 }
 
+SignalHandler ProxyServer::WrapThreadSafeHandler(std::function<void()> handler) {
+  boost::asio::io_service& ios(io_service_);
+  return [&ios, handler](int) {
+    ios.post(handler);
+  };
+}
+
 void ProxyServer::Run() {
-  if (!BackendLoactor::Instance().Initialize()) {
-    LOG_ERROR << "ProxyServer BackendLoactor init error ...";
+  std::shared_ptr<BackendLocator> locator(new BackendLocator());
+  if (!locator->Initialize()) {
+    LOG_ERROR << "ProxyServer BackendLocator Initialize error ...";
     return;
   }
+  worker_pool_->OnLocatorUpdated(locator);
 
   auto endpoint = ParseEndpoint(listen_addr_);
   acceptor_.open(endpoint.protocol());
-  acceptor_.set_option(ip::tcp::acceptor::reuse_address(true));
+  acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
   acceptor_.bind(endpoint);
 
   boost::system::error_code ec;
   static const int BACKLOG = 1024; // TODO : config
   acceptor_.listen(BACKLOG, ec);
   if (ec) {
-    LOG_ERROR << "BackendLoactor listen error " << ec.message();
+    LOG_ERROR << "ProxyServer listen error " << ec.message();
     return;
   }
 
-  // SignalWatcher::Instance().RegisterHandler(SIGHUP, [this](int) { ReloadBackends(); });
+  SignalWatcher::Instance().RegisterHandler(SIGHUP, WrapThreadSafeHandler([this]() {
+      // FIXME : prevent signal handler reentrance
+      if (!Config::Instance().ReloadCulsters()) {
+        LOG_ERROR << "SIGHUP BackendLocator reload config error.";
+        return;
+      }
+      std::shared_ptr<BackendLocator> locator(new BackendLocator());
+      if (!locator->Initialize()) {
+        LOG_ERROR << "SIGHUP BackendLocator reload Initialize error.";
+        return;
+      }
+      LOG_WARN << "SIGHUP BackendLocator::Reload OK.";
+      worker_pool_->OnLocatorUpdated(locator);
+    }));
   SignalWatcher::Instance().RegisterHandler(SIGINT,
-      [this](int) {
+      WrapThreadSafeHandler([this]() {
         LOG_ERROR << "SIGINT Received.";
         Stop();
-      });
+      }));
   SignalWatcher::Instance().RegisterHandler(SIGTERM,
-      [this](int) {
+      WrapThreadSafeHandler([this]() {
         LOG_ERROR << "SIGTERM Received.";
         Stop();
-      });
+      }));
 
   worker_pool_->StartDispatching();
   StartAccept();

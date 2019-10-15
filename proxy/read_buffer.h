@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <cassert>
-#include "base/logging.h"
 
 namespace yarmproxy {
 
@@ -58,6 +57,9 @@ public:
     parsed_offset_ += bytes;
   }
 
+  size_t recycle_lock_count() const { // TODO : for debug only
+    return recycle_lock_count_;
+  }
   bool recycle_locked() const;
   void inc_recycle_lock();
   void dec_recycle_lock();
@@ -67,6 +69,7 @@ public:
   }
   size_t unprocessed_bytes() const;  // 已经接收，且已经解析，但尚未处理的数据
 
+  void update_processed_offset(size_t processed);
   void update_processed_bytes(size_t processes_bytes);
   void update_received_bytes(size_t received_bytes);
   void push_reply_data(const char* data, size_t bytes);

@@ -210,4 +210,5 @@ int main() {
 
   std::cout << "============ BulkArrayTest ============" << std::endl;
   BulkArrayTest();
+  return 0;
 }

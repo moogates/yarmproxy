@@ -3,7 +3,7 @@ if [ $# -gt 0 ]; then
   size=$1
 fi
 
-for id in `seq 1 9`; do
+for id in `seq 1 99`; do
   key=key$id
   echo $key
   # 存储命令: <command name> <key> <flags> <exptime> <bytes>

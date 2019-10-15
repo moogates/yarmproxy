@@ -1,38 +1,36 @@
+#include "config.h"
+#include "logging.h"
 #include "proxy_server.h"
 
-#include "base/logging.h"
-
-// TODO : argv / config file
-// TODO : idle client-conn timeout & heartbeat ?
-// TODO : max backend conn resource limit
-// TODO : refining hash & katama
-// TODO : gracefully shutdown
-// TODO : kill -HUP reload
-// TODO : anti spam-request
-// TODO : better detail hiding
-// TODO : limit max data size
-// TODO : redis mset error handling
-// TODO : benchmarking, vs. twemproxy
-// TODO : c++11 style member var init
-
+namespace yarmproxy {
+void Welcome();
 int Daemonize();
 int MaximizeFdLimit();
+int CreatePidFile();
+int CleanupPidFile();
+}
 
-int main() {
-  // base::InitLogging("proxy.log", "TRACE");
-  base::InitLogging("proxy.log", "WARN");
-  // loguru::g_stderr_verbosity = 0;
-  // loguru::g_stderr_verbosity = -8;
-  // loguru::g_stderr_verbosity = 8;
-  loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
+int main(int argc, char* argv[]) {
+  using namespace yarmproxy;
+  Welcome();
+  auto& conf = Config::Instance();
+  const char* conf_file = argc > 1 ? argv[1] : "./yarmproxy.conf";
+  if (!conf.Initialize(conf_file)) {
+    return 1;
+  }
+  LOG_INIT(conf.log_file().c_str(), conf.log_level().c_str());
 
-  // Daemonize();
+  if (conf.daemonize()) {
+    Daemonize();
+  }
   MaximizeFdLimit();
+  CreatePidFile();
 
-  std::string endpoint("127.0.0.1:11311");
-  LOG_INFO << "Service listening on " << endpoint;
-  yarmproxy::ProxyServer server(endpoint); // TODO : concurrency
+  LOG_ERROR << "YarmProxy listening on " << conf.listen();
+  ProxyServer server(conf.listen(), conf.worker_threads());
   server.Run();
+  CleanupPidFile();
+  LOG_ERROR << "YarmProxy stopped.";
   return 0;
 }
 
