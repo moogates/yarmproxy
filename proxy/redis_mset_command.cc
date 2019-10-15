@@ -24,9 +24,8 @@ struct RedisMsetCommand::Subquery {
   enum Phase {
     INIT_SEND_QUERY    = 0, // write query for the first time
     SENDING_MORE_QUERY = 1, // sending more query data
-    WAITING_MORE_QUERY = 2, // waiting others to launch read-more-query
-    READING_MORE_QUERY = 3, // launch read-more-query
-    READING_REPLY      = 4, // read reply
+    READING_MORE_QUERY = 2, // waiting for more query
+    READING_REPLY      = 3, // read reply
   };
 
   std::shared_ptr<BackendConn> backend_;
@@ -130,8 +129,6 @@ bool RedisMsetCommand::ContinueWriteQuery() {
   auto tail_backend = tail_query_->backend_;
   assert(tail_backend);
 
-  //if (tail_query_->backend_error_ || // TODO : connect error if not enough. mset has the same bug
-  //    (tail_query_->backend_ && tail_query_->backend_->closed())) {
   if (tail_backend->error()) {
     if (!tail_query_->query_recv_complete_) {
       return true; // no callback, try read more query directly
@@ -162,11 +159,7 @@ bool RedisMsetCommand::ContinueWriteQuery() {
           << " cmd=" << this
           << " bytes=" << client_conn_->buffer()->unprocessed_bytes();
 
-  assert(tail_query_->phase_ == Subquery::WAITING_MORE_QUERY ||
-         tail_query_->phase_ == Subquery::READING_MORE_QUERY);
-  if (tail_query_->phase_ == Subquery::WAITING_MORE_QUERY) {
-    tail_query_->phase_ = Subquery::READING_MORE_QUERY;
-  }
+  assert(tail_query_->phase_ == Subquery::READING_MORE_QUERY);
   client_conn_->buffer()->inc_recycle_lock();
 
   tail_query_->backend_->WriteQuery(client_conn_->buffer()->unprocessed_data(),
@@ -261,14 +254,12 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
     assert(backend->buffer()->unparsed_bytes() == 0);
     backend->buffer()->update_processed_bytes(
         backend->buffer()->unprocessed_bytes());
-    // backend->set_reply_recv_complete();
-    assert(backend->reply_recv_complete());
+
     pending_subqueries_.erase(backend);
     backend_pool()->Release(backend);
 
     if (unparsed_bulks_ > 0 &&
         !client_conn_->buffer()->recycle_locked()) {
-      assert(!query_recv_complete());
       client_conn_->TryReadMoreQuery("redis_mset_6");
     }
 
@@ -279,14 +270,6 @@ void RedisMsetCommand::OnBackendReplyReceived(std::shared_ptr<BackendConn> backe
   }
 }
 
-/*
-void RedisMsetCommand::StartWriteReply() {
-  if (replying_backend_) {
-    TryWriteReply(replying_backend_);
-    LOG_DEBUG << "StartWriteReply TryWriteReply called";
-  }
-}
-*/
 // try to keep pace with parent class impl
 void RedisMsetCommand::OnWriteQueryFinished(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
@@ -295,14 +278,9 @@ void RedisMsetCommand::OnWriteQueryFinished(
       OnBackendRecoverableError(backend, ec);
       // 等同于转发完成已收数据
       client_conn_->buffer()->dec_recycle_lock();
-
-      if (!client_conn_->buffer()->recycle_locked() && // 全部完成write query 才能释放recycle_lock
-          (!tail_query_->query_recv_complete_ || !query_parsing_complete())) {
-        assert(client_conn_->buffer()->parsed_unreceived_bytes() > 0 ||
-               !query_parsing_complete());
-        assert(client_conn_->buffer()->recycle_lock_count() == 0);
+      if (!query_recv_complete() &&
+          !client_conn_->buffer()->recycle_locked()) {
         client_conn_->TryReadMoreQuery("redis_mset_1");
-        LOG_DEBUG << "OnWriteQueryFinished E_CONNECT TryReadMoreQuery";
       }
     } else {
       client_conn_->Abort();
@@ -313,82 +291,37 @@ void RedisMsetCommand::OnWriteQueryFinished(
 
   auto& query = pending_subqueries_[backend];
   switch(query->phase_) {
-  case Subquery::INIT_SEND_QUERY: // TODO : use switch & state machine
-    query->phase_ = Subquery::SENDING_MORE_QUERY; // sending more query data
-    assert(!query->segments_.empty());
+  case Subquery::INIT_SEND_QUERY:
+    query->phase_ = Subquery::SENDING_MORE_QUERY;
     query->backend_->WriteQuery(query->segments_.front().first,
                                 query->segments_.front().second);
-    LOG_DEBUG << "OnWriteQueryFinished backend=" << query->backend_
-              << " ep=" << query->backend_->remote_endpoint()
-              << " phase 1 finished, phase 2 launched";
     return;
   case Subquery::SENDING_MORE_QUERY:
     query->segments_.pop_front();
     if (!query->segments_.empty()) {
-      // phase_ is still SENDING_MORE_QUERY
       query->backend_->WriteQuery(query->segments_.front().first,
                                   query->segments_.front().second);
       return;
     }
-    client_conn_->buffer()->dec_recycle_lock();
-
-    if (query == tail_query_) {
-      if (query->query_recv_complete_) {
-        query->phase_ = Subquery::READING_REPLY;
-        backend->ReadReply();
-        if (!client_conn_->buffer()->recycle_locked()
-            && !query_recv_complete()) {
-          // assert(false);
-          // TODO : 似乎这里也该 TryReadMoreQuery
-          LOG_WARN << "TryReadMoreQuery redis_mset_8";
-          client_conn_->TryReadMoreQuery("redis_mset_8");
-        }
-      } else {
-        if (!client_conn_->buffer()->recycle_locked()) {
-          query->phase_ = Subquery::READING_MORE_QUERY;
-          assert(!query_recv_complete());
-          client_conn_->TryReadMoreQuery("redis_mset_2");
-        } else {
-          assert(query->phase_ == Subquery::SENDING_MORE_QUERY);
-          query->phase_ = Subquery::WAITING_MORE_QUERY;
-        }
-      }
-    } else {
-      query->phase_ = Subquery::READING_REPLY;
-      backend->ReadReply();
-
-      if (!client_conn_->buffer()->recycle_locked()) {
-        if (!tail_query_->query_recv_complete_) {
-          tail_query_->phase_ = Subquery::READING_MORE_QUERY;
-          client_conn_->TryReadMoreQuery("redis_mset_3");
-        }
-      }
+    if (!query->query_recv_complete_) {
+      query->phase_ = Subquery::READING_MORE_QUERY;
     }
-    return;
+    // no break here
   case Subquery::READING_MORE_QUERY:
     client_conn_->buffer()->dec_recycle_lock();
 
     if (query->query_recv_complete_) {
       query->phase_ = Subquery::READING_REPLY;
       backend->ReadReply();
+    }
 
-      if (!client_conn_->buffer()->recycle_locked() &&
-          !query_recv_complete()) {
-        // assert(false);
-        LOG_WARN << "TryReadMoreQuery redis_mset_7";
-        client_conn_->TryReadMoreQuery("redis_mset_7");
-      }
-    } else {
-      assert(query == tail_query_);
-      assert(client_conn_->buffer()->recycle_lock_count() == 0);
-      client_conn_->TryReadMoreQuery("redis_mset_4");
+    if (!query_recv_complete() &&
+        !client_conn_->buffer()->recycle_locked()) {
+      client_conn_->TryReadMoreQuery("redis_mset_8");
     }
     return;
   default:
-    LOG_WARN << "OnWriteQueryFinished bad phase " << query->phase_
-             << " , backend=" << backend;
     assert(false);
-    client_conn_->Abort();
     return;
   }
 }
@@ -485,35 +418,6 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
   ActivateWaitingSubquery();
   return true;
 }
-
-/*
-bool RedisMsetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
-  size_t unparsed = backend->buffer()->unparsed_bytes();
-  assert(unparsed > 0);
-  const char * entry = backend->buffer()->unparsed_data();
-  if (entry[0] != '+' && entry[0] != '-' && entry[0] != '$') {
-    return false;
-  }
-
-  const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed));
-  if (p == nullptr) {
-    return true;
-  }
-  if (entry[0] == '$' && entry[1] != '-') {
-    p = static_cast<const char *>(memchr(p + 1, '\n', entry + unparsed - p));
-    if (p == nullptr) {
-      return true;
-    }
-  }
-
-  backend->buffer()->update_parsed_bytes(p - entry + 1);
-  assert(unparsed == p - entry + 1);
-
-  assert(backend->buffer()->unparsed_bytes() == 0);
-  backend->set_reply_recv_complete();
-  return true;
-}
-*/
 
 }
 
