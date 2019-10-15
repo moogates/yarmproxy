@@ -1,6 +1,5 @@
 #include "config.h"
 
-// #include <iostream>
 #include <fstream>
 #include <vector>
 
@@ -22,9 +21,6 @@ bool Config::ApplyTokens(const std::vector<std::string>& tokens) {
   if (context_ == "/worker") {
     return ApplyWorkerTokens(tokens);
   }
-//if (context_ == "/log") {
-//  return ApplyLogTokens(tokens);
-//}
   error_msg_ = "unknown context ";
   error_msg_.append(context_);
   return false;
@@ -76,9 +72,9 @@ bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
     }
   }
 
-  if (tokens.size() == 2 && tokens[0] == "command_exec_timeout") {
+  if (tokens.size() == 2 && tokens[0] == "socket_rw_timeout") {
     try {
-      command_exec_timeout_ = std::stoi(tokens[1]);
+      socket_rw_timeout_ = std::stoi(tokens[1]);
       return true;
     } catch (...) {
       error_msg_ = "positive integer required";
@@ -263,14 +259,6 @@ bool Config::ApplyClusterTokens(const std::vector<std::string>& tokens) {
   }
 
   return false;
-}
-
-bool Config::ApplyLogTokens(const std::vector<std::string>& tokens) {
-  if (tokens.size() == 1 && tokens[0] == "}") {
-    PopSubcontext();
-    return true;
-  }
-  return true;
 }
 
 bool Config::ReloadCulsters() {

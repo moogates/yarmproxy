@@ -21,7 +21,8 @@ ClientConnection::ClientConnection(WorkerContext& context)
     , buffer_(new ReadBuffer(context.allocator_->Alloc(),
                       context.allocator_->slab_size()))
     , context_(context)
-    , timer_(context.io_service_) {
+    , read_timer_(context.io_service_)
+    , write_timer_(context.io_service_) {
   ++g_stats_.client_conns_;
   LOG_DEBUG << "client ctor. count=" << g_stats_.client_conns_;
 }
@@ -37,39 +38,41 @@ ClientConnection::~ClientConnection() {
   LOG_DEBUG << "client dtor. count=" << g_stats_.client_conns_;
 }
 
-void ClientConnection::OnTimeout(const boost::system::error_code& ec) {
+void ClientConnection::OnTimeout(const boost::system::error_code& ec,
+                                 TimerType timer_type) {
   if (ec != boost::asio::error::operation_aborted) {
     // timer was not cancelled, take necessary action.
-    LOG_WARN << "client OnTimeout.";
+    LOG_WARN << "client OnTimeout, timer=" << timer_type;
+    if (timer_type == READ_TIMER) {
+      ++g_stats_.client_read_timeouts_;
+    } else {
+      ++g_stats_.client_write_timeouts_;
+    }
     Abort();
   }
 }
 
-void ClientConnection::UpdateTimer() {
-  assert(!aborted_);
-  // TODO : 细致的超时处理, 包括connect/read/write/command
-  ++timer_ref_count_;
+void ClientConnection::UpdateTimer(TimerType timer_type) {
+  if (aborted_) {
+    return;
+  }
+  boost::asio::steady_timer& timer = 
+      timer_type == READ_TIMER ? read_timer_ : write_timer_;
 
-  int timeout = buffer_->unparsed_received_bytes() == 0 ?
-                  Config::Instance().client_idle_timeout() :
-                  (Config::Instance().command_exec_timeout() + 10);
-  size_t canceled = timer_.expires_after(std::chrono::milliseconds(timeout));
-  LOG_DEBUG << "client UpdateTimer timeout=" << timeout
-           << " canceled=" << canceled;
+  int timeout = (timer_type == READ_TIMER && 
+      buffer_->unparsed_received_bytes() == 0) ?
+      Config::Instance().client_idle_timeout() :
+      Config::Instance().socket_rw_timeout();
+
+  timer.expires_after(std::chrono::milliseconds(timeout));
+  LOG_DEBUG << "client UpdateTimer " << timer_type << " timeout=" << timeout;
 
   std::weak_ptr<ClientConnection> wptr(shared_from_this());
-  timer_.async_wait([wptr](const boost::system::error_code& ec) {
+  timer.async_wait([wptr, timer_type](const boost::system::error_code& ec) {
         if (auto ptr = wptr.lock()) {
-          ptr->OnTimeout(ec);
+          ptr->OnTimeout(ec, timer_type);
         }
       });
-}
-
-void ClientConnection::RevokeTimer() {
-  assert(timer_ref_count_ > 0);
-  if (--timer_ref_count_ == 0) {
-    timer_.cancel();
-  }
 }
 
 void ClientConnection::StartRead() {
@@ -106,7 +109,7 @@ void ClientConnection::AsyncRead() {
             << " free_space=" << buffer_->free_space_size()
             << " lock=" << buffer_->recycle_lock_count();
 
-  UpdateTimer();
+  UpdateTimer(READ_TIMER);
   socket_.async_read_some(boost::asio::buffer(
       buffer_->free_space_begin(), buffer_->free_space_size()),
       std::bind(&ClientConnection::HandleRead, shared_from_this(),
@@ -144,7 +147,7 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
   std::shared_ptr<ClientConnection> client_conn(shared_from_this());
   auto cb_wrap = [client_conn, data, bytes, callback](
       const boost::system::error_code& error, size_t bytes_transferred) {
-    client_conn->RevokeTimer();
+    client_conn->write_timer_.cancel();
     if (!error) {
       g_stats_.bytes_to_clients_ += bytes_transferred;
     }
@@ -158,7 +161,7 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
   };
 
   is_writing_reply_ = true;
-  UpdateTimer();
+  UpdateTimer(WRITE_TIMER);
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes), cb_wrap);
 }
 
@@ -197,7 +200,7 @@ void ClientConnection::ProcessUnparsedQuery() {
 
 void ClientConnection::HandleRead(const boost::system::error_code& error,
                                   size_t bytes_transferred) {
-  RevokeTimer();
+  read_timer_.cancel();
   if (aborted_) {
     return;
   }
@@ -275,7 +278,8 @@ void ClientConnection::Abort() {
   LOG_WARN << "client " << this << " Abort";
 
   aborted_ = true;
-  timer_.cancel();
+  read_timer_.cancel();
+  write_timer_.cancel();
   socket_.close();
 
   // keep this line at end to avoid earyly deref.

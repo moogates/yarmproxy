@@ -7,10 +7,8 @@ TODO : memcached key_len_limit=250, body_size_limit=1M
 TODO : size limit : Redis strings are limited to 512 megabytes.
 
 TODO : anti bad request
-TODO : 更有好的超时处理
 TODO : cpu affinity
 TODO : IPv6 support
-TODO : pid_file
 TODO : memcached binary protocol support
 
 benchmarking
@@ -35,3 +33,7 @@ optional
 TODO : refining hash & katama
 TODO : replace doobs_hash
 TODO : better detail hiding
+
+Done:
+更好的超时处理
+pid_file

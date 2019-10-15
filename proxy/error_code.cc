@@ -17,8 +17,6 @@ const char* ErrorCodeString(ErrorCode ec) {
     return "E_WRITE_REPLY";
   case ErrorCode::E_PROTOCOL:
     return "E_PROTOCOL";
-  case ErrorCode::E_WRITE_ABORTED:
-    return "E_WRITE_ABORTED";
 
   case ErrorCode::E_BACKEND_CONNECT_TIMEOUT:
     return "E_BACKEND_CONNECT_TIMEOUT";

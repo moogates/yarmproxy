@@ -94,7 +94,7 @@ void BackendConn::WriteQuery(const char* data, size_t bytes) {
     std::weak_ptr<BackendConn> wptr(shared_from_this());
     context_.io_service_.post([wptr]() {
       if (auto ptr = wptr.lock()) {
-        ptr->query_sent_callback_(ErrorCode::E_WRITE_ABORTED);
+        ptr->query_sent_callback_(ErrorCode::E_WRITE_QUERY);
       }
     });
     return;
@@ -204,6 +204,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
              << (connect_ec ? connect_ec.message() : option_ec.message())
              << " endpoint=" << remote_endpoint_
              << " backend=" << this;
+    ++g_stats_.backend_connect_errors_;
     query_sent_callback_(ErrorCode::E_CONNECT);
     return;
   }
@@ -235,14 +236,22 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeo
 
   switch(timeout_code) {
   case ErrorCode::E_BACKEND_CONNECT_TIMEOUT:
+    if (!write_timer_canceled_) {
+      ++g_stats_.backend_connect_timeouts_;
+      query_sent_callback_(timeout_code);
+      Abort(timeout_code);
+    }
+    break;
   case ErrorCode::E_BACKEND_WRITE_TIMEOUT:
     if (!write_timer_canceled_) {
+      ++g_stats_.backend_write_timeouts_;
       query_sent_callback_(timeout_code);
       Abort(timeout_code);
     }
     break;
   case ErrorCode::E_BACKEND_READ_TIMEOUT:
     if (!read_timer_canceled_) {
+      ++g_stats_.backend_read_timeouts_;
       reply_received_callback_(timeout_code);
       Abort(timeout_code);
     }
@@ -255,7 +264,7 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeo
 
 void BackendConn::UpdateTimer(boost::asio::steady_timer& timer, ErrorCode timeout_code) {
   // TODO : 细致的超时处理, 包括connect/read/write/command
-  int timeout = Config::Instance().command_exec_timeout();
+  int timeout = Config::Instance().socket_rw_timeout();
   size_t canceled = timer.expires_after(std::chrono::milliseconds(timeout));
   LOG_DEBUG << "BackendConn UpdateTimer timeout=" << timeout
            << " backend=" << this

@@ -10,9 +10,9 @@ struct Stats;
 extern Stats g_stats_;
 
 struct Stats {
-  Stats() : start_since_(time(nullptr)) {
+  Stats() : alive_since_(time(nullptr)) {
   }
-  time_t start_since_;
+  time_t alive_since_;
   std::atomic_int client_conns_;
   std::atomic_int backend_conns_;
 
@@ -20,6 +20,14 @@ struct Stats {
   std::atomic_llong bytes_to_clients_;
   std::atomic_llong bytes_from_backends_;
   std::atomic_llong bytes_to_backends_;
+
+  std::atomic_llong client_read_timeouts_;
+  std::atomic_llong client_write_timeouts_;
+
+  std::atomic_llong backend_connect_errors_;
+  std::atomic_llong backend_connect_timeouts_;
+  std::atomic_llong backend_read_timeouts_;
+  std::atomic_llong backend_write_timeouts_;
 };
 
 }

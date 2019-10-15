@@ -86,9 +86,8 @@ private:
   bool is_reading_reply_    = false; // TODO : merge into a flag
   bool has_read_some_reply_ = false;
   bool reply_recv_complete_ = false;
-  bool no_recycle_          = false;
-
-  bool aborted_ = false;
+  bool no_recycle_          = false; // is it redundant with aborted_?
+  bool aborted_             = false;
 
   boost::asio::steady_timer write_timer_;
   bool write_timer_canceled_ = false;

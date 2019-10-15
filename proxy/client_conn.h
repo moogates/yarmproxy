@@ -77,12 +77,15 @@ private:
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void ProcessUnparsedQuery();
 
-  boost::asio::steady_timer timer_; // TODO : system_timer or steady_timer?
-  int timer_ref_count_ = 0;
+  enum TimerType {
+    READ_TIMER,
+    WRITE_TIMER,
+  };
+  boost::asio::steady_timer read_timer_;
+  boost::asio::steady_timer write_timer_;
 
-  void UpdateTimer();
-  void RevokeTimer();
-  void OnTimeout(const boost::system::error_code& error);
+  void UpdateTimer(TimerType type);
+  void OnTimeout(const boost::system::error_code& error, TimerType type);
 };
 
 }

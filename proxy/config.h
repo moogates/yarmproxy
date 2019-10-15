@@ -73,8 +73,8 @@ public:
   int client_idle_timeout() const {
     return client_idle_timeout_;
   }
-  int command_exec_timeout() const {
-    return command_exec_timeout_;
+  int socket_rw_timeout() const {
+    return socket_rw_timeout_;
   }
 
   const std::vector<Cluster>& clusters() const {
@@ -103,7 +103,7 @@ private:
   size_t buffer_size_ = 4096;
 
   int client_idle_timeout_ = 60000; // 60,000ms(one minute)
-  int command_exec_timeout_ =   50; // 50 ms
+  int socket_rw_timeout_ =   50; // 50 ms
 
   std::vector<Cluster> clusters_;
 private:
@@ -114,7 +114,6 @@ private:
   bool ApplyGlobalTokens(const std::vector<std::string>& tokens);
   bool ApplyClusterTokens(const std::vector<std::string>& tokens);
   bool ApplyWorkerTokens(const std::vector<std::string>& tokens);
-  bool ApplyLogTokens(const std::vector<std::string>& tokens);
 
   void PushSubcontext(const std::string& subcontext);
   void PopSubcontext();
