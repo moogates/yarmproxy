@@ -35,11 +35,11 @@ BackendConn::~BackendConn() {
   delete buffer_;
 }
 
-void BackendConn::Abort() {
+void BackendConn::Abort(ErrorCode ec) {
   if (aborted_) {
     return;
   }
-  LOG_DEBUG << "BackendConn Abort, backend=" << this;
+  LOG_ERROR << "BackendConn Abort, ec=" << ErrorCodeString(ec);
   aborted_ = true;
   no_recycle_  = true;
   is_reading_reply_ = false;
@@ -91,7 +91,12 @@ void BackendConn::TryReadMoreReply() {
 
 void BackendConn::WriteQuery(const char* data, size_t bytes) {
   if (aborted_) {
-    query_sent_callback_(ErrorCode::E_WRITE_ABORTED);
+    std::weak_ptr<BackendConn> wptr(shared_from_this());
+    context_.io_service_.post([wptr]() {
+      if (auto ptr = wptr.lock()) {
+        ptr->query_sent_callback_(ErrorCode::E_WRITE_ABORTED);
+      }
+    });
     return;
   }
   if (!socket_.is_open()) {
@@ -233,13 +238,13 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeo
   case ErrorCode::E_BACKEND_WRITE_TIMEOUT:
     if (!write_timer_canceled_) {
       query_sent_callback_(timeout_code);
-      Abort();
+      Abort(timeout_code);
     }
     break;
   case ErrorCode::E_BACKEND_READ_TIMEOUT:
     if (!read_timer_canceled_) {
       reply_received_callback_(timeout_code);
-      Abort();
+      Abort(timeout_code);
     }
     break;
   default:

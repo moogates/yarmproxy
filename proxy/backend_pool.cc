@@ -47,7 +47,7 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
     LOG_DEBUG << "BackendConnPool::Release unrecyclable backend=" << backend
              << " finished=" << backend->finished()
              << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
-    backend->Abort();
+    // backend->Abort(ErrorCode::E_SUCCESS);
     return;
   }
 
@@ -63,7 +63,7 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
       // TODO : should warn
       LOG_DEBUG << "BackendConnPool::Release overflow, backend=" << backend
                << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
-      backend->Abort();
+      // backend->Abort(ErrorCode::E_SUCCESS);
     } else {
       backend->Reset();
       // backend->buffer()->Reset();

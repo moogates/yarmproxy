@@ -43,7 +43,7 @@ private:
   void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
   void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
 public:
-  void Abort();
+  void Abort(ErrorCode ec);
   void Reset();
   ReadBuffer* buffer() {
     return buffer_;
@@ -81,7 +81,7 @@ private:
   boost::asio::ip::tcp::socket socket_;
 
   BackendReplyReceivedCallback reply_received_callback_;
-  BackendQuerySentCallback query_sent_callback_;
+  BackendQuerySentCallback query_sent_callback_; // TODO :rename
 
   bool is_reading_reply_    = false; // TODO : merge into a flag
   bool has_read_some_reply_ = false;
