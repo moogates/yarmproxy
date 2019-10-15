@@ -8,7 +8,7 @@
 namespace yarmproxy {
 
 ErrorCommand::ErrorCommand(std::shared_ptr<ClientConnection> client,
-                           const std::string& reply_message) 
+                           const std::string& reply_message)
     : Command(client, ProtocolType::NONE)
     , reply_message_(reply_message) {
 }

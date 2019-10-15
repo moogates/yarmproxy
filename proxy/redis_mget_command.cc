@@ -273,7 +273,7 @@ void RedisMgetCommand::NextBackendStartReply() {
 
 bool RedisMgetCommand::HasUnfinishedBanckends() const {
   LOG_DEBUG << "RedisMgetCommand::HasUnfinishedBanckends"
-            << " completed_backends_=" << completed_backends_ 
+            << " completed_backends_=" << completed_backends_
             << " total_backends=" << subqueries_.size();
   return completed_backends_ < subqueries_.size();
 }

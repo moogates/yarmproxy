@@ -33,7 +33,7 @@ private:
     Endpoint endpoint;
 
     bool operator<(const CachePoint& r) const { return hash_point < r.hash_point; }
-  };  
+  };
 
   std::map<Endpoint, size_t> weighted_nodes_; //服务器信息
   std::vector<CachePoint> cache_points_;

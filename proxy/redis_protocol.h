@@ -141,7 +141,7 @@ public:
   }
 
   bool completed() const {
-    return absent_size() == 0; 
+    return absent_size() == 0;
   }
 
   size_t absent_size() const {

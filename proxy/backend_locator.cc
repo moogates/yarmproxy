@@ -71,7 +71,7 @@ Endpoint BackendLocator::Locate(const char * key, size_t len, ProtocolType proto
   } else {
     continuum = it->second;
   }
-  
+
   Endpoint ep = continuum->LocateCacheNode(key, len);
   return ep;
 }

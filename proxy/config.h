@@ -52,7 +52,7 @@ public:
   const std::string& config_file() const {
     return config_file_;
   }
-  const std::string& pid_file() const { 
+  const std::string& pid_file() const {
     return pid_file_;
   }
 

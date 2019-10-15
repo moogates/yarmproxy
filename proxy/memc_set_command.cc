@@ -11,7 +11,7 @@
 namespace yarmproxy {
 
 MemcSetCommand::MemcSetCommand(std::shared_ptr<ClientConnection> client,
-          const char* cmd_data, size_t cmd_len, size_t* body_bytes) 
+          const char* cmd_data, size_t cmd_len, size_t* body_bytes)
     : Command(client, ProtocolType::MEMCACHED) {
   *body_bytes = ParseQuery(cmd_data, cmd_len);
 }
