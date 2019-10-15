@@ -14,7 +14,7 @@ enum class ErrorCode {
   E_WRITE_REPLY = 5,
 
   E_PROTOCOL = 6,
-  // E_TIMEOUT  = 7,
+  E_WRITE_ABORTED = 7,
 
   E_BACKEND_CONNECT_TIMEOUT = 8,
   E_BACKEND_WRITE_TIMEOUT   = 9,

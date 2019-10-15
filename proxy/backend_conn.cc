@@ -91,7 +91,7 @@ void BackendConn::TryReadMoreReply() {
 
 void BackendConn::WriteQuery(const char* data, size_t bytes) {
   if (aborted_) {
-    query_sent_callback_(ErrorCode::E_WRITE_QUERY);
+    query_sent_callback_(ErrorCode::E_WRITE_ABORTED);
     return;
   }
   if (!socket_.is_open()) {
