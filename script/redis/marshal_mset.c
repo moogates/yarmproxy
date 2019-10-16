@@ -1,67 +1,37 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+#include "marshal.h"
 
-int IntegerLength(size_t value) {
-  int len = 1;
-  while(value /= 10) {
-    ++len;
-  }
-  return len;
-}
+#include <stdlib.h>
+#include <time.h>
 
 int main(int argc, char* argv[]) {
   if (argc < 3) {
-    printf("Usage: %s key size [expire_seconds] [nx_flag]\r\n", argv[0]);
+    printf("This program is used to marshal a redis 'mset' command.\r\n"
+           "Usage\t: %s key_prefix size [count=16]\r\n"
+           "Exmaple\t: %s key 1024 32\r\n", argv[0], argv[0]);
     return 1;
   }
-  int expired = 0;
+  int count = 16;
   if (argc > 3) {
-    expired = atoi(argv[3]);
-  }
-  int nx_flag = 0;
-  if (argc > 4) {
-    nx_flag = atoi(argv[4]);
+    count = atoi(argv[3]);
   }
 
-  const char* key = argv[1];
+  const char* key_prefix = argv[1];
   int size = atoi(argv[2]);
 
   if (size == 0) {
     srand(time(NULL));
     size = 1 + random() % (128 * 1024);
   }
-  size_t key_len = strlen(key);
-  int bulks = 3;
 
-  if (expired > 0) {
-    bulks += 2;
-  }
+  int bulks = 1 + count * 2;
 
-  if (nx_flag > 0) {
-    bulks += 1;
-  }
+  printf("*%d\r\n$4\r\nmset\r\n", bulks);
 
-  printf("*%d\r\n$3\r\nset\r\n$%d\r\n%s\r\n$%d\r\n", bulks, key_len, key, size);
-
-  for(int i = 0; (i + 1) * 50 <= size; ++i) {
-    printf("%08d__10_%06d_20_abcdef_30_(%c.*%c)40__abcde\r\n", i * 50, size, key[0], key[key_len - 1]);
-    // printf("%08d__10_%06d_20_abcdef_30_abcdef_40_abcde\r\n", i * 50, size);
-  }
-
-  char ending_line[] = "00_abcdef_10_abcdef_20_abcdef_30_abcdef_40_abcdef_";
-  if (size % 50 > 0) {
-    ending_line[size % 50] = 0;
-    printf("%s", ending_line);
-  }
-  printf("\r\n");
-  if (expired > 0) {
-    printf("$4\r\nkey2\r\n$5\r\n86400\r\n");
-  }
-
-  if (nx_flag > 0) {
-    printf("$2\r\nNX\r\n");
+  char key[64];
+  for(int i = 1; i <= count; ++i) {
+    sprintf(key, "%s%d", key_prefix, i);
+    PrintBulkKey(key);
+    PrintBulkBody(size);
   }
 
   return 0;
