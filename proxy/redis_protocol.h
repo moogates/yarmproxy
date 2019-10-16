@@ -241,10 +241,6 @@ public:
     return items_[pos];
   }
 
-  const std::vector<Bulk>& present_bulks_data() const {
-    return items_;
-  }
-
   Bulk& back() {
     return items_.back();
   }

@@ -18,11 +18,9 @@ public:
   RedisMsetCommand(std::shared_ptr<ClientConnection> client, const redis::BulkArray& ba);
   virtual ~RedisMsetCommand();
 
-  virtual bool query_parsing_complete() override;
   void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
 private:
-  // void StartWriteReply() override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
   void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
 
@@ -30,11 +28,11 @@ private:
 
   bool StartWriteQuery() override;
   bool ContinueWriteQuery() override;
-  // bool ParseReply(std::shared_ptr<BackendConn> backend) override;
 
   bool query_data_zero_copy() override {
     return true;
   }
+  bool query_parsing_complete() override;
   bool query_recv_complete() override;
 
 private:
@@ -47,7 +45,6 @@ private:
 private:
   void ActivateWaitingSubquery();
   void PushSubquery(const Endpoint& ep, const char* data, size_t bytes);
-  void PushSubqueryBulks(const std::vector<redis::Bulk>& bulks);
 };
 
 }

@@ -20,7 +20,7 @@ private:
   bool query_data_zero_copy() override {
     return true;
   }
-  virtual bool query_parsing_complete() override;
+  bool query_parsing_complete() override;
   void check_query_recv_complete() override;
   bool query_recv_complete() override {
     return query_recv_complete_;

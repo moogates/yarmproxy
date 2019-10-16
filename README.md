@@ -27,7 +27,9 @@ yarmproxy(Yet Another Redis and Memcached PROXY) is a high performance redis/mem
 
 # Build
 ## Dependencies
-## boost-asio 1.56 or higher
+boost-asio (boost 1.56 or higher recommended)
 
+# Contact
+  Send mail to moogates@163.com if you have any questions or found any bugs.
 
 
