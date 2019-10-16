@@ -2,52 +2,103 @@
 
 #include <cstring>
 
-namespace base {
+namespace logging {
 
-static loguru::Verbosity LevelVerbosity(const char* level) {
-  if (strcmp("TRACE", level) == 0) {
-    return 4;
+static Verbosity VerbosityFromName(const char* level);
+
+bool StreamLogger::Initialize(const char* file_name, const char* verbosity_name) {
+  auto file = fopen(file_name, "w"); //w = truncate, a = append
+  if (!file) {
+    LOG_ERROR << "Failed to open log file '" << file_name << "'";
+    return false;
   }
-  if (strcmp("DEBUG", level) == 0) {
-    return 2;
+  LOG_INFO << "Logging to '" << file_name << "', level=" << verbosity_name;
+
+  global_verbosity_ = VerbosityFromName(verbosity_name);
+  {
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    fflush(log_file_);
+    log_file_ = file;
   }
-  if (strcmp("INFO", level) == 0) {
-    return loguru::Verbosity_INFO;     // 0
-  }
-  if (strcmp("WARN", level) == 0) {
-    return loguru::Verbosity_WARNING;  // -1
-  }
-  if (strcmp("ERROR", level) == 0) {
-    return loguru::Verbosity_ERROR;    // -2
-  }
-  if (strcmp("FATAL", level) == 0) {
-    return loguru::Verbosity_FATAL;    // -3
-  }
-  if (strcmp("OFF", level) == 0) {
-    return loguru::Verbosity_OFF;      // -9
-  }
-  return loguru::Verbosity_INFO;       // 0
+  LOG_INFO << "Start logging to '" << file_name << "', level=" << verbosity_name;
+  return true;
 }
 
-void InitLogging(const char *path, const char *loglevel) {
-  loguru::Verbosity verbosity = LevelVerbosity(loglevel);
-  if (verbosity <= 0) {
-    loguru::g_stderr_verbosity = loguru::Verbosity_WARNING;
-    // loguru::g_preamble_date    = true; // The date field
-    // loguru::g_preamble_time    = true; // The time of the current day
-    loguru::g_preamble_uptime  = false; // The time since init call
-    loguru::g_preamble_thread  = false; // The logging thread
-    loguru::g_preamble_file    = false; // The file from which the log originates from
-    // loguru::g_preamble_verbose = true; // The verbosity field
-    // loguru::g_preamble_pipe    = true; // The pipe symbol right before the message
-  }
-  loguru::g_stderr_verbosity = verbosity;
+std::mutex StreamLogger::write_mutex_;
+Verbosity StreamLogger::global_verbosity_ = Verbosity::DEBUG;
+FILE* StreamLogger::log_file_ = stdout;
 
-  int argc = 1;
-  char* argv[] = {const_cast<char*>("loguru"), nullptr};
-  loguru::init(argc, argv);
-  // loguru::add_file(path, loguru::Append, verbosity);
-  loguru::add_file(path, loguru::Truncate, verbosity);
+static const char* VerbosityName(Verbosity v) {
+  switch(v) {
+  case Verbosity::TRACE:
+    return "TRACE";
+  case Verbosity::DEBUG:
+    return "DEBUG";
+  case Verbosity::INFO:
+    return "INFO";
+  case Verbosity::WARN:
+    return "WARN";
+  case Verbosity::ERROR:
+    return "ERROR";
+  case Verbosity::FATAL:
+    return "FATAL";
+  case Verbosity::OFF:
+    return "OFF";
+  default:
+    return "BAD";
+  }
+}
+
+static void CurrentDateTime(char* buff, size_t buff_size) {
+  using namespace std::chrono;
+  auto now = system_clock::now();
+  long long ms_since_epoch = duration_cast<milliseconds>(
+                                now.time_since_epoch()).count();
+  time_t sec_since_epoch = time_t(ms_since_epoch / 1000);
+  tm time_info;
+  localtime_r(&sec_since_epoch, &time_info);
+  snprintf(buff, buff_size, "%04d-%02d-%02d %02d:%02d:%02d.%03lld",
+    1900 + time_info.tm_year, 1 + time_info.tm_mon, time_info.tm_mday,
+    time_info.tm_hour, time_info.tm_min, time_info.tm_sec,
+    ms_since_epoch % 1000);
+}
+
+static Verbosity VerbosityFromName(const char* level) {
+  if (strcmp("TRACE", level) == 0) {
+    return Verbosity::TRACE;
+  }
+  if (strcmp("DEBUG", level) == 0) {
+    return Verbosity::DEBUG;
+  }
+  if (strcmp("INFO", level) == 0) {
+    return Verbosity::INFO;
+  }
+  if (strcmp("WARN", level) == 0) {
+    return Verbosity::WARN;
+  }
+  if (strcmp("ERROR", level) == 0) {
+    return Verbosity::ERROR;
+  }
+  if (strcmp("FATAL", level) == 0) {
+    return Verbosity::FATAL;
+  }
+  if (strcmp("OFF", level) == 0) {
+    return Verbosity::OFF;
+  }
+  return Verbosity::INFO;
+}
+
+StreamLogger::~StreamLogger() noexcept(false) {
+  // TODO : option 是否立即flush
+  char date_time[64];
+  CurrentDateTime(date_time, sizeof(date_time));
+
+  {
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    fprintf(log_file_, "%s [%s] %s\n", date_time,
+            VerbosityName(current_verbosity_), oss_.str().c_str());
+  }
+  fflush(log_file_); // TODO : flush 是否有必要在lock之内?
 }
 
 }

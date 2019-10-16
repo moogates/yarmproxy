@@ -84,7 +84,7 @@ void ClientConnection::StartRead() {
     LOG_WARN << "client StartRead set socket option error";
     socket_.close();
   } else {
-    LOG_ERROR << "client StartRead ===================================";
+    LOG_INFO << "client " << this << " StartRead";
     AsyncRead();
   }
 }
