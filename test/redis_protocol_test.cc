@@ -1,5 +1,4 @@
 #include "../proxy/redis_protocol.h"
-#include "base/logging.h"
 
 #include <cassert>
 #include <iostream>
@@ -204,7 +203,6 @@ void BulkTest() {
 }
 
 int main() {
-  loguru::g_stderr_verbosity = 8;
   std::cout << "============ BulkTest ============" << std::endl;
   BulkTest();
 

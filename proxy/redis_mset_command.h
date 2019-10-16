@@ -9,6 +9,7 @@ namespace yarmproxy {
 using Endpoint = boost::asio::ip::tcp::endpoint;
 
 namespace redis {
+class Bulk;
 class BulkArray;
 }
 
@@ -39,15 +40,14 @@ private:
 private:
   struct Subquery;
 
-  size_t total_bulks_; // TODO : for debug only
   size_t unparsed_bulks_;
-  bool init_write_query_ = true;
   std::map<Endpoint, std::shared_ptr<Subquery>> waiting_subqueries_;
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> pending_subqueries_;
   std::shared_ptr<Subquery> tail_query_;
 private:
   void ActivateWaitingSubquery();
   void PushSubquery(const Endpoint& ep, const char* data, size_t bytes);
+  void PushSubqueryBulks(const std::vector<redis::Bulk>& bulks);
 };
 
 }
