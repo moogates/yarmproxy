@@ -1,5 +1,5 @@
 body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
-./data_gen $body_size | sed "1s/EXAMPLE_KEY/key1/g" | nc 127.0.0.1 11311 > /dev/null
+./marshal_set key1 $body_size | nc 127.0.0.1 11311 > /dev/null
 
 query="get key1\r\n"
 printf "$query" | nc 127.0.0.1 11311 | grep "^ERROR\|^VALUE\|^END" > get1.tmp

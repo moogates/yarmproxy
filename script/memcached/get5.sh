@@ -2,7 +2,7 @@ body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
 printf "Setting up(body_size=$body_size)..."
 for id in `seq 1 10`; do
   key=key$id
-  ./data_gen $body_size | sed "1s/EXAMPLE_KEY/$key/g" | nc 127.0.0.1 11311 > /dev/null
+  ./marshal_set $key $body_size | nc 127.0.0.1 11311 > /dev/null
 done
 echo "Done"
 

@@ -1,2 +1,9 @@
-printf "delete key1\r\ndelete key2\r\ndelete key3\r\ndelete key4\r\ndelete key5\r\ndelete key6\r\ndelete key7\r\ndelete key8\r\ndelete key9\r\ndelete key10\r\ndelete key11\r\ndelete key12\r\ndelete key13\r\ndelete key14\r\ndelete key15\r\ndelete key16\r\ndelete key17\r\ndelete key18\r\ndelete key19\r\ndelete key20\r\ndelete key21\r\ndelete key22\r\ndelete key23\r\ndelete key24\r\ndelete key25\r\ndelete key26\r\ndelete key27\r\ndelete key28\r\ndelete key29\r\ndelete key30\r\n" | nc 127.0.0.1 11311
-exit 1
+rm -fv delete3.tmp
+
+for i in `seq 1 30`; do
+  key="key$i"
+  printf "delete $key\r\n" >> delete3.tmp
+done
+
+cat delete3.tmp | ../yarmnc 127.0.0.1 11311
+

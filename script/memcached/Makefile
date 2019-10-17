@@ -3,7 +3,7 @@ EXES = $(patsubst %.c, %, $(SOURCES))
 
 all : $(EXES)
 
-% : %.c marshal.h
+% : %.c
 	gcc $< -o $@ -std=c99
 
 clean:
