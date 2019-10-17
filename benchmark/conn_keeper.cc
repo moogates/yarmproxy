@@ -3,7 +3,7 @@
 #include <boost/bind.hpp>
 // #include <boost/algorithm/string.hpp>
 
-#include "base/logging.h"
+#include "../proxy/logging.h"
 
 #include "redis_conn.h"
 
@@ -46,7 +46,7 @@ void ConnectionKeeper::CheckNextConnection() {
     LOG_WARN << "CheckNextConnection reconnect, index=" << next_check_ << " old_conn=" << conn.get()
               << " new_conn=" << new_conn.get();
   } else {
-    LOG_DEBUG << "CheckNextConnection ok, index=" << next_check_ << " topic=" << conn->topic()  << " conn=" << conn.get();
+    LOG_DEBUG << "CheckNextConnection ok, index=" << next_check_ << " conn=" << conn.get();
   }
   ++next_check_;
   next_check_ %= topic_conn_.size();

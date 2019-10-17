@@ -31,21 +31,16 @@ public:
   void AsyncWrite();
   void Close();
 
-  void Subscribe(const std::string& topic);
   inline void refresh_keepalive() {
     // TODO : 优化keepalive管理
     keepalive_ = time(NULL);
   }
 
-  void Write(const char* data, size_t len);
-
   boost::asio::io_service & io_service() {
     return io_service_;
   }
-  bool IsClosed() const  { return status_ == ST_CLOSED; }
+  bool IsClosed() const  { return closed_; }
 
-  virtual const std::string& topic() { static std::string emtpy; return emtpy; }
-  virtual bool is_publisher() const  { return false; }
   virtual void OnKeepaliveTimer(const boost::system::error_code& error);
 private:
   void SetSocketOptions();
@@ -61,33 +56,16 @@ private:
   boost::asio::ip::tcp::socket socket_;
 
   time_t keepalive_;
-  enum Status {
-    ST_UNINIT      = 1,
-    ST_ACCEPTED    = 1,
-    ST_CONNECTED   = 2,
-    ST_CLOSED      = 3,
-    ST_AUTHING     = 4,
-    ST_SUBSCRIBING = 5,
-    ST_SUBSCRIBE_OK = 6,
-  };
 
+  // const std::string& query_data_;
   std::string query_data_;
-  size_t query_sent_counter_ = 0;
-  
-  std::set<std::string> subscribed_topics_;
+  size_t query_written_bytes_ = 0;
+  bool is_writing_ = false;
   
   enum { kReadBufLength = 64 * 1024 };
   char read_buf_[kReadBufLength];
-  size_t read_buf_begin_, read_buf_end_;
 
-  enum { kWriteBufLength = 4 * 1024 };
-  char write_buf_[kWriteBufLength];
-  size_t write_buf_begin_, write_buf_end_;
-  std::string extended_write_buf_;
-  bool is_writing_;
-
-  Status status_;
-  int phase_;
+  bool closed_ = false;
 
   boost::asio::deadline_timer timer_;
   boost::asio::ip::tcp::endpoint upstream_endpoint_;

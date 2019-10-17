@@ -2,7 +2,7 @@
 
 #include <boost/asio.hpp>
 
-#include "base/logging.h"
+#include "../proxy/logging.h"
 #include "conn_keeper.h"
 
 void UseMaxFdLimit() {

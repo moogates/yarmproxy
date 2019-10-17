@@ -19,7 +19,7 @@ aux_source_directory(${YARM_ROOT_DIR}/base BASE_SOURCES)
 #set(SOURCES main.cc redis_conn.cc)
 link_directories(/usr/local/lib)
 
-add_executable(yarmbench ${BASE_SOURCES} ${SOURCES})
+add_executable(yarmbench ${BASE_SOURCES} ${SOURCES} ../proxy/logging.cc ../proxy/loguru.cc)
 
 target_link_libraries(yarmbench boost_system boost_thread pthread dl)
 
