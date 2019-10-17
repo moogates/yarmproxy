@@ -1,6 +1,7 @@
 TODO : argv / config file
 TODO : idle client-conn timeout & heartbeat?
 TODO : max backend conn resource limit
+TODO : uniform public / proctected / private
 
 TODO : limit max data size
 TODO : memcached key_len_limit=250, body_size_limit=1M

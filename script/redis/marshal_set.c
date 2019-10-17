@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
 
   printf("*%d\r\n$3\r\nset\r\n", bulks);
   PrintBulkKey(key);
-  PrintBulkBody(size);
+  PrintBulkBody(key, size);
 
   if (expired > 0) {
     printf("$2\r\nEX\r\n$5\r\n86400\r\n");

@@ -24,14 +24,13 @@ int main(int argc, char* argv[]) {
   }
 
   int bulks = 1 + count * 2;
-
   printf("*%d\r\n$4\r\nmset\r\n", bulks);
 
   char key[64];
   for(int i = 1; i <= count; ++i) {
     sprintf(key, "%s%d", key_prefix, i);
     PrintBulkKey(key);
-    PrintBulkBody(size);
+    PrintBulkBody(key, size);
   }
 
   return 0;
