@@ -1,4 +1,4 @@
-./data_gen key1 1000 | nc 127.0.0.1 11311 > /dev/null
+./marshal_set key1 1000 | nc 127.0.0.1 11311 > /dev/null
 
 query="*2\r\n\$3\r\ndel\r\n\$4\r\nkey1\r\n"
 #printf "$query" | nc 127.0.0.1 6379
