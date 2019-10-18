@@ -4,6 +4,7 @@
 #include <set>
 #include <string>
 #include <memory>
+#include <random>
 
 #include <boost/asio.hpp>
 
@@ -41,7 +42,7 @@ public:
   }
   bool IsClosed() const  { return closed_; }
 
-  virtual void OnKeepaliveTimer(const boost::system::error_code& error);
+  virtual void OnRepeatTimer(const boost::system::error_code& error);
 private:
   void SetSocketOptions();
   RedisConnection(boost::asio::io_service& io_service, 
@@ -67,8 +68,11 @@ private:
 
   bool closed_ = false;
 
-  boost::asio::deadline_timer timer_;
+  int repeat_ = 32768;
+
+  boost::asio::steady_timer timer_;
   boost::asio::ip::tcp::endpoint upstream_endpoint_;
+  std::default_random_engine rand_eng_;
 };
 
 }

@@ -25,13 +25,14 @@ RedisConnection::RedisConnection(boost::asio::io_service& io_service,
                                   short port)
   : io_service_(io_service)
   , socket_(io_service)
-  , timer_(io_service, boost::posix_time::seconds(3))
+  , timer_(io_service)
   , upstream_endpoint_(boost::asio::ip::address::from_string(host), port)
 {
   query_data_ = "*3\r\n$4\r\nmget\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n";
 }
 
 RedisConnection::~RedisConnection() {
+  LOG_DEBUG << "RedisConnection dtor conn=" << this;
 }
 
 void RedisConnection::SetSocketOptions() {
@@ -59,11 +60,6 @@ void RedisConnection::Initialize() {
           shared_from_this(),
           std::placeholders::_1));
 
-  timer_.expires_from_now(boost::posix_time::seconds(PING_INTERVAL));
-  timer_.async_wait(std::bind(&RedisConnection::OnKeepaliveTimer,
-                    shared_from_this(),
-                    std::placeholders::_1));
-
   LOG_DEBUG << "RedisConnection Initialized ok, conn=" << this
             << " upstream=" << upstream_endpoint_;
 }
@@ -84,24 +80,22 @@ void RedisConnection::OnConnected(const boost::system::error_code& error) {
 }
 
 // TODO : 命名统一，一律使用OnXXX, 不使用HandleXXX
-void RedisConnection::OnKeepaliveTimer(const boost::system::error_code& error) {
+void RedisConnection::OnRepeatTimer(const boost::system::error_code& error) {
   if (error) {
     LOG_DEBUG << "RedisConnection timer error, conn=" << this;
     Close();
     return;
   }
-
   if (closed_) {
-    LOG_DEBUG << "RedisConnection OnKeepaliveTimer closed, conn=" << this
+    LOG_DEBUG << "RedisConnection OnRepeatTimer closed, conn=" << this
               << " upstream=" << upstream_endpoint_;
     return;
   }
-  LOG_DEBUG << "RedisConnection OnKeepaliveTimer ok, conn=" << this
-            << " upstream=" << upstream_endpoint_;
 
-  timer_.expires_from_now(boost::posix_time::seconds(PING_INTERVAL));
-  timer_.async_wait(std::bind(&RedisConnection::OnKeepaliveTimer, shared_from_this(),
-                     std::placeholders::_1));
+  query_written_bytes_ = 0;
+  AsyncWrite();
+  LOG_DEBUG << "RedisConnection OnRepeatTimer ok, repeat_=" << repeat_
+            << ", conn=" << this << " upstream=" << upstream_endpoint_;
 }
 
 void RedisConnection::Close() {
@@ -154,12 +148,21 @@ void RedisConnection::HandleWrite(const boost::system::error_code& error,
   if (query_written_bytes_ < query_data_.size()) {
     AsyncWrite();
   } else {
-    boost::system::error_code ec;
-    socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
-    if (ec) {
-      LOG_INFO << "HandleWrite shutdown_send error, conn=" << this;
+    if (--repeat_ > 0) {
+      LOG_INFO << "HandleWrite finished, repeat=" << repeat_
+               << " start new timer, conn=" << this;
+      timer_.expires_after(std::chrono::milliseconds(1 + rand_eng_() % 512));
+      timer_.async_wait(std::bind(&RedisConnection::OnRepeatTimer,
+                    shared_from_this(),
+                    std::placeholders::_1));
     } else {
-      LOG_DEBUG << "HandleWrite shutdown_send ok, conn=" << this;
+      boost::system::error_code ec;
+      socket_.shutdown(boost::asio::ip::tcp::socket::shutdown_send, ec);
+      if (ec) {
+        LOG_INFO << "HandleWrite shutdown_send error, conn=" << this;
+      } else {
+        LOG_DEBUG << "HandleWrite shutdown_send ok, conn=" << this;
+      }
     }
   }
 }
@@ -176,7 +179,9 @@ void RedisConnection::HandleRead(const boost::system::error_code& error, size_t 
     return;
   }
 
-  std::cout.write(reinterpret_cast<const char*>(read_buf_), bytes_transferred);
+  LOG_DEBUG << "HandleRead ok, bytes=" <<  bytes_transferred
+            << " conn="<< this;
+  std::cout.write(reinterpret_cast<const char*>(read_buf_), std::min(size_t(16), bytes_transferred));
   AsyncRead();
 }
 

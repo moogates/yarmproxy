@@ -18,8 +18,7 @@ public:
      , host_(host)
      , port_(port)
      , concurrency_(concurrency)
-     , next_check_(0)
-     , check_timer_(io_service, boost::posix_time::seconds(1)) {
+     , check_timer_(io_service) {
   }
 
   void Start();
@@ -33,9 +32,9 @@ public:
   int port_;
 
   size_t concurrency_;
-  size_t next_check_;
+  size_t next_check_ = 0;
 
-  boost::asio::deadline_timer check_timer_;
+  boost::asio::steady_timer check_timer_;
   std::vector<std::shared_ptr<RedisConnection>> topic_conn_;
 
  private:

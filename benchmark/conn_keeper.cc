@@ -1,6 +1,6 @@
 #include "conn_keeper.h"
 
-#include <boost/bind.hpp>
+#include <functional>
 // #include <boost/algorithm/string.hpp>
 
 #include "../proxy/logging.h"
@@ -15,14 +15,14 @@ void ConnectionKeeper::Start() {
     usleep(200);
   }
 
-  check_timer_.expires_from_now(boost::posix_time::seconds(300));
-  check_timer_.async_wait(boost::bind(&ConnectionKeeper::OnCheckTimer, this,
-                     boost::asio::placeholders::error));
+  check_timer_.expires_after(std::chrono::seconds(3));
+  check_timer_.async_wait(std::bind(&ConnectionKeeper::OnCheckTimer, this,
+                     std::placeholders::_1));
 }
 
 void ConnectionKeeper::OnCheckTimer(const boost::system::error_code& error) {
   LOG_DEBUG << "ConnectionKeeper OnCheckTimer";
-  size_t round = std::min(size_t(30), concurrency_ / 100);
+  size_t round = std::min(size_t(100), concurrency_ / 20);
   if (round <= 0) {
     round = 1;
   }
@@ -31,9 +31,9 @@ void ConnectionKeeper::OnCheckTimer(const boost::system::error_code& error) {
     usleep(10000);
   }
 
-  check_timer_.expires_from_now(boost::posix_time::seconds(300));
-  check_timer_.async_wait(boost::bind(&ConnectionKeeper::OnCheckTimer, this,
-                     boost::asio::placeholders::error));
+  check_timer_.expires_after(std::chrono::milliseconds(500));
+  check_timer_.async_wait(std::bind(&ConnectionKeeper::OnCheckTimer, this,
+                     std::placeholders::_1));
 }
 
 void ConnectionKeeper::CheckNextConnection() {
