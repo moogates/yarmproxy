@@ -103,7 +103,7 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client,
   }
   for(size_t i = 1; i < ba.present_bulks(); ++i) {
     if (i == ba.present_bulks() - 1 && !ba[i].completed()) {
-      ++unparsed_bulks_;// don't parse the last key if it's not complete
+      ++unparsed_bulks_; // don't parse the last key if it's not complete
       break;
     }
     Endpoint ep = backend_locator()->Locate(
@@ -249,10 +249,6 @@ void RedisDelCommand::OnWriteQueryFinished(
                                   query->segments_.front().second);
     }
   } else {
-    // TODO
-    LOG_WARN << "OnWriteQueryFinished bad phase "
-             << query->phase_ << " , backend=" << backend;
-    client_conn_->Abort();
     assert(false);
   }
 }
@@ -284,33 +280,19 @@ void RedisDelCommand::ActivateWaitingSubquery() {
 bool RedisDelCommand::ProcessUnparsedPart() {
   ReadBuffer* buffer = client_conn_->buffer();
   std::vector<redis::Bulk> new_bulks;
-  size_t total_parsed = 0;
 
-  // TODO : duplicate code cleaning up
-  while(new_bulks.size() < unparsed_bulks_ &&
-        total_parsed < buffer->unparsed_received_bytes()) {
-    const char * entry = buffer->unparsed_data() + total_parsed;
-    size_t unparsed_bytes = buffer->unparsed_received_bytes() - total_parsed;
-    new_bulks.emplace_back(entry, unparsed_bytes);
-    redis::Bulk& bulk = new_bulks.back();
-
-    if (bulk.present_size() < 0) {
-      return false;
-    }
-
-    if (bulk.present_size() == 0 || !bulk.completed()) {
-      new_bulks.pop_back();
-      break;
-    }
-    total_parsed += bulk.total_size();
-    LOG_DEBUG << "ProcessUnparsedPart current bulk parsed_bytes="
-              << bulk.total_size();
+  int parsed_bytes = redis::BulkArray::ParseBulkItems(buffer->unparsed_data(),
+       buffer->unparsed_received_bytes(), unparsed_bulks_, &new_bulks);
+  if (parsed_bytes < 0) {
+    LOG_INFO << "redisdel ProcessUnparsedPart parse error. cmd=" << this;
+    return false;
+  }
+  if (new_bulks.size() > 0 && !new_bulks.back().completed()) {
+    parsed_bytes -= new_bulks.back().total_size();
+    new_bulks.pop_back();
   }
 
-  LOG_DEBUG << "ProcessUnparsedPart new_bulks.size=" << new_bulks.size()
-            << " total_parsed=" << total_parsed;
-
-  if (new_bulks.size() == 0) {
+  if (new_bulks.empty()) {
     if (!client_conn_->buffer()->recycle_locked()) {
       client_conn_->TryReadMoreQuery("redis_del_3");
     }
@@ -322,20 +304,13 @@ bool RedisDelCommand::ProcessUnparsedPart() {
   unparsed_bulks_ -= new_bulks.size();
 
   for(size_t i = 0; i < new_bulks.size(); ++i) {
-    assert(new_bulks[i].completed());
-  //if (i == new_bulks.size() - 1 && !new_bulks[i].completed()) {
-  //  ++unparsed_bulks_;// don't parse the last key if it's not complete
-  //  break;
-  //}
-    Endpoint ep = backend_locator()->Locate(
-                                new_bulks[i].payload_data(),
-                                new_bulks[i].payload_size(),
-                                ProtocolType::REDIS);
+    Endpoint ep = backend_locator()->Locate(new_bulks[i].payload_data(),
+        new_bulks[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, new_bulks[i].raw_data(), new_bulks[i].present_size());
   }
 
-  buffer->update_processed_bytes(total_parsed);
-  buffer->update_parsed_bytes(total_parsed);
+  buffer->update_processed_bytes(parsed_bytes);
+  buffer->update_parsed_bytes(parsed_bytes);
   ActivateWaitingSubquery();
   return true;
 }
@@ -350,7 +325,7 @@ bool RedisDelCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
     return false;
   }
 
-  const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed));
+  auto p = static_cast<const char *>(memchr(entry, '\n', unparsed));
   if (p == nullptr) {
     return true;
   }

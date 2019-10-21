@@ -13,6 +13,7 @@ TODO : anti bad request
 TODO : cpu affinity
 TODO : IPv6 support
 TODO : memcached binary protocol support
+TODO : test locator key namespace
 
 benchmarking
 TODO : benchmarking client

@@ -12,8 +12,6 @@
 
 namespace yarmproxy {
 
-std::atomic_int redis_mset_cmd_count;
-
 struct RedisMsetCommand::Subquery {
   Subquery(std::shared_ptr<BackendConn> backend,
            const char* data, size_t present_bytes)

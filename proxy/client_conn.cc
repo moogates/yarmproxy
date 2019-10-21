@@ -42,7 +42,8 @@ void ClientConnection::OnTimeout(const boost::system::error_code& ec,
                                  TimerType timer_type) {
   if (ec != boost::asio::error::operation_aborted) {
     // timer was not cancelled, take necessary action.
-    LOG_WARN << "client OnTimeout, timer=" << timer_type;
+    LOG_WARN << "client OnTimeout, timer="
+             << (timer_type == READ_TIMER ? "READ" : "WRITE");
     if (timer_type == READ_TIMER) {
       ++g_stats_.client_read_timeouts_;
     } else {
@@ -65,7 +66,9 @@ void ClientConnection::UpdateTimer(TimerType timer_type) {
       Config::Instance().socket_rw_timeout();
 
   timer.expires_after(std::chrono::milliseconds(timeout));
-  LOG_DEBUG << "client UpdateTimer " << timer_type << " timeout=" << timeout;
+  LOG_DEBUG << "client UpdateTimer "
+            << (timer_type == READ_TIMER ? "READ" : "WRITE")
+            << " timeout=" << timeout;
 
   std::weak_ptr<ClientConnection> wptr(shared_from_this());
   timer.async_wait([wptr, timer_type](const boost::system::error_code& ec) {

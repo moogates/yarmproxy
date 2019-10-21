@@ -54,7 +54,7 @@ static const std::string& DefaultNamespace(ProtocolType protocol) {
 static std::string KeyNamespace(const char * key, size_t len, ProtocolType protocol) {
   std::ostringstream oss;
   oss << ProtocolNs(protocol) << "/";
-  const char * p = static_cast<const char *>(memchr(key, '#',
+  const char * p = static_cast<const char *>(memchr(key, ':',
         std::min(int(len), Config::Instance().max_namespace_length() + 1)));
   if (p != nullptr) {
     oss << std::string(key, p - key);
@@ -63,7 +63,7 @@ static std::string KeyNamespace(const char * key, size_t len, ProtocolType proto
 }
 
 Endpoint BackendLocator::Locate(const char * key, size_t len, ProtocolType protocol) {
-  std::shared_ptr<BackendContinuum> continuum;  // use shared_ptr
+  std::shared_ptr<BackendContinuum> continuum;
   auto it = namespace_continum_.find(KeyNamespace(key, len, protocol));
   if (it == namespace_continum_.end()) {
     // TODO : optional drop user request

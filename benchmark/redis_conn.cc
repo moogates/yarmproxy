@@ -28,7 +28,11 @@ RedisConnection::RedisConnection(boost::asio::io_service& io_service,
   , timer_(io_service)
   , upstream_endpoint_(boost::asio::ip::address::from_string(host), port)
 {
-  query_data_ = "*3\r\n$4\r\nmget\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n";
+  if (rand_eng_() % 2 == 0) {
+    query_data_ = "*3\r\n$4\r\nmget\r\n$4\r\nkey1\r\n$4\r\nkey2\r\n";
+  } else {
+    query_data_ = "get key1 key2\r\n";
+  }
 }
 
 RedisConnection::~RedisConnection() {

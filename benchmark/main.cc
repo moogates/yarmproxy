@@ -35,8 +35,8 @@ int MaximizeFdLimit() {
 }
 
 int main(int argc, char **argv) {
-  // base::InitLogging("proxy.log", "WARN");
-  loguru::g_stderr_verbosity = 8;
+  base::InitLogging("yarmbench.log", "WARN");
+  // loguru::g_stderr_verbosity = 8;
 
   using namespace yarmproxy;
   MaximizeFdLimit();

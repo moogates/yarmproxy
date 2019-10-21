@@ -214,7 +214,7 @@ bool MemcGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
   while(backend->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend->buffer()->unparsed_data();
     size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
-    const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed_bytes));
+    auto p = static_cast<const char *>(memchr(entry, '\n', unparsed_bytes));
     if (p == nullptr) {
       LOG_DEBUG << "ParseReply no enough data for parsing, please read more,"
                 << " unparsed_bytes=" << backend->buffer()->unparsed_bytes();
@@ -226,21 +226,18 @@ bool MemcGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
       size_t body_bytes = ParseReplyBodySize(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
       backend->buffer()->update_parsed_bytes(entry_bytes);
-      // return true; // 这里如果return, 则每次转发一条，only for test
     } else {
-      // "END\r\n"
-      if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0
-          && backend->buffer()->unparsed_bytes() == (sizeof("END\r\n") - 1)) {
+      if (strncmp("END\r\n", entry, sizeof("END\r\n") - 1) == 0 &&
+          backend->buffer()->unparsed_bytes() == (sizeof("END\r\n") - 1)) {
         backend->set_reply_recv_complete();
         if (backend == last_backend_) {
           backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1);
-          LOG_DEBUG << "ParseReply END, is last, backend=" << backend
-                   << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
+          LOG_DEBUG << "ParseReply tail backend=" << backend
+                   << " unprocessed=" << backend->buffer()->unprocessed_bytes();
         } else {
-          // backend->buffer()->update_parsed_bytes(sizeof("END\r\n") - 1); // for debug only
           backend->buffer()->cut_received_tail(sizeof("END\r\n") - 1);
-          LOG_DEBUG << "ParseReply END, is not last, backend=" << backend
-                   << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
+          LOG_DEBUG << "ParseReply non-tail backend=" << backend
+                   << " unprocessed=" << backend->buffer()->unprocessed_bytes();
         }
         return true;
       } else {
