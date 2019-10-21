@@ -38,8 +38,8 @@ MemcGetCommand::~MemcGetCommand() {
 
 void MemcGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
   std::map<Endpoint, std::string> ep_keys;
-  for(const char* p = cmd_data + 4/*strlen("get ")*/;
-      p < cmd_data + cmd_size - 2/*strlen("\r\n")*/; ++p) {
+  for(const char* p = cmd_data + (sizeof("get ") - 1);
+      p < cmd_data + cmd_size - (sizeof("\r\n") - 1); ++p) {
     const char* q = p;
     while(*q != ' ' && *q != '\r') {
       ++q;
@@ -47,14 +47,14 @@ void MemcGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
     auto ep = backend_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
     auto it = ep_keys.find(ep);
     if (it == ep_keys.end()) {
-      it = ep_keys.emplace(ep, "get").first; // TODO : don't use insert anymore
+      it = ep_keys.emplace(ep, "get").first;
     }
 
     it->second.append(p - 1, 1 + q - p);
     p = q;
   }
   for(auto& it : ep_keys) {
-    it.second.append("\r\n"); // TODO : may I only iterate over values?
+    it.second.append("\r\n");
     auto backend = backend_pool()->Allocate(it.first);
     subqueries_.emplace_back(new Subquery(backend, std::move(it.second)));
   }
@@ -110,11 +110,6 @@ void MemcGetCommand::BackendReadyToReply(
 void MemcGetCommand::OnBackendReplyReceived(
         std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   TryMarkLastBackend(backend);
-//if (ec != ErrorCode::E_SUCCESS || ParseReply(backend) == false) {
-//  LOG_WARN << "Command::OnBackendReplyReceived error, backend=" << backend;
-//  client_conn_->Abort();
-//  return;
-//}
   if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
     ec = ErrorCode::E_PROTOCOL;
   }
@@ -137,25 +132,23 @@ bool MemcGetCommand::BackendErrorRecoverable(
   return !backend->has_read_some_reply();
 }
 
-void MemcGetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  LOG_DEBUG << "MemcGetCommand::OnBackendConnectError endpoint="
+void MemcGetCommand::OnBackendRecoverableError(
+    std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+  LOG_DEBUG << "MemcGetCommand::OnBackendRecoverableError endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   TryMarkLastBackend(backend);
 
   if (backend == last_backend_) {
+    // last backend, send reply
     if (subqueries_.size() > 1) {
-      static const char END_RN[] = "END\r\n"; // TODO : 统一放置错误码
+      static const char END_RN[] = "END\r\n";
       backend->SetReplyData(END_RN, sizeof(END_RN) - 1);
     } else {
       const auto& err_reply(MemcErrorReply(ec));
       backend->SetReplyData(err_reply.data(), err_reply.size());
     }
-    LOG_DEBUG << "MemcGetCommand::OnBackendConnectError last, endpoint="
-            << backend->remote_endpoint() << " backend=" << backend;
   } else {
-    // ++completed_backends_;
-    LOG_DEBUG << "MemcGetCommand::OnBackendConnectError not last, endpoint="
-            << backend->remote_endpoint() << " backend=" << backend;
+    // not last backend, do nothing
   }
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
@@ -196,20 +189,13 @@ bool MemcGetCommand::HasUnfinishedBanckends() const {
 void MemcGetCommand::RotateReplyingBackend() {
   ++completed_backends_;
   if (HasUnfinishedBanckends()) {
-  // if (HasUnfinishedBanckends() || waiting_reply_queue_.size() > 0) {
-    LOG_DEBUG << "MemcGetCommand::Rotate to next backend, HasUnfinishedBanckends="
-              << HasUnfinishedBanckends()
-              << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
     NextBackendStartReply();
   } else {
-    LOG_DEBUG << "MemcGetCommand::Rotate to next COMMAND"
-             << " completed_backends_=" << completed_backends_
-             << " waiting_reply_queue_.size=" << waiting_reply_queue_.size();
     client_conn_->RotateReplyingCommand();
   }
 }
 
-size_t MemcGetCommand::ParseReplyBodyBytes(const char * data, const char * end) {
+size_t MemcGetCommand::ParseReplyBodySize(const char * data, const char * end) {
   // "VALUE <key> <flag> <bytes>\r\n"
   const char * p = data + sizeof("VALUE ");
   int count = 0;
@@ -237,7 +223,7 @@ bool MemcGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
 
     if (entry[0] == 'V') {
       // "VALUE <key> <flag> <bytes>\r\n"
-      size_t body_bytes = ParseReplyBodyBytes(entry, p);
+      size_t body_bytes = ParseReplyBodySize(entry, p);
       size_t entry_bytes = p - entry + 1 + body_bytes + 2;
       backend->buffer()->update_parsed_bytes(entry_bytes);
       // return true; // 这里如果return, 则每次转发一条，only for test

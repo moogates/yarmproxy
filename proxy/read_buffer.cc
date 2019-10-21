@@ -15,12 +15,9 @@ size_t ReadBuffer::unparsed_bytes() const {
 }
 
 ReadBuffer::~ReadBuffer() {
-  // LOG_INFO << "ReadBuffer dtor";
 }
 
 void ReadBuffer::update_received_bytes(size_t received_bytes) {
-  // LOG_DEBUG << "ReadBuffer::update_received_bytes, this=" << this
-  //           << " received_data=" << std::string(data_ + received_offset_, received_bytes);
   received_offset_ += received_bytes;
 }
 
@@ -30,7 +27,7 @@ void ReadBuffer::push_reply_data(const char* data, size_t bytes) {
   parsed_offset_ += bytes;
 }
 
-size_t ReadBuffer::unprocessed_bytes() const {  // 已经接收，且已经解析，但尚未处理的数据
+size_t ReadBuffer::unprocessed_bytes() const {
   return std::min(received_offset_, parsed_offset_) - processed_offset_;
 }
 
@@ -47,11 +44,9 @@ bool ReadBuffer::recycle_locked() const {
 }
 
 void ReadBuffer::inc_recycle_lock() {
-  // LOG_DEBUG << "ReadBuffer inc_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
   ++recycle_lock_count_;
 }
 void ReadBuffer::dec_recycle_lock() {
-  // LOG_DEBUG << "ReadBuffer dec_recycle_lock, PRE-count=" << recycle_lock_count_ << " buffer=" << this;
   assert(recycle_lock_count_ > 0);
   if (recycle_lock_count_ > 0) {
     --recycle_lock_count_;
@@ -65,7 +60,8 @@ void ReadBuffer::try_recycle_buffer() {
       parsed_offset_ -= processed_offset_;
       processed_offset_ = received_offset_ = 0;
     } else if (processed_offset_ > (buffer_size_ - received_offset_)) {
-      memmove(data_, data_ + processed_offset_, received_offset_ - processed_offset_);
+      memmove(data_, data_ + processed_offset_,
+              received_offset_ - processed_offset_);
       assert(parsed_offset_ >= processed_offset_);
       parsed_offset_ -= processed_offset_;
       received_offset_ -= processed_offset_;

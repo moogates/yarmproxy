@@ -2,10 +2,12 @@
 #define _YARMPROXY_COMMAND_H_
 
 #include <cassert>
+
+#include <functional>
 #include <list>
+#include <memory>
 #include <vector>
 #include <string>
-#include <memory>
 
 #include "protocol_type.h"
 namespace yarmproxy {

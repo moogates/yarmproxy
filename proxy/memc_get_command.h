@@ -21,12 +21,14 @@ public:
     assert(false);
     return false;
   }
-  void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
+  void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
+      ErrorCode ec) override;
 
 private:
-  // void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
-  bool BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
-  void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
+  bool BackendErrorRecoverable(std::shared_ptr<BackendConn> backend,
+      ErrorCode ec) override;
+  void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend,
+      ErrorCode ec) override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend() override;
 
@@ -43,7 +45,7 @@ private:
   }
 
 private:
-  static size_t ParseReplyBodyBytes(const char * data, const char * end);
+  static size_t ParseReplyBodySize(const char * data, const char * end);
   void ParseQuery(const char* cmd_data, size_t cmd_size);
 
   struct Subquery;

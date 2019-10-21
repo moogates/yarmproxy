@@ -47,14 +47,13 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
     LOG_DEBUG << "BackendConnPool::Release unrecyclable backend=" << backend
              << " finished=" << backend->finished()
              << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes();
-    // backend->Abort(ErrorCode::E_SUCCESS);
+    backend->Close();
     return;
   }
 
   const auto it = conn_map_.find(ep);
   if (it == conn_map_.end()) {
     backend->Reset();
-    // backend->buffer()->Reset();
     conn_map_[ep].push(backend);
     LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend << " ep=" << ep << " pool_size=1";
   } else {
@@ -63,10 +62,9 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
       // TODO : should warn
       LOG_DEBUG << "BackendConnPool::Release overflow, backend=" << backend
                << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
-      // backend->Abort(ErrorCode::E_SUCCESS);
+      backend->Close();
     } else {
       backend->Reset();
-      // backend->buffer()->Reset();
       it->second.push(backend);
       LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend
                 << " ep=" << ep << " pool_size=" << it->second.size();

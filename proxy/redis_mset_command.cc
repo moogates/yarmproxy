@@ -33,7 +33,6 @@ struct RedisMsetCommand::Subquery {
   size_t keys_count_ = 1;
   Phase phase_ = INIT_SEND_QUERY;
   bool query_recv_complete_ = false;
-  bool backend_error_ = false; // remove it
   std::list<std::pair<const char*, size_t>> segments_;
 };
 
@@ -183,28 +182,24 @@ void RedisMsetCommand::OnBackendRecoverableError(
   if (subquery->query_recv_complete_) {
     if (unparsed_bulks_ == 0 && pending_subqueries_.size() == 1) {
       if (client_conn_->IsFirstCommand(shared_from_this())) {
-        LOG_DEBUG << "redismset OnBackendConnectError write reply, ep="
+        LOG_DEBUG << "redismset OnBackendRecoverableError write reply, ep="
                   << subquery->backend_->remote_endpoint();
         TryWriteReply(backend);
       } else {
-        LOG_DEBUG << "redismset OnBackendConnectError waiting to write reply, ep="
+        LOG_DEBUG << "redismset OnBackendRecoverableError waiting to write reply, ep="
                   << subquery->backend_->remote_endpoint();
         replying_backend_ = backend;
       }
     } else {
-      LOG_DEBUG << "RedisMsetCommand OnBackendConnectError need not reply, ep="
+      LOG_DEBUG << "redismset OnBackendRecoverableError need not reply, ep="
                 << subquery->backend_->remote_endpoint()
                 << " is_tail=" << (subquery == tail_query_)
                 << " pending_subqueries_.size=" << pending_subqueries_.size();
-      backend->set_reply_recv_complete();
-      backend->set_no_recycle();
       pending_subqueries_.erase(backend);
       backend_pool()->Release(backend);
     }
   } else {
-    subquery->backend_error_ = true; // waiting for more query
-    LOG_DEBUG << "RedisMsetCommand OnBackendConnectError backend_error_, waiting for more query, ep="
-              << subquery->backend_->remote_endpoint();
+    // backend recoverrable error, waiting for more query
   }
 }
 

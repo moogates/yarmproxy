@@ -53,9 +53,9 @@ bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
         std::string subquery(redis::BulkArray::SerializePrefix(current_bulks_count + 1));
         subquery.append("$4\r\nmget\r\n"); // (ba[0].raw_data(), ba[0].total_size())
         subquery.append(current_bulks_data, current_bulks_bytes);
-
         auto backend = backend_pool()->Allocate(last_endpoint);
-        subqueries_.emplace_back(new Subquery(backend, std::move(subquery), current_bulks_count));
+        subqueries_.emplace_back(new Subquery(backend, std::move(subquery),
+              current_bulks_count));
 
         current_bulks_data = nullptr;
       }
@@ -71,7 +71,8 @@ bool RedisMgetCommand::ParseQuery(const redis::BulkArray& ba) {
     subquery.append("$4\r\nmget\r\n"); // (ba[0].raw_data(), ba[0].total_size())
     subquery.append(current_bulks_data, current_bulks_bytes);
     auto backend = backend_pool()->Allocate(last_endpoint);
-    subqueries_.emplace_back(new Subquery(backend, std::move(subquery), current_bulks_count));
+    subqueries_.emplace_back(new Subquery(backend, std::move(subquery),
+          current_bulks_count));
 
     LOG_DEBUG << "ParseQuery create last subquery ep=" << last_endpoint
               << " bulks_count=" << current_bulks_count;

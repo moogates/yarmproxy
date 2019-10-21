@@ -129,11 +129,6 @@ bool RedisDelCommand::query_recv_complete() {
   return unparsed_bulks_ == 0; // 只解析completed bulk, 因而解析完就是接收完
 }
 
-bool RedisDelCommand::ContinueWriteQuery() {
-  assert(false);
-  return false;
-}
-
 bool RedisDelCommand::StartWriteQuery() {
   assert(init_write_query_);
   init_write_query_ = false;

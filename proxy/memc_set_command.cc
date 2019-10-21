@@ -51,9 +51,5 @@ void MemcSetCommand::check_query_recv_complete() {
   }
 }
 
-bool MemcSetCommand::query_recv_complete() {
-  return query_recv_complete_;
-}
-
 }
 

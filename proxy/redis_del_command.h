@@ -27,7 +27,11 @@ private:
   bool ProcessUnparsedPart() override;
 
   bool StartWriteQuery() override;
-  bool ContinueWriteQuery() override;
+  bool ContinueWriteQuery() override {
+    assert(false);
+    return false;
+  }
+
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
 
   bool query_data_zero_copy() override {

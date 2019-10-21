@@ -28,8 +28,8 @@ ProxyServer::ProxyServer(const std::string & addr, size_t worker_threads)
     , acceptor_(io_service_)
     , listen_addr_(addr)
     , stopped_(false)
-    , worker_pool_(new WorkerPool(worker_threads > 0 ? worker_threads
-                                      : DefaultConcurrency())) {
+    , worker_pool_(new WorkerPool(
+        worker_threads > 0 ? worker_threads : DefaultConcurrency())) {
 }
 
 ProxyServer::~ProxyServer() {

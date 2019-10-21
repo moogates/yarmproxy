@@ -13,13 +13,14 @@ namespace yarmproxy {
 // TODO: 更好的容错，错误时更有好的返回信息
 
 BackendConn::BackendConn(WorkerContext& context,
-    const Endpoint& endpoint)
-  : context_(context)
-  , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
-  , remote_endpoint_(endpoint)
-  , socket_(context.io_service_)
-  , write_timer_(context.io_service_)
-  , read_timer_(context.io_service_) {
+      const Endpoint& endpoint)
+    : context_(context)
+    , buffer_(new ReadBuffer(context.allocator_->Alloc(),
+          context.allocator_->slab_size()))
+    , remote_endpoint_(endpoint)
+    , socket_(context.io_service_)
+    , write_timer_(context.io_service_)
+    , read_timer_(context.io_service_) {
   ++g_stats_.backend_conns_;
   LOG_DEBUG << "BackendConn ctor, count=" << g_stats_.backend_conns_;
 }
@@ -33,6 +34,14 @@ BackendConn::~BackendConn() {
 
   context_.allocator_->Release(buffer_->data());
   delete buffer_;
+}
+
+void BackendConn::Close() {
+  if (aborted_) {
+    return;
+  }
+  socket_.close();
+  aborted_ = true;
 }
 
 void BackendConn::Abort(ErrorCode ec) {
@@ -82,8 +91,8 @@ void BackendConn::ReadReply() {
 }
 
 void BackendConn::TryReadMoreReply() {
-  if (reply_recv_complete_ || is_reading_reply_
-      || !buffer_->has_much_free_space()) {
+  if (reply_recv_complete_ || is_reading_reply_ ||
+      !buffer_->has_much_free_space()) {
     return;
   }
   ReadReply();
