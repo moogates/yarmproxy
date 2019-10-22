@@ -229,12 +229,14 @@ static std::string ErrorReplyBody(size_t keys) {
   return oss.str();
 }
 
-void RedisMgetCommand::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) {
+void RedisMgetCommand::OnBackendRecoverableError(
+    std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   TryMarkLastBackend(backend);
 
-  std::string err_reply = ErrorReplyBody(backend_subqueries_[backend]->key_count_);
+  auto err_reply = ErrorReplyBody(backend_subqueries_[backend]->key_count_);
   backend->SetReplyData(err_reply.data(), err_reply.size());
-  LOG_DEBUG << "RedisMgetCommand " << this << " OnBackendRecoverableError backend=" << backend
+  LOG_DEBUG << "RedisMgetCommand " << this
+           << " OnBackendRecoverableError backend=" << backend
            << " ec=" << ErrorCodeString(ec)
            << " err_reply=[" << err_reply << "]";
 

@@ -39,6 +39,7 @@ Command::Command(std::shared_ptr<ClientConnection> client, ProtocolType protocol
 };
 
 Command::~Command() {
+  // TODO : backend_pool()->Release(replying_backend_);
 }
 
 BackendConnPool* Command::backend_pool() {

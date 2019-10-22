@@ -350,7 +350,6 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
   }
   if (new_bulks.empty()) {
     if (!client_conn_->buffer()->recycle_locked()) {
-      assert(false); // TODO : assert for test coverage
       client_conn_->TryReadMoreQuery("redis_mset_5");
     }
     return true;

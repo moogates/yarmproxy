@@ -43,7 +43,7 @@ private:
   bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
 
   bool query_data_zero_copy() override {
-    return false; // a bit more copy, for less system call
+    return false; // a bit more copy, for less system call and simple code
   }
   bool ParseQuery(const redis::BulkArray& ba);
 private:
@@ -65,8 +65,6 @@ private:
 
   size_t completed_backends_ = 0;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
-
-  // std::map<std::shared_ptr<BackendConn>, size_t> absent_bulks_tracker_;
 };
 
 }
