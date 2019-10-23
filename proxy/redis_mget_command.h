@@ -1,13 +1,16 @@
 #ifndef _YARMPROXY_REDIS_MGET_COMMAND_H_
 #define _YARMPROXY_REDIS_MGET_COMMAND_H_
 
-#include <map>
 #include <set>
+
+#include <boost/asio/ip/tcp.hpp>
 
 #include "command.h"
 #include "redis_protocol.h"
 
 namespace yarmproxy {
+
+using Endpoint = boost::asio::ip::tcp::endpoint;
 
 class RedisMgetCommand : public Command {
 public:
@@ -35,17 +38,12 @@ private:
   void RotateReplyingBackend() override;
 
 private:
-  void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
   void BackendReadyToReply(std::shared_ptr<BackendConn> backend);
-
-  bool HasUnfinishedBanckends() const;
   void NextBackendStartReply();
-  bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
 
   bool query_data_zero_copy() override {
-    return false; // a bit more copy, for less system call and simple code
+    return false; // a bit more copy, for less system call and simpler code
   }
-  bool ParseQuery(const redis::BulkArray& ba);
 private:
   struct Subquery;
   std::string reply_prefix_;
@@ -56,15 +54,8 @@ private:
     reply_prefix_.clear();
   }
 
-  std::vector<std::shared_ptr<Subquery>> subqueries_;
+  std::map<Endpoint, std::shared_ptr<Subquery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
-
-  std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> backend_subqueries_;
-
-  std::shared_ptr<BackendConn> last_backend_;
-
-  size_t completed_backends_ = 0;
-  std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 };
 
 }

@@ -87,8 +87,8 @@ protected:
   std::shared_ptr<ClientConnection> client_conn_;
   bool has_written_some_reply_ = false;
   bool first_write_query_ = true;
-private:
   bool is_writing_reply_ = false;
+private:
   ProtocolType protocol_;
 };
 
