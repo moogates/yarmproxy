@@ -38,17 +38,12 @@ private:
   void RotateReplyingBackend() override;
 
 private:
-  void TryMarkLastBackend(std::shared_ptr<BackendConn> backend);
   void BackendReadyToReply(std::shared_ptr<BackendConn> backend);
-
-  // bool HasUnfinishedBanckends() const;
   void NextBackendStartReply();
-  bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
 
   bool query_data_zero_copy() override {
-    return false; // a bit more copy, for less system call and simple code
+    return false; // a bit more copy, for less system call and simpler code
   }
-  bool ParseQuery(const redis::BulkArray& ba);
 private:
   struct Subquery;
   std::string reply_prefix_;
@@ -61,15 +56,6 @@ private:
 
   std::map<Endpoint, std::shared_ptr<Subquery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
-  // std::list<std::shared_ptr<Subquery>> waiting_reply_queue_;
-
-  std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> backend_subqueries_;
-
-  std::shared_ptr<BackendConn> last_backend_;
-
-  std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
-
-  ///////////////////////
 };
 
 }
