@@ -61,16 +61,15 @@ private:
 
   std::map<Endpoint, std::shared_ptr<Subquery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
+  // std::list<std::shared_ptr<Subquery>> waiting_reply_queue_;
 
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> backend_subqueries_;
 
   std::shared_ptr<BackendConn> last_backend_;
 
-  size_t completed_backends_ = 0;
   std::set<std::shared_ptr<BackendConn>> received_reply_backends_;
 
   ///////////////////////
-  // std::list<std::pair<std::shared_ptr<Subquery>&, int>> waiting_reply_queue_;
 };
 
 }
