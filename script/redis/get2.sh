@@ -1,12 +1,19 @@
+#!/bin/bash
+
+YARMPROXY_PORT=$YARMPROXY_PORT
+if [ $# -gt 0 ]; then
+  YARMPROXY_PORT=$1
+fi
+
 printf "Setting up ... "
 body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
 echo body_size=$body_size
-./set_100.sh $body_size > /dev/null
+./set_100.sh $body_size $YARMPROXY_PORT > /dev/null
 echo "Done."
 
 query="*2\r\n\$3\r\nget\r\n\$4\r\nkey1\r\n*2\r\n\$3\r\nget\r\n\$4\r\nkey2\r\n"
 # echo "--------- $query -----------"
-printf "$query" | nc 127.0.0.1 11311 | grep "^\\$\|^*\|^-" > get2.tmp
+printf "$query" | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | grep "^\\$\|^*\|^-" > get2.tmp
 
 expected_count=2
 count=$(cat get2.tmp | wc -l | awk '{print $1}')

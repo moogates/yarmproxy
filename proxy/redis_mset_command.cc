@@ -3,7 +3,7 @@
 #include "logging.h"
 
 #include "backend_conn.h"
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "error_code.h"
@@ -89,7 +89,7 @@ RedisMsetCommand::RedisMsetCommand(std::shared_ptr<ClientConnection> client,
   unparsed_bulks_ += unparsed_bulks_ % 2; //no parse 'key' if 'value' absent
 
   for(size_t i = 1; (i + 1) < ba.present_bulks(); i += 2) {
-    Endpoint ep = backend_locator()->Locate(
+    Endpoint ep = key_locator()->Locate(
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(),
         ba[i].present_size() + ba[i + 1].present_size());
@@ -356,7 +356,7 @@ bool RedisMsetCommand::ProcessUnparsedPart() {
   }
 
   for(size_t i = 0; i + 1 < new_bulks.size(); i += 2) {
-    Endpoint ep = backend_locator()->Locate(new_bulks[i].payload_data(),
+    Endpoint ep = key_locator()->Locate(new_bulks[i].payload_data(),
         new_bulks[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, new_bulks[i].raw_data(),
         new_bulks[i].present_size() + new_bulks[i + 1].present_size());

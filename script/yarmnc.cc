@@ -1,4 +1,9 @@
-#include "yarmnc.h"
+/*
+ * Test driver for YarmProxy, similar to 'nc' command in tcp client mode.
+ * This simple tool is written to replace 'nc' because nc has bugs and might hang 
+ * during high-speed large-thoroughput client/server TCP data exchange.
+ * Author: Mu Yuwei (moogates@163.com)
+ */
 
 #include <iostream>
 
@@ -13,8 +18,64 @@
 #include <fcntl.h>
 #endif
 
+#include <string>
+#include <functional>
 
-namespace base {
+#include <sys/select.h>
+
+#ifdef WINDOWS	
+#include <winsock2.h>
+#endif
+
+using DataHandler = std::function<void(const char* data, size_t bytes)>;
+
+class YarmClient {
+public:
+  YarmClient(const char* host, int port, const DataHandler&);
+
+  virtual ~YarmClient();
+  int Connect();
+  int Run();
+
+private:
+  int NonblockingWrite();
+  int NonblockingRead();
+  int LoadQueryData();
+  void PrepareSlect();
+
+  bool write_finished() const {
+    return (write_buf_begin_ == write_buf_end_) &&
+             stdin_status_ != 0;
+  }
+
+private:
+  std::string host_;
+  int port_;
+
+#ifdef WINDOWS
+  SOCKET sock_ = -1;
+#else
+  int sock_ = -1;
+#endif // WINDOWS
+
+  enum { kReadBufLength = 16 * 1024 };
+  char read_buf_[kReadBufLength];
+
+  int stdin_status_ = 0;
+  enum { kWriteBufLength = 4 * 1024 };
+  char write_buf_[kWriteBufLength];
+  size_t write_buf_begin_ = 0, write_buf_end_ = 0;
+  bool shutdown_write_ = false;
+
+  std::function<void(const char* data, size_t bytes)> data_handler_;
+
+  fd_set read_set_, write_set_, error_set_;
+  struct timeval timeval_;
+
+  size_t total_bytes_input_ = 0;
+  size_t total_bytes_sent_ = 0;
+  size_t total_bytes_recv_ = 0;
+};
 
 YarmClient::YarmClient(const char* host, int port, const DataHandler& handler)
   : host_(host)
@@ -231,13 +292,6 @@ int YarmClient::NonblockingRead() {
   return 0;
 }
 
-}
-
-void Print(const char* data, size_t bytes) {
-  std::cout.write(data, bytes);
-  std::cout.flush();
-}
-
 int main(int argc, char *argv[]) {
   const char* host = "127.0.0.1";
   int port = 11311;
@@ -246,7 +300,10 @@ int main(int argc, char *argv[]) {
     host = argv[1];
     port = std::stoi(argv[2]);
   }
-  base::YarmClient yc(host, port, Print);
+  YarmClient yc(host, port, [](const char* data, size_t bytes) {
+        std::cout.write(data, bytes);
+        std::cout.flush();
+      });
   yc.Run();
   return 0;
 }

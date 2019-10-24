@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_BACKEND_CONTINUUM_H_
-#define _YARMPROXY_BACKEND_CONTINUUM_H_
+#ifndef _YARMPROXY_KEY_DISTRIBUTER_H_
+#define _YARMPROXY_KEY_DISTRIBUTER_H_
 
 #include <string>
 #include <map>
@@ -13,9 +13,10 @@
 namespace yarmproxy {
 using Endpoint = boost::asio::ip::tcp::endpoint;
 
-class BackendContinuum {
+// key distributer similar to katama consistent hash continuum 
+class KeyDistributer {
 public:
-  BackendContinuum(const std::vector<Config::Backend>& backends);
+  KeyDistributer(const std::vector<Config::Backend>& backends);
   Endpoint LocateCacheNode(const char * key, size_t len) const;
   void Dump();
 
@@ -41,5 +42,5 @@ private:
 
 }
 
-#endif // _YARMPROXY_BACKEND_CONTINUUM_H_
+#endif // _YARMPROXY_KEY_DISTRIBUTER_H_
 

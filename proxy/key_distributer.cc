@@ -1,4 +1,4 @@
-#include "backend_continuum.h"
+#include "key_distributer.h"
 
 #include "logging.h"
 
@@ -6,10 +6,9 @@
 
 namespace yarmproxy {
 
-BackendContinuum::BackendContinuum(
-    const std::vector<Config::Backend>& backends) {
+KeyDistributer::KeyDistributer(const std::vector<Config::Backend>& backends) {
   for(auto& backend : backends) {
-    LOG_DEBUG << "BackendContinuum ctor host=" << backend.host_
+    LOG_DEBUG << "KeyDistributerctor host=" << backend.host_
               << " port=" << backend.port_
               << " weight=" << backend.weight_;
     auto ep = Endpoint(boost::asio::ip::address_v4::from_string(backend.host_),
@@ -20,9 +19,9 @@ BackendContinuum::BackendContinuum(
 }
 
 
-bool BackendContinuum::BuildCachePoints() {
+bool KeyDistributer::BuildCachePoints() {
   if (weighted_nodes_.empty()) {
-    LOG_WARN << "BackendContinuum::BuildCachePoints empty node list!";
+    LOG_WARN << "KeyDistributer::BuildCachePoints empty node list!";
     return false;
   }
 
@@ -43,7 +42,7 @@ bool BackendContinuum::BuildCachePoints() {
   return true;
 }
 
-Endpoint BackendContinuum::LocateCacheNode(const char * key,
+Endpoint KeyDistributer::LocateCacheNode(const char * key,
                                            size_t len) const {
   uint32_t hash = doobs_hash(key, len);
   Endpoint ep;
@@ -61,7 +60,7 @@ Endpoint BackendContinuum::LocateCacheNode(const char * key,
   return ep;
 }
 
-void BackendContinuum::Dump() {
+void KeyDistributer::Dump() {
   for(auto& entry : cache_points_) {
     LOG_DEBUG << "cache point dump - " << entry.endpoint
               << " : " << entry.hash_point;

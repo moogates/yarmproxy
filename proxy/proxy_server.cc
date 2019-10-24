@@ -2,7 +2,7 @@
 
 #include "logging.h"
 
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "client_conn.h"
 #include "config.h"
 #include "signal_watcher.h"
@@ -46,9 +46,9 @@ SignalHandler ProxyServer::WrapThreadSafeHandler(std::function<void()> handler) 
 }
 
 void ProxyServer::Run() {
-  std::shared_ptr<BackendLocator> locator(new BackendLocator());
+  std::shared_ptr<KeyLocator> locator(new KeyLocator());
   if (!locator->Initialize()) {
-    LOG_ERROR << "ProxyServer BackendLocator Initialize error ...";
+    LOG_ERROR << "ProxyServer KeyLocator Initialize error ...";
     return;
   }
   worker_pool_->OnLocatorUpdated(locator);
@@ -69,15 +69,15 @@ void ProxyServer::Run() {
   SignalWatcher::Instance().RegisterHandler(SIGHUP, WrapThreadSafeHandler([this]() {
       // FIXME : prevent signal handler reentrance
       if (!Config::Instance().ReloadCulsters()) {
-        LOG_ERROR << "SIGHUP BackendLocator reload config error.";
+        LOG_ERROR << "SIGHUP KeyLocator reload config error.";
         return;
       }
-      std::shared_ptr<BackendLocator> locator(new BackendLocator());
+      std::shared_ptr<KeyLocator> locator(new KeyLocator());
       if (!locator->Initialize()) {
-        LOG_ERROR << "SIGHUP BackendLocator reload Initialize error.";
+        LOG_ERROR << "SIGHUP KeyLocator reload Initialize error.";
         return;
       }
-      LOG_WARN << "SIGHUP BackendLocator::Reload OK.";
+      LOG_WARN << "SIGHUP KeyLocator::Reload OK.";
       worker_pool_->OnLocatorUpdated(locator);
     }));
   SignalWatcher::Instance().RegisterHandler(SIGINT,

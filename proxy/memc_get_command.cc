@@ -5,7 +5,7 @@
 #include "error_code.h"
 
 #include "backend_conn.h"
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "read_buffer.h"
@@ -44,7 +44,7 @@ void MemcGetCommand::ParseQuery(const char* cmd_data, size_t cmd_size) {
     while(*q != ' ' && *q != '\r') {
       ++q;
     }
-    auto ep = backend_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
+    auto ep = key_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
     auto it = ep_keys.find(ep);
     if (it == ep_keys.end()) {
       it = ep_keys.emplace(ep, "get").first;

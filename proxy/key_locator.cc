@@ -1,10 +1,10 @@
-#include "backend_locator.h"
+#include "key_locator.h"
 
 #include "logging.h"
 
 #include "config.h"
-#include "backend_continuum.h"
 #include "protocol_type.h"
+#include "key_distributer.h"
 
 namespace yarmproxy {
 
@@ -19,18 +19,18 @@ static const char * ProtocolNs(ProtocolType protocol) {
   }
 }
 
-bool BackendLocator::Initialize() {
+bool KeyLocator::Initialize() {
   if (Config::Instance().clusters().empty()) {
     return false;
   }
   for(auto& cluster : Config::Instance().clusters()) {
-    std::shared_ptr<BackendContinuum> continuum(
-        new BackendContinuum(cluster.backends_));
+    std::shared_ptr<KeyDistributer> continuum(
+        new KeyDistributer(cluster.backends_));
     for(auto& ns : cluster.namespaces_) {
       std::ostringstream oss;
       oss << ProtocolNs(cluster.protocol_) << "/" << (ns == "_" ? "" : ns.c_str());
       namespace_continum_.emplace(oss.str(), continuum);
-      LOG_DEBUG << "BackendLocator ns=" << oss.str()
+      LOG_DEBUG << "KeyLocator ns=" << oss.str()
                 << " continium=" << continuum;
     }
   }
@@ -62,8 +62,8 @@ static std::string KeyNamespace(const char * key, size_t len, ProtocolType proto
   return oss.str();
 }
 
-Endpoint BackendLocator::Locate(const char * key, size_t len, ProtocolType protocol) {
-  std::shared_ptr<BackendContinuum> continuum;
+Endpoint KeyLocator::Locate(const char * key, size_t len, ProtocolType protocol) {
+  std::shared_ptr<KeyDistributer> continuum;
   auto it = namespace_continum_.find(KeyNamespace(key, len, protocol));
   if (it == namespace_continum_.end()) {
     // TODO : optional drop user request

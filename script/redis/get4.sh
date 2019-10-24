@@ -1,10 +1,17 @@
+#!/bin/bash
+
+YARMPROXY_PORT=11311
+if [ $# -gt 0 ]; then
+  YARMPROXY_PORT=$1
+fi
+
 printf "Setting up ... "
 body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
 echo body_size=$body_size
 ./set_100.sh $body_size > /dev/null
 echo "Done."
 
-gunzip -c get4.data.gz | nc 127.0.0.1 11311 | grep "^\\$\|^*\|^-"  > get4.tmp
+gunzip -c get4.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | grep "^\\$\|^*\|^-"  > get4.tmp
 # cat get4.tmp
 
 expected_count=$(gunzip -c get4.data.gz | grep "^*" | wc -l | awk '{print $1}')

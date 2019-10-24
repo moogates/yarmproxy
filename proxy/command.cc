@@ -7,14 +7,13 @@
 
 #include "error_code.h"
 #include "protocol_type.h"
-#include "backend_locator.h"
 
-#include "worker_pool.h"
-#include "client_conn.h"
 #include "backend_conn.h"
-#include "backend_locator.h"
 #include "backend_pool.h"
+#include "client_conn.h"
+#include "key_locator.h"
 #include "read_buffer.h"
+#include "worker_pool.h"
 
 #include "error_command.h"
 #include "stats_command.h"
@@ -46,8 +45,8 @@ BackendConnPool* Command::backend_pool() {
   return client_conn_->context().backend_conn_pool();
 }
 
-std::shared_ptr<BackendLocator> Command::backend_locator() {
-  return client_conn_->context().backend_locator_;
+std::shared_ptr<KeyLocator> Command::key_locator() {
+  return client_conn_->context().key_locator_;
 }
 
 // return : bytes parsed, 0 if no adequate data to parse

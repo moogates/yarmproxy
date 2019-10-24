@@ -4,7 +4,7 @@
 
 #include "error_code.h"
 #include "backend_conn.h"
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "read_buffer.h"
@@ -32,7 +32,7 @@ RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
 {
   for(size_t i = 1; i < ba.total_bulks(); ++i) {
     const redis::Bulk& bulk = ba[i];
-    Endpoint endpoint = backend_locator()->Locate(
+    Endpoint endpoint = key_locator()->Locate(
         bulk.payload_data(), bulk.payload_size(), ProtocolType::REDIS);
 
     LOG_DEBUG << "ParseQuery key=" << bulk.to_string()
@@ -131,11 +131,11 @@ void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend
   assert(backend == waiting_reply_queue_.front());
   assert(backend == replying_backend_);
 
-  if (replying_backend_->buffer()->parsed_unreceived_bytes() == 0) {
+  if (backend->buffer()->parsed_unreceived_bytes() == 0) {
     waiting_reply_queue_.pop_front(); // 要bulk完整才pop
     RotateReplyingBackend();
   } else {
-    replying_backend_->TryReadMoreReply();
+    backend->TryReadMoreReply();
   }
 }
 
@@ -145,7 +145,7 @@ void RedisMgetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend)
   }
 
   if (waiting_reply_queue_.empty()) {
-    assert(false); // bad data
+    // bad data
     client_conn_->Abort();
     return;
   }
@@ -157,25 +157,25 @@ void RedisMgetCommand::BackendReadyToReply(std::shared_ptr<BackendConn> backend)
     return;
   }
 
-  replying_backend_ = waiting_reply_queue_.front();
-  bool ret = ParseReply(replying_backend_);
+  replying_backend_ = backend;
+  bool ret = ParseReply(backend);
   if (!ret) {
-    LOG_WARN << "RedisMget parse error, backend=" << replying_backend_;
+    LOG_WARN << "RedisMget parse error, backend=" << backend;
     client_conn_->Abort();
     return;
   }
-  if (replying_backend_->buffer()->unprocessed_bytes() == 0) {
-    LOG_DEBUG << "RedisMget waiting for data from backend=" << replying_backend_;
-    replying_backend_->TryReadMoreReply();
+  if (backend->buffer()->unprocessed_bytes() == 0) {
+    LOG_DEBUG << "RedisMget waiting for data from backend=" << backend;
+    backend->TryReadMoreReply();
     return;
   }
   
-  // assert(!replying_backend_->finished()); // TODO : checkou error condition
-  LOG_DEBUG << "RedisMget replying_backend_=" << replying_backend_
-      << " unprocessed_bytes=" << replying_backend_->buffer()->unprocessed_bytes()
-      << " parsed_unreceived_bytes=" << replying_backend_->buffer()->parsed_unreceived_bytes()
-      << " unparsed_bytes=" << replying_backend_->buffer()->unparsed_bytes();
-  TryWriteReply(replying_backend_);
+  // assert(!backend->finished()); // TODO : checkou error condition
+  LOG_DEBUG << "RedisMget backend=" << backend
+      << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes()
+      << " parsed_unreceived_bytes=" << backend->buffer()->parsed_unreceived_bytes()
+      << " unparsed_bytes=" << backend->buffer()->unparsed_bytes();
+  TryWriteReply(backend);
 }
 
 void RedisMgetCommand::OnBackendReplyReceived(

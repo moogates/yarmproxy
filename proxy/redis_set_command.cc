@@ -1,7 +1,7 @@
 #include "redis_set_command.h"
 
 #include "logging.h"
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "read_buffer.h"
@@ -13,7 +13,7 @@ RedisSetCommand::RedisSetCommand(std::shared_ptr<ClientConnection> client,
                                  const redis::BulkArray& ba)
     : Command(client, ProtocolType::REDIS)
     , unparsed_bulks_(ba.absent_bulks()) {
-  auto ep = backend_locator()->Locate(ba[1].payload_data(),
+  auto ep = key_locator()->Locate(ba[1].payload_data(),
                  ba[1].payload_size(), ProtocolType::REDIS);
   LOG_DEBUG << "RedisSetCommand key=" << ba[1].to_string()
             << " ep=" << ep;

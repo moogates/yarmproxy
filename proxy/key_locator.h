@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_BACKEND_LOCATOR_H_
-#define _YARMPROXY_BACKEND_LOCATOR_H_
+#ifndef _YARMPROXY_KEY_LOCATOR_H_
+#define _YARMPROXY_KEY_LOCATOR_H_
 
 #include <string>
 #include <memory>
@@ -9,18 +9,18 @@ namespace yarmproxy {
 
 using Endpoint = boost::asio::ip::tcp::endpoint;
 
-class BackendContinuum;
+class KeyDistributer;
 enum class ProtocolType;
 
-class BackendLocator {
+class KeyLocator {
 public:
-  BackendLocator() {}
+  KeyLocator() {}
   bool Initialize();
   Endpoint Locate(const char * key, size_t len, ProtocolType protocol);
 private:
-  std::map<std::string, std::shared_ptr<BackendContinuum>> namespace_continum_;
+  std::map<std::string, std::shared_ptr<KeyDistributer>> namespace_continum_;
 };
 
 }
 
-#endif // _YARMPROXY_BACKEND_LOCATOR_H_
+#endif // _YARMPROXY_KEY_LOCATOR_H_

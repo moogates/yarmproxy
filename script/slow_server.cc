@@ -1,3 +1,6 @@
+/*
+ * simulate a very slow server, replying only partial resp.
+ */
 #include <cstdlib>
 
 #include <iostream>
@@ -50,10 +53,8 @@ private:
     has_written_some_ = true;
     auto self(shared_from_this());
     boost::asio::async_write(socket_, boost::asio::buffer(data_, length),
-        [this, self](boost::system::error_code ec, std::size_t /*length*/)
-        {
-          if (!ec)
-          {
+        [this, self](boost::system::error_code ec, std::size_t /*length*/) {
+          if (!ec) {
             do_read();
           }
         });

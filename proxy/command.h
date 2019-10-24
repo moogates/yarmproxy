@@ -14,7 +14,7 @@ namespace yarmproxy {
 
 class BackendConn;
 class BackendConnPool;
-class BackendLocator;
+class KeyLocator;
 class ClientConnection;
 
 enum class ErrorCode;
@@ -55,7 +55,7 @@ public:
   virtual bool ProcessUnparsedPart() { return true; }
 protected:
   BackendConnPool* backend_pool();
-  std::shared_ptr<BackendLocator> backend_locator();
+  std::shared_ptr<KeyLocator> key_locator();
 
   void TryWriteReply(std::shared_ptr<BackendConn> backend);
   virtual void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec);

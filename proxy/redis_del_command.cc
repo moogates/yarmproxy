@@ -3,7 +3,7 @@
 #include "logging.h"
 
 #include "backend_conn.h"
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "error_code.h"
@@ -106,7 +106,7 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client,
       ++unparsed_bulks_; // don't parse the last key if it's not complete
       break;
     }
-    Endpoint ep = backend_locator()->Locate(
+    Endpoint ep = key_locator()->Locate(
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size());
   }
@@ -304,7 +304,7 @@ bool RedisDelCommand::ProcessUnparsedPart() {
   unparsed_bulks_ -= new_bulks.size();
 
   for(size_t i = 0; i < new_bulks.size(); ++i) {
-    Endpoint ep = backend_locator()->Locate(new_bulks[i].payload_data(),
+    Endpoint ep = key_locator()->Locate(new_bulks[i].payload_data(),
         new_bulks[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, new_bulks[i].raw_data(), new_bulks[i].present_size());
   }

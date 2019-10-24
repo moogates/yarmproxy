@@ -1,4 +1,11 @@
-gunzip -c ./setnx4.data.gz | nc 127.0.0.1 11311 > setnx4.tmp
+#!/bin/bash
+
+YARMPROXY_PORT=11311
+if [ $# -gt 0 ]; then
+  YARMPROXY_PORT=$1
+fi
+
+gunzip -c ./setnx4.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT > setnx4.tmp
 
 cat setnx4.tmp
 

@@ -1,6 +1,11 @@
-driver=nc
-driver=../yarmnc
-gunzip -c ./set3.data.gz | $driver 127.0.0.1 11311 > set3.tmp
+#!/bin/bash
+
+YARMPROXY_PORT=11311
+if [ $# -gt 0 ]; then
+  YARMPROXY_PORT=$1
+fi
+
+gunzip -c ./set3.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT > set3.tmp
 
 cat set3.tmp
 

@@ -8,7 +8,7 @@
 namespace yarmproxy {
 
 class BackendConnPool;
-class BackendLocator;
+class KeyLocator;
 class Allocator;
 
 class WorkerContext {
@@ -17,7 +17,7 @@ public:
   std::thread thread_;
   boost::asio::io_service io_service_;
   boost::asio::io_service::work work_;
-  std::shared_ptr<BackendLocator> backend_locator_;
+  std::shared_ptr<KeyLocator> key_locator_;
   BackendConnPool* backend_conn_pool();
 private:
   BackendConnPool* backend_conn_pool_;
@@ -35,7 +35,7 @@ public:
 
   void StartDispatching();
   void StopDispatching();
-  void OnLocatorUpdated(std::shared_ptr<BackendLocator> locator);
+  void OnLocatorUpdated(std::shared_ptr<KeyLocator> locator);
 
   WorkerContext& NextWorker() {
     return workers_[next_worker_++ % concurrency_];

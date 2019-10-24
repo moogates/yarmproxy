@@ -2,7 +2,7 @@
 
 #include "logging.h"
 
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "error_code.h"
@@ -25,7 +25,7 @@ size_t MemcSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   const char *q = p;
   while(*(++q) != ' ');
 
-  auto ep = backend_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
+  auto ep = key_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
   replying_backend_ = backend_pool()->Allocate(ep);
 
   p = cmd_data + cmd_len - 2;
