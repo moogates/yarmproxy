@@ -7,8 +7,9 @@ fi
 
 printf "Setting up ... "
 body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
+body_size=100000
 echo body_size=$body_size
-./set_100.sh $body_size > /dev/null
+./set_100.sh $body_size $YARMPROXY_PORT > /dev/null
 echo "Done."
 
 gunzip -c get4.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | grep "^\\$\|^*\|^-"  > get4.tmp

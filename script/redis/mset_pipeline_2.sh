@@ -1,4 +1,11 @@
-gunzip -c ./mset_pipeline_2.data.gz | ../yarmnc 127.0.0.1 11311 > mset_pipeline_2.tmp
+#!/bin/bash
+
+YARMPROXY_PORT=11311
+if [ $# -gt 0 ]; then
+  YARMPROXY_PORT=$1
+fi
+
+gunzip -c ./mset_pipeline_2.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT > mset_pipeline_2.tmp
 
 cat mset_pipeline_2.tmp
 

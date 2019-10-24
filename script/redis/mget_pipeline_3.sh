@@ -1,17 +1,11 @@
-driver=nc
-driver=../yarmnc
+#!/bin/bash
 
-printf "Setting up ... "
-body_size=$(echo "($RANDOM*23+2027)%262144" | bc)
-body_size=100000
-./set_100.sh $body_size > /dev/null
-#./set_100.sh $body_size
-echo "Done."
+YARMPROXY_PORT=11311
+if [ $# -gt 0 ]; then
+  YARMPROXY_PORT=$1
+fi
 
-#gunzip -c ./mget_pipeline_3.data.gz | $driver 127.0.0.1 11311 | grep "^\\$\|^*"
-#gunzip -c ./mget_pipeline_3.data.gz | $driver 127.0.0.1 6379
-#exit
-gunzip -c ./mget_pipeline_3.data.gz | $driver 127.0.0.1 11311 | grep "^\\$\|^*" > mget_pipeline_3.tmp
+gunzip -c ./mget_pipeline_3.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | grep "^\\$\|^*" > mget_pipeline_3.tmp
 
 count=$(cat mget_pipeline_3.tmp | wc -l)
 printf "Total lines $count/1460\r\n"

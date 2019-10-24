@@ -1,4 +1,11 @@
-gunzip -c ./mget_pipeline_2.data.gz | ../yarmnc 127.0.0.1 11311 | grep "^\\$\|^*" > mget_pipeline_2.tmp
+#!/bin/bash
+
+YARMPROXY_PORT=11311
+if [ $# -gt 0 ]; then
+  YARMPROXY_PORT=$1
+fi
+
+gunzip -c ./mget_pipeline_2.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | grep "^\\$\|^*" > mget_pipeline_2.tmp
 
 count=$(cat mget_pipeline_2.tmp | wc -l)
 printf "Total lines $count/1500\r\n"

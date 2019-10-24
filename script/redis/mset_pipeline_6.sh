@@ -1,9 +1,11 @@
-driver=nc
-driver=../yarmnc
+#!/bin/bash
 
-#gunzip -c ./x.data.gz | $driver 127.0.0.1 11311
-#exit
-gunzip -c ./mset_pipeline_6.data.gz | $driver 127.0.0.1 11311 > mset_pipeline_6.tmp
+YARMPROXY_PORT=11311
+if [ $# -gt 0 ]; then
+  YARMPROXY_PORT=$1
+fi
+
+gunzip -c ./mset_pipeline_6.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT > mset_pipeline_6.tmp
 cat mset_pipeline_6.tmp
 
 expected=$(gunzip -c mset_pipeline_6.data.gz |  grep "^*" | wc -l | awk '{print $1}')

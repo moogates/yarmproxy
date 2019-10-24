@@ -1,6 +1,11 @@
-gunzip -c ./mset14.data.gz | nc 127.0.0.1 11311 > mset14.tmp
+#!/bin/bash
 
-cat mset14.tmp
+YARMPROXY_PORT=11311
+if [ $# -gt 0 ]; then
+  YARMPROXY_PORT=$1
+fi
+
+gunzip -c ./mset14.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | tee mset14.tmp
 
 expected="+OK"
 res=$(cat mset14.tmp | tr -d '\r\n')

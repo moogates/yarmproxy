@@ -2,7 +2,7 @@ CXX = g++
 #CXX = clang++
 CXXFLAGS = -I/usr/local/include -Wall -Wextra -std=c++11
 
-all: yarmnc slow_server sink_server test
+all: yarmnc slow_server sink_server
 
 yarmnc : yarmnc.cc
 	$(CXX) $< -o $@ $(CXXFLAGS) $(LDFLAGS)
@@ -18,7 +18,7 @@ test : yarmnc
 	cd redis && ./redis_all.sh
 
 clean:
-	rm -fv yarmnc
+	rm -fv yarmnc slow_server sink_server
 
 .PHONY : all test clean 
 
