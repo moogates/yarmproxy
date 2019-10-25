@@ -6,7 +6,7 @@ if [ $# -gt 0 ]; then
 fi
 
 for id in `seq 1 4`; do
-  echo "./mget${id}.sh"
+  echo -e "\r\n./mget${id}.sh"
   ./mget${id}.sh $YARMPROXY_PORT
 done
 

@@ -9,10 +9,7 @@ query="*10\r\n\$4\r\nmget\r\n\$4\r\nkeyx\r\n\$4\r\nkey1\r\n\$4\r\nkey1\r\n\$4\r\
 #query="*10\r\n\$4\r\nmget\r\n\$4\r\nkeyx\r\n\$4\r\nkey1\r\n\$4\r\nkey1\r\n\$4\r\nkey2\r\n\$4\r\nkey3\r\n\$4\r\nkey1\r\n\$4\r\nkey1\r\n\$4\r\nkey2\r\n\$4\r\nkey3\r\n"
 #query="*4\r\n\$4\r\nmget\r\n\$4\r\nkey2\r\n\$4\r\nkey1\r\n\$4\r\nkey2\r\n"
 #query="*3\r\n\$4\r\nmget\r\n\$4\r\nkey2\r\n\$4\r\nkey1\r\n"
-# printf "$query"
-#printf "$query" | nc 127.0.0.1 $YARMPROXY_PORT
-#exit
-printf "$query" | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | grep "^\\$\|^*" | tee mget_pipeline_1.tmp
+printf "$query" | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | grep "^\\$\|^*" > mget_pipeline_1.tmp
 
 count=$(cat mget_pipeline_1.tmp | wc -l)
 printf "Total lines $count/150\r\n"
