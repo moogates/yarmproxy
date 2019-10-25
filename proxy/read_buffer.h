@@ -11,18 +11,14 @@ private:
   char* data_;
   size_t buffer_size_;
 
-  size_t processed_offset_;
-  size_t received_offset_;
-  size_t parsed_offset_;
-  size_t recycle_lock_count_;
+  size_t processed_offset_   = 0;
+  size_t received_offset_    = 0;
+  size_t parsed_offset_      = 0;
+  size_t recycle_lock_count_ = 0;
 public:
   ReadBuffer(char* buffer, size_t buffer_size)
       : data_(buffer)
-      , buffer_size_(buffer_size)
-      , processed_offset_(0)
-      , received_offset_(0)
-      , parsed_offset_(0)
-      , recycle_lock_count_(0) {
+      , buffer_size_(buffer_size) {
   }
   ~ReadBuffer();
   char* data() {
@@ -30,7 +26,9 @@ public:
   }
 
   void Reset() {
-    received_offset_ = processed_offset_ = parsed_offset_ = 0;
+    processed_offset_   = 0;
+    received_offset_    = 0;
+    parsed_offset_      = 0;
     recycle_lock_count_ = 0;
   }
 

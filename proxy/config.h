@@ -30,9 +30,6 @@ public:
   int max_namespace_length() const {
     return max_namespace_length_;
   }
-  size_t buffer_size() const {
-    return buffer_size_;
-  }
   struct Backend {
     Backend(std::string&& host, int port, size_t weight)
       : host_(host)
@@ -76,6 +73,12 @@ public:
   int socket_rw_timeout() const {
     return socket_rw_timeout_;
   }
+  size_t buffer_size() const {
+    return buffer_size_;
+  }
+  size_t reserved_buffer_space() const {
+    return reserved_buffer_space_;
+  }
 
   const std::vector<Cluster>& clusters() const {
     return clusters_;
@@ -92,18 +95,17 @@ private:
   int worker_threads_ = 0;
   int max_namespace_length_ = 4;
 
-  int worker_max_idle_backends_    = 32;
-  size_t worker_buffer_size_       = 4096;
-  size_t worker_buffer_trunk_size_ = 0;
-  bool worker_cpu_affinity_ = false;
-
   std::string log_file_ = "./yarmproxy.log";
   std::string log_level_ = "WARN";
 
-  size_t buffer_size_ = 4096;
-
   int client_idle_timeout_ = 60000; // 60,000ms(one minute)
   int socket_rw_timeout_ =   50; // 50 ms
+
+  // per worker config
+  int worker_max_idle_backends_    = 32;
+  size_t buffer_size_       = 4096;
+  size_t reserved_buffer_space_    = 512 * 1024;
+  bool worker_cpu_affinity_ = false;
 
   std::vector<Cluster> clusters_;
 private:

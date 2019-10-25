@@ -2,11 +2,11 @@
 
 #include <iostream>
 
-#include "logging.h"
-
 #include "allocator.h"
-#include "key_locator.h"
 #include "backend_pool.h"
+#include "config.h"
+#include "logging.h"
+#include "key_locator.h"
 
 namespace yarmproxy {
 
@@ -15,7 +15,8 @@ namespace yarmproxy {
 WorkerContext::WorkerContext()
     : work_(io_service_)
     , backend_conn_pool_(nullptr)
-    , allocator_(new Allocator(SLAB_SIZE, 16)) {
+    , allocator_(new Allocator(Config::Instance().buffer_size(),
+          Config::Instance().reserved_buffer_space())) {
 }
 
 BackendConnPool* WorkerContext::backend_conn_pool() {

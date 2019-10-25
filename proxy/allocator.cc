@@ -4,41 +4,44 @@
 
 namespace yarmproxy {
 
-Allocator::Allocator(int slab_size, int slab_count)
-    : slab_size_(slab_size)
-    , slab_count_(slab_count) {
-  chunk_ = new char[slab_size * slab_count]; // TODO : 内存位置对齐fix
-  for(int i = 0; i < slab_count; ++i) {
-    free_slabs_.insert(chunk_ + i * slab_size);
+Allocator::Allocator(int buffer_size, int reserved_space_size)
+    : buffer_size_(buffer_size)
+    , reserved_space_size_(reserved_space_size) {
+  LOG_WARN << "Allocator ctor, buffer_size=" << buffer_size
+           << " reserved_space_size=" << reserved_space_size;
+  if (reserved_space_size == 0) {
+    reserved_space_ = nullptr;
+  } else {
+    reserved_space_ = new char[reserved_space_size]; // TODO : 内存位置对齐
+    for(auto p = reserved_space_; p < reserved_space_ + reserved_space_size; p += buffer_size) {
+      free_slabs_.insert(p);
+    }
   }
 }
 
 char* Allocator::Alloc() {
-  return new char[slab_size_];  // TODO : Why pre-allocated chunk slower than malloc()? locality?
+  // return new char[buffer_size_];  // TODO : Why pre-allocated chunk slower than malloc()? locality?
   if (free_slabs_.empty()) {
     LOG_INFO << "Allocator::Alloc no free slab";
-    return new char[slab_size_];
+    return new char[buffer_size_];
   } else {
     char* slab = *(free_slabs_.begin());
     free_slabs_.erase(free_slabs_.begin());
-    LOG_INFO << "Allocator::Alloc has free slab, size=" << free_slabs_.size()
-             << " addr=" << (void*)slab;
+    LOG_INFO << "Allocator::Alloc free_count=" << free_slabs_.size()
+             << " allocated=" << (void*)slab;
     return slab;
   }
 }
 
 void Allocator::Release(char* slab) {
-  delete []slab;
-  return;
-  free_slabs_.insert(slab);  // recycle all
-  return;
-
-  if (slab < chunk_ || slab >= chunk_ + slab_size_ * slab_count_) {
-    LOG_INFO << "Allocator::Alloc delete a slab";
+  if (reserved_space_ == nullptr || slab < reserved_space_ ||
+      slab >= reserved_space_ + reserved_space_size_) {
+    LOG_INFO << "Allocator::Release delete buffer";
     delete []slab;
   }
-  LOG_INFO << "Allocator::Alloc recycle a slab, size=" << free_slabs_.size();
   free_slabs_.insert(slab);
+  LOG_INFO << "Allocator::Release recycle " << slab
+           << " free_count=" << free_slabs_.size();
 }
 
 }

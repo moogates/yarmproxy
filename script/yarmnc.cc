@@ -58,11 +58,11 @@ private:
   int sock_ = -1;
 #endif // WINDOWS
 
-  enum { kReadBufLength = 16 * 1024 };
+  enum { kReadBufLength = 64 * 1024 };
   char read_buf_[kReadBufLength];
 
   int stdin_status_ = 0;
-  enum { kWriteBufLength = 4 * 1024 };
+  enum { kWriteBufLength = 64 * 1024 };
   char write_buf_[kWriteBufLength];
   size_t write_buf_begin_ = 0, write_buf_end_ = 0;
   bool shutdown_write_ = false;

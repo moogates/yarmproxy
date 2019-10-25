@@ -7,7 +7,6 @@
 
 #include <boost/asio/ip/tcp.hpp>
 
-// #include "key_locator.h"
 #include "logging.h"
 #include "protocol_type.h"
 
@@ -158,13 +157,13 @@ bool Config::ApplyWorkerTokens(const std::vector<std::string>& tokens) {
         error_msg_ = "bad buffer size";
         return false;
       }
-      worker_buffer_size_ = sz * 1024;
+      buffer_size_ = sz * 1024;
     } catch (...) {
       error_msg_ = "bad number";
       return false;
     }
     return true;
-  } else if (tokens[0] == "buffer_trunk_size") {
+  } else if (tokens[0] == "reserved_buffer_space") {
     try {
       int sz = std::stoi(tokens[1]);
       if (sz < 32 || sz > 8192 ||
@@ -172,7 +171,7 @@ bool Config::ApplyWorkerTokens(const std::vector<std::string>& tokens) {
         error_msg_ = "bad buffer trunk size";
         return false;
       }
-      worker_buffer_trunk_size_ = sz * 1024;
+      reserved_buffer_space_ = sz * 1024;
     } catch (...) {
       error_msg_ = "bad number";
       return false;

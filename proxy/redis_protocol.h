@@ -15,7 +15,7 @@ namespace redis {
 const int SIZE_PARSE_ERROR = -10001;
 const int SIZE_NIL_BULK    = -1;
 
-// very light-weighted redis RESP data wrapper and parser
+// light-weighted redis RESP data wrapper and parser
 
 // Bulk:
 // "result" -> "$6\r\nresult\r\n"
@@ -302,22 +302,6 @@ public:
     return oss.str();
   }
 };
-
-//int ParseInteger(const char* data, size_t bytes) {
-//  // 1000 -> ":1000\r\n"
-//  return 0;
-//}
-
-//int ParseErrorString(const char* data, size_t bytes) {
-//  // "SERVER_ERROR" -> "-SERVER_ERROR\r\n"
-//  return 0;
-//}
-
-//int ParseSimpleString(const char* data, size_t bytes) {
-//  // "HELLO" -> "+HELLO\r\n"
-//  return 0;
-//}
-
 
 }
 }

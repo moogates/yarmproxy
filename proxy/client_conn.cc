@@ -19,7 +19,7 @@ namespace yarmproxy {
 ClientConnection::ClientConnection(WorkerContext& context)
     : socket_(context.io_service_)
     , buffer_(new ReadBuffer(context.allocator_->Alloc(),
-                      context.allocator_->slab_size()))
+                      context.allocator_->buffer_size()))
     , context_(context)
     , read_timer_(context.io_service_)
     , write_timer_(context.io_service_) {

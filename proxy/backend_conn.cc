@@ -16,7 +16,7 @@ BackendConn::BackendConn(WorkerContext& context,
       const Endpoint& endpoint)
     : context_(context)
     , buffer_(new ReadBuffer(context.allocator_->Alloc(),
-          context.allocator_->slab_size()))
+          context.allocator_->buffer_size()))
     , remote_endpoint_(endpoint)
     , socket_(context.io_service_)
     , write_timer_(context.io_service_)
