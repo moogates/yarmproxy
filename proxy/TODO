@@ -20,7 +20,7 @@ TODO : benchmarking client
 TODO : benchmarking, vs. twemproxy
 
 potential bug:
-TODO : get8.sh, 为啥memcached在mac上比ubuntu上慢这么多？
+TODO : for get8.sh, why memcached reply much slower on mac than on ubuntu?
 TODO : 9.27 跑了一晚上，redis返回错误提示：-ERR max number of clients reached
 
 compiling
@@ -30,14 +30,9 @@ TODO : supporting Windows
 
 test:
 TODO : more detailed test for all supported commands
-TODO : command composer testing
-
 
 optional
-TODO : refining hash & katama
-TODO : replace doobs_hash
+TODO : refining hash & katama.
+       - hash speed & distribution test, replace doobs_hash if necessary
 TODO : better detail hiding
 
-Done:
-更好的超时处理
-pid_file

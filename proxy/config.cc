@@ -166,8 +166,7 @@ bool Config::ApplyWorkerTokens(const std::vector<std::string>& tokens) {
   } else if (tokens[0] == "reserved_buffer_space") {
     try {
       int sz = std::stoi(tokens[1]);
-      if (sz < 32 || sz > 8192 ||
-          ((sz & (sz - 1)) != 0)) {
+      if ((sz & (sz - 1)) != 0) {
         error_msg_ = "bad buffer trunk size";
         return false;
       }

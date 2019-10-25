@@ -10,8 +10,6 @@
 
 namespace yarmproxy {
 
-#define SLAB_SIZE (4*1024) // TODO : use g_config_.buffer_size
-
 WorkerContext::WorkerContext()
     : work_(io_service_)
     , backend_conn_pool_(nullptr)
