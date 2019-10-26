@@ -1,0 +1,165 @@
+myw@ubuntu16:~/yarmproxy/benchmark$ ./redis_mset.sh 
+Benchmarking redis mset, body_size 50
+ - Running against redis(port=6379) ... 
+real	0m0.275s
+user	0m0.211s
+sys	0m0.059s
+ - Running against yarmproxy(port=11311) ... 
+real	0m0.367s
+user	0m0.194s
+sys	0m0.074s
+ - Running against nutcracker(port=22121) ... 
+real	0m0.284s
+user	0m0.222s
+sys	0m0.043s
+
+
+Benchmarking redis mset, body_size 200
+ - Running against redis(port=6379) ... 
+real	0m0.259s
+user	0m0.199s
+sys	0m0.066s
+ - Running against yarmproxy(port=11311) ... 
+real	0m0.391s
+user	0m0.196s
+sys	0m0.072s
+ - Running against nutcracker(port=22121) ... 
+real	0m0.300s
+user	0m0.212s
+sys	0m0.062s
+
+
+Benchmarking redis mset, body_size 500
+ - Running against redis(port=6379) ... 
+real	0m0.275s
+user	0m0.201s
+sys	0m0.078s
+ - Running against yarmproxy(port=11311) ... 
+real	0m0.438s
+user	0m0.211s
+sys	0m0.070s
+ - Running against nutcracker(port=22121) ... 
+real	0m0.332s
+user	0m0.214s
+sys	0m0.067s
+
+
+Benchmarking redis mset, body_size 2000
+ - Running against redis(port=6379) ... 
+real	0m0.331s
+user	0m0.234s
+sys	0m0.079s
+ - Running against yarmproxy(port=11311) ... 
+real	0m0.581s
+user	0m0.226s
+sys	0m0.083s
+ - Running against nutcracker(port=22121) ... 
+real	0m0.370s
+user	0m0.228s
+sys	0m0.091s
+
+
+Benchmarking redis mset, body_size 5000
+ - Running against redis(port=6379) ... 
+real	0m0.379s
+user	0m0.248s
+sys	0m0.107s
+ - Running against yarmproxy(port=11311) ... 
+real	0m0.811s
+user	0m0.237s
+sys	0m0.109s
+ - Running against nutcracker(port=22121) ... 
+real	0m0.452s
+user	0m0.255s
+sys	0m0.112s
+
+
+Benchmarking redis mset, body_size 10000
+ - Running against redis(port=6379) ... 
+real	0m0.492s
+user	0m0.259s
+sys	0m0.168s
+ - Running against yarmproxy(port=11311) ... 
+real	0m1.017s
+user	0m0.244s
+sys	0m0.157s
+ - Running against nutcracker(port=22121) ... 
+real	0m0.619s
+user	0m0.271s
+sys	0m0.169s
+
+
+Benchmarking redis mset, body_size 20000
+ - Running against redis(port=6379) ... 
+real	0m0.690s
+user	0m0.296s
+sys	0m0.258s
+ - Running against yarmproxy(port=11311) ... 
+real	0m1.395s
+user	0m0.298s
+sys	0m0.215s
+ - Running against nutcracker(port=22121) ... 
+real	0m0.875s
+user	0m0.300s
+sys	0m0.264s
+
+
+Benchmarking redis mset, body_size 50000
+ - Running against redis(port=6379) ... 
+real	0m1.326s
+user	0m0.365s
+sys	0m0.575s
+ - Running against yarmproxy(port=11311) ... 
+real	0m2.336s
+user	0m0.353s
+sys	0m0.479s
+ - Running against nutcracker(port=22121) ... 
+real	0m1.773s
+user	0m0.337s
+sys	0m0.587s
+
+
+Benchmarking redis mset, body_size 100000
+ - Running against redis(port=6379) ... 
+real	0m2.273s
+user	0m0.340s
+sys	0m1.205s
+ - Running against yarmproxy(port=11311) ... 
+real	0m4.014s
+user	0m0.359s
+sys	0m1.014s
+ - Running against nutcracker(port=22121) ... 
+real	0m2.916s
+user	0m0.385s
+sys	0m1.115s
+
+
+Benchmarking redis mset, body_size 200000
+ - Running against redis(port=6379) ... 
+real	0m4.148s
+user	0m0.443s
+sys	0m2.393s
+ - Running against yarmproxy(port=11311) ... 
+real	0m7.126s
+user	0m0.443s
+sys	0m2.035s
+ - Running against nutcracker(port=22121) ... 
+real	0m5.334s
+user	0m0.420s
+sys	0m2.304s
+
+
+Benchmarking redis mset, body_size 500000
+ - Running against redis(port=6379) ... 
+real	0m9.768s
+user	0m0.786s
+sys	0m5.768s
+ - Running against yarmproxy(port=11311) ... 
+real	0m16.244s
+user	0m0.742s
+sys	0m4.839s
+ - Running against nutcracker(port=22121) ... 
+real	0m13.260s
+user	0m0.819s
+sys	0m5.472s
+
