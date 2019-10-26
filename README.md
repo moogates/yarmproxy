@@ -23,7 +23,12 @@ yarmproxy(Yet Another Redis and Memcached PROXY) is a high performance redis/mem
   replace
   get
 
-
+# File Structure
+  - `proxy` the yarmproxy source code
+  - `unit` unit test
+  - `test` testing redis/memcached commands 
+  - `stress` a client for stress testing
+  - `benchmark` benchmarking origin_server(redis or memcached)/yarmproxy/nutcracker
 
 # Build
 ## Dependencies

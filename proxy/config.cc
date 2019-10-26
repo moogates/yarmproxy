@@ -317,7 +317,7 @@ bool Config::TraverseConfFile(TokensHandler handler) {
     LOG_ERROR << "Open conf file '" << config_file_ << "' error.";
     return false;
   }
-  LOG_INFO << "Start loading config file '" << config_file_ << "'";
+  LOG_INFO << "Loading config file '" << config_file_ << "'.";
 
   std::string line;
   size_t line_count = 0;
