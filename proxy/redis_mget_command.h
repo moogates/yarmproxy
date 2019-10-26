@@ -32,8 +32,10 @@ public:
                             ErrorCode ec) override;
 
 private:
-  bool BackendErrorRecoverable(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
-  void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, ErrorCode ec) override;
+  bool BackendErrorRecoverable(std::shared_ptr<BackendConn> backend,
+      ErrorCode ec) override;
+  void OnBackendRecoverableError(std::shared_ptr<BackendConn> backend,
+      ErrorCode ec) override;
   bool ParseReply(std::shared_ptr<BackendConn> backend) override;
   void RotateReplyingBackend() override;
 
@@ -55,7 +57,7 @@ private:
   }
 
   std::map<Endpoint, std::shared_ptr<Subquery>> subqueries_;
-  std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
+  std::list<std::pair<std::shared_ptr<BackendConn>, int>> waiting_reply_queue_;
 };
 
 }
