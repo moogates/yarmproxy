@@ -53,12 +53,21 @@ void ProxyServer::Run() {
   }
   worker_pool_->OnLocatorUpdated(locator);
 
+  // boost::asio::ip::tcp::no_delay opt_nodelay(true);
+  // acceptor.set_option(opt_nodelay);
+  // TODO : check options
+
   auto endpoint = ParseEndpoint(listen_addr_);
   acceptor_.open(endpoint.protocol());
+
+  boost::system::error_code ec;
+  boost::asio::ip::tcp::no_delay nodelay(true);
+  acceptor_.set_option(nodelay, ec);
+
   acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
   acceptor_.bind(endpoint);
 
-  boost::system::error_code ec;
+  // boost::system::error_code ec;
   static const int BACKLOG = 1024; // TODO : config
   acceptor_.listen(BACKLOG, ec);
   if (ec) {

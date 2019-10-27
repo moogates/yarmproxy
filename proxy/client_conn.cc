@@ -80,8 +80,8 @@ void ClientConnection::UpdateTimer(TimerType timer_type) {
 
 void ClientConnection::StartRead() {
   boost::system::error_code ec;
-  boost::asio::ip::tcp::no_delay nodelay(true);
-  socket_.set_option(nodelay, ec);
+  // boost::asio::ip::tcp::no_delay nodelay(true);
+  // socket_.set_option(nodelay, ec);
 
   if (ec) {
     LOG_WARN << "client StartRead set socket option error";
@@ -171,7 +171,8 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
 void ClientConnection::ProcessUnparsedQuery() {
   // TODO : pipeline中多个请求的时序问题,即后面的command可能先
   // 被执行. 参考 del_pipeline_1.sh
-  static const size_t PIPELINE_ACTIVE_LIMIT = 4; // TODO : config
+  // static const size_t PIPELINE_ACTIVE_LIMIT = 32; // TODO : config
+  static const size_t PIPELINE_ACTIVE_LIMIT = 8; // TODO : config
   while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
         && buffer_->unparsed_received_bytes() > 0) {
     std::shared_ptr<Command> command;
