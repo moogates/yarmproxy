@@ -83,6 +83,11 @@ void ClientConnection::StartRead() {
   // boost::asio::ip::tcp::no_delay nodelay(true);
   // socket_.set_option(nodelay, ec);
 
+  // boost::asio::socket_base::send_buffer_size option(8192);
+  boost::asio::socket_base::send_buffer_size option(16384);
+  // boost::asio::socket_base::send_buffer_size option(32768);
+  socket_.set_option(option, ec);
+
   if (ec) {
     LOG_WARN << "client StartRead set socket option error";
     socket_.close();

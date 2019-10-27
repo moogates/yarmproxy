@@ -196,6 +196,11 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
     boost::asio::ip::tcp::no_delay no_delay(true);
     socket_.set_option(no_delay, option_ec);
 
+    // boost::asio::socket_base::send_buffer_size option(8192);
+    boost::asio::socket_base::send_buffer_size option(16384);
+    // boost::asio::socket_base::send_buffer_size option(32768);
+    socket_.set_option(option, option_ec);
+
     if (!option_ec) {
       boost::asio::socket_base::keep_alive keep_alive(true);
       socket_.set_option(keep_alive, option_ec);
