@@ -61,8 +61,12 @@ void ProxyServer::Run() {
   acceptor_.open(endpoint.protocol());
 
   boost::system::error_code ec;
+
   boost::asio::ip::tcp::no_delay nodelay(true);
   acceptor_.set_option(nodelay, ec);
+
+  boost::asio::socket_base::receive_buffer_size option(16 * 1024);
+  acceptor_.set_option(option, ec);
 
   acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
   acceptor_.bind(endpoint);
