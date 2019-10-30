@@ -18,9 +18,9 @@ BackendConn::BackendConn(WorkerContext& context,
     , buffer_(new ReadBuffer(context.allocator_->Alloc(),
           context.allocator_->buffer_size()))
     , remote_endpoint_(endpoint)
-    , socket_(context.io_service_)
-    , write_timer_(context.io_service_)
-    , read_timer_(context.io_service_) {
+    , socket_(context.io_context_)
+    , write_timer_(context.io_context_)
+    , read_timer_(context.io_context_) {
   ++g_stats_.backend_conns_;
   LOG_DEBUG << "BackendConn ctor, count=" << g_stats_.backend_conns_;
 }
@@ -101,7 +101,7 @@ void BackendConn::TryReadMoreReply() {
 void BackendConn::WriteQuery(const char* data, size_t bytes) {
   if (aborted_) {
     std::weak_ptr<BackendConn> wptr(shared_from_this());
-    context_.io_service_.post([wptr]() {
+    context_.io_context_.post([wptr]() {
       if (auto ptr = wptr.lock()) {
         ptr->query_sent_callback_(ErrorCode::E_WRITE_QUERY);
       }
@@ -195,11 +195,6 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
   if (!connect_ec) {
     boost::asio::ip::tcp::no_delay no_delay(true);
     socket_.set_option(no_delay, option_ec);
-
-    // boost::asio::socket_base::send_buffer_size option(8192);
-    boost::asio::socket_base::send_buffer_size option(16384);
-    // boost::asio::socket_base::send_buffer_size option(32768);
-    socket_.set_option(option, option_ec);
 
     if (!option_ec) {
       boost::asio::socket_base::keep_alive keep_alive(true);

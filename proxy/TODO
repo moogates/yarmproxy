@@ -3,6 +3,8 @@ TODO : idle client-conn timeout & heartbeat?
 TODO : max backend conn resource limit
 TODO : uniform public / proctected / private
 
+bug : crash on MAC if buffer size 128k 
+
 test support of 'redis-cli'
 
 TODO : limit max data size

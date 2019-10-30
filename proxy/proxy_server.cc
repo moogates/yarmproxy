@@ -24,8 +24,8 @@ static size_t DefaultConcurrency() {
 }
 
 ProxyServer::ProxyServer(const std::string & addr, size_t worker_threads)
-    : work_(io_service_)
-    , acceptor_(io_service_)
+    : work_(io_context_)
+    , acceptor_(io_context_)
     , listen_addr_(addr)
     , stopped_(false)
     , worker_pool_(new WorkerPool(
@@ -39,7 +39,7 @@ ProxyServer::~ProxyServer() {
 }
 
 SignalHandler ProxyServer::WrapThreadSafeHandler(std::function<void()> handler) {
-  boost::asio::io_service& ios(io_service_);
+  boost::asio::io_context& ios(io_context_);
   return [&ios, handler](int) {
     ios.post(handler);
   };
@@ -53,10 +53,6 @@ void ProxyServer::Run() {
   }
   worker_pool_->OnLocatorUpdated(locator);
 
-  // boost::asio::ip::tcp::no_delay opt_nodelay(true);
-  // acceptor.set_option(opt_nodelay);
-  // TODO : check options
-
   auto endpoint = ParseEndpoint(listen_addr_);
   acceptor_.open(endpoint.protocol());
 
@@ -64,9 +60,6 @@ void ProxyServer::Run() {
 
   boost::asio::ip::tcp::no_delay nodelay(true);
   acceptor_.set_option(nodelay, ec);
-
-  boost::asio::socket_base::receive_buffer_size option(16 * 1024);
-  acceptor_.set_option(option, ec);
 
   acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
   acceptor_.bind(endpoint);
@@ -108,19 +101,19 @@ void ProxyServer::Run() {
   StartAccept();
 
   while(!stopped_) {
-  // try { // TODO : don't try for test
-      io_service_.run();
-      LOG_WARN << "ProxyServer io_service stopped.";
-  //} catch (std::exception& e) {
-  //  LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
-  //}
+    try { // TODO : don't try for test
+      io_context_.run(); // TODO : deprecated
+      LOG_WARN << "ProxyServer io_context stopped.";
+    } catch (std::exception& e) {
+      LOG_ERROR << "ProxyServer io_context.run error:" << e.what();
+    }
   }
 }
 
 void ProxyServer::Stop() {
   LOG_WARN << "ProxyServer Stop";
   stopped_ = true;
-  io_service_.stop();
+  io_context_.stop();
   worker_pool_->StopDispatching();
 }
 

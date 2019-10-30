@@ -17,12 +17,12 @@
 namespace yarmproxy {
 
 ClientConnection::ClientConnection(WorkerContext& context)
-    : socket_(context.io_service_)
+    : socket_(context.io_context_)
     , buffer_(new ReadBuffer(context.allocator_->Alloc(),
                       context.allocator_->buffer_size()))
     , context_(context)
-    , read_timer_(context.io_service_)
-    , write_timer_(context.io_service_) {
+    , read_timer_(context.io_context_)
+    , write_timer_(context.io_context_) {
   ++g_stats_.client_conns_;
   LOG_DEBUG << "client ctor. count=" << g_stats_.client_conns_;
 }
@@ -79,22 +79,8 @@ void ClientConnection::UpdateTimer(TimerType timer_type) {
 }
 
 void ClientConnection::StartRead() {
-  boost::system::error_code ec;
-  // boost::asio::ip::tcp::no_delay nodelay(true);
-  // socket_.set_option(nodelay, ec);
-
-  // boost::asio::socket_base::send_buffer_size option(8192);
-  boost::asio::socket_base::send_buffer_size option(16384);
-  // boost::asio::socket_base::send_buffer_size option(32768);
-  socket_.set_option(option, ec);
-
-  if (ec) {
-    LOG_WARN << "client StartRead set socket option error";
-    socket_.close();
-  } else {
-    LOG_INFO << "client " << this << " StartRead";
-    AsyncRead();
-  }
+  LOG_INFO << "client " << this << " StartRead";
+  AsyncRead();
 }
 
 void ClientConnection::TryReadMoreQuery(const char* caller) {
