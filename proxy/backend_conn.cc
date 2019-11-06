@@ -101,7 +101,7 @@ void BackendConn::TryReadMoreReply() {
 void BackendConn::WriteQuery(const char* data, size_t bytes) {
   if (aborted_) {
     std::weak_ptr<BackendConn> wptr(shared_from_this());
-    context_.io_context_.post([wptr]() {
+    context_.io_context_.post([wptr]() { // TODO : deprecated
       if (auto ptr = wptr.lock()) {
         ptr->query_sent_callback_(ErrorCode::E_WRITE_QUERY);
       }
@@ -119,6 +119,7 @@ void BackendConn::WriteQuery(const char* data, size_t bytes) {
 
   UpdateTimer(write_timer_, ErrorCode::E_BACKEND_WRITE_TIMEOUT);
   write_timer_canceled_ = false;
+
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes),
           std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
               std::placeholders::_1, std::placeholders::_2));
@@ -143,7 +144,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes,
 
   g_stats_.bytes_to_backends_ += bytes_transferred;
   if (bytes_transferred < bytes) {
-    LOG_DEBUG << "HandleWrite 向 backend 没写完, 继续写. backend=" << this;
+    LOG_ERROR << "HandleWrite 向 backend 没写完, 继续写. backend=" << this;
     UpdateTimer(write_timer_, ErrorCode::E_BACKEND_WRITE_TIMEOUT);
     write_timer_canceled_ = false;
     boost::asio::async_write(socket_,
@@ -220,7 +221,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
   UpdateTimer(write_timer_, ErrorCode::E_BACKEND_WRITE_TIMEOUT);
   write_timer_canceled_ = false;
-  async_write(socket_, boost::asio::buffer(data, bytes),
+  boost::asio::async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
           std::placeholders::_1, std::placeholders::_2));
 }

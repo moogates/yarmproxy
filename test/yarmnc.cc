@@ -1,6 +1,6 @@
 /*
  * Test driver for YarmProxy, similar to 'nc' command in tcp client mode.
- * This simple tool is written to replace 'nc' because nc has bugs and might hang 
+ * This simple tool is written to replace 'nc' because nc has bugs and might hang
  * during high-speed large-thoroughput client/server TCP data exchange.
  * Author: Mu Yuwei (moogates@163.com)
  */
@@ -26,6 +26,8 @@
 #ifdef WINDOWS	
 #include <winsock2.h>
 #endif
+
+#include "stopwatch.h"
 
 using DataHandler = std::function<void(const char* data, size_t bytes)>;
 
@@ -228,10 +230,14 @@ void YarmClient::PrepareSlect() {
 }
 
 int YarmClient::Run() {
+  stopwatch::Stopwatch sw;
   if (Connect() < 0) {
     std::cerr <<"Connect error" << std::endl;
     return 1;
   }
+  std::uint64_t connected_tp = sw.elapsed<stopwatch::mus>();
+  std::uint64_t write_complete_tp = 0;
+  std::vector<std::uint64_t> writtalbe_tps;
 
   while(true) {
     int ret = LoadQueryData();
@@ -252,6 +258,7 @@ int YarmClient::Run() {
       }
     }
     if (FD_ISSET(sock_, &write_set_)) {
+      writtalbe_tps.push_back(sw.elapsed<stopwatch::mus>());
       if (NonblockingWrite() < 0) {
         break;
       }
@@ -262,11 +269,21 @@ int YarmClient::Run() {
     }
 
     if (write_finished() && !shutdown_write_) {
+      write_complete_tp = sw.elapsed<stopwatch::mus>();
       std::cerr << "Send data finished." << std::endl;
       shutdown(sock_, SHUT_WR);
       shutdown_write_ = true;
     }
   }
+  std::uint64_t all_complete_tp = sw.elapsed<stopwatch::mus>();
+  std::cerr << "Stopwatch connected=" << connected_tp
+      << " write_complete=" << write_complete_tp
+      << " all_complete=" << all_complete_tp
+      << std::endl << "[";
+  for(const auto& tp : writtalbe_tps) {
+    std::cerr << " " << tp;
+  }
+  std::cerr << "]" << std::endl;
   return 0;
 }
 

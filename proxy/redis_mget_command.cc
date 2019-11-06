@@ -303,6 +303,11 @@ bool RedisMgetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
                << backend->buffer()->parsed_unreceived_bytes()
                << ", backend=" << backend;
 
+      size_t total_bulks = bulk_array.total_bulks();
+      if (total_bulks == 0) {
+        LOG_WARN << "RedisMget ParseReply total_bulks error, backend=" << backend;
+        return false;
+      }
       // absent_bulks = bulk_array.absent_bulks();
       absent_bulks = bulk_array.total_bulks() - 1;
       LOG_DEBUG << "RedisMget ParseReply absent_bulks="

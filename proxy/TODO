@@ -5,11 +5,13 @@ TODO : uniform public / proctected / private
 
 bug : crash on MAC if buffer size 128k 
 
+inspecting and compare hash funcions
+
 test support of 'redis-cli'
 
 TODO : limit max data size
-TODO : memcached key_len_limit=250, body_size_limit=1M
-TODO : size limit : Redis strings are limited to 512 megabytes.
+ - memcached key_len_limit=250, body_size_limit=1M
+ - size limit : Redis strings are limited to 512 megabytes.
 
 TODO : anti bad request
 TODO : cpu affinity
@@ -19,7 +21,7 @@ TODO : test locator key namespace
 
 benchmarking
 TODO : benchmarking client
-TODO : benchmarking, vs. twemproxy
+TODO : benchmarking, vs. nutcracker
 
 potential bug:
 TODO : for get8.sh, why memcached reply much slower on mac than on ubuntu?

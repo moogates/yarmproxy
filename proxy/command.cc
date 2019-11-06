@@ -455,7 +455,7 @@ void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, Er
   } else {
     // wait for more query data
     // assert(client_conn_->buffer()->recycle_locked());
-    LOG_ERROR << "TryReadMoreQuery command_3 ec=" << ErrorCodeString(ec)
+    LOG_DEBUG << "TryReadMoreQuery command_3 ec=" << ErrorCodeString(ec)
               << " is_reading_query=" << client_conn_->is_reading_query()
               << " lock_count=" << client_conn_->buffer()->recycle_lock_count()
               << " unparsed=" << client_conn_->buffer()->unparsed_bytes()
