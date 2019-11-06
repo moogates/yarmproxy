@@ -25,9 +25,9 @@
 #include "redis_protocol.h"
 #include "redis_basic_command.h"
 #include "redis_del_command.h"
-// #include "redis_get_command.h"
 #include "redis_mset_command.h"
 #include "redis_mget_command.h"
+#include "redis_mget2_command.h"
 #include "redis_set_command.h"
 
 namespace yarmproxy {
@@ -125,6 +125,7 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       if (!ba.completed()) { // TODO : allow incomplete mget bulk_array
         return 0;
       }
+      // command->reset(new RedisMget2Command(client, ba));
       command->reset(new RedisMgetCommand(client, ba));
       return ba.total_size();
     } else if (ba[0].equals("del", sizeof("del") - 1) ||

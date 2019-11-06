@@ -1,5 +1,5 @@
-#ifndef _YARMPROXY_REDIS_MGET_COMMAND_H_
-#define _YARMPROXY_REDIS_MGET_COMMAND_H_
+#ifndef _YARMPROXY_REDIS_MGET2_COMMAND_H_
+#define _YARMPROXY_REDIS_MGET2_COMMAND_H_
 
 #include <set>
 
@@ -12,12 +12,12 @@ namespace yarmproxy {
 
 using Endpoint = boost::asio::ip::tcp::endpoint;
 
-class RedisMgetCommand : public Command {
+class RedisMget2Command : public Command {
 public:
-  RedisMgetCommand(std::shared_ptr<ClientConnection> client,
+  RedisMget2Command(std::shared_ptr<ClientConnection> client,
                   const redis::BulkArray& ba);
 
-  virtual ~RedisMgetCommand();
+  virtual ~RedisMget2Command();
 
   bool StartWriteQuery() override;
   bool ContinueWriteQuery() override {
@@ -26,10 +26,8 @@ public:
   }
 
   void StartWriteReply() override;
-  void OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
-                            ErrorCode ec) override;
   void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
-                            ErrorCode ec) override;
+                              ErrorCode ec) override;
   void OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,
                             ErrorCode ec) override;
 
@@ -46,7 +44,7 @@ private:
   void NextBackendStartReply();
 
   bool query_data_zero_copy() override {
-    return true; // zero copy
+    return false; // a bit more copy, for less system call and simpler code
   }
 private:
   struct Subquery;
