@@ -38,7 +38,7 @@ RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
     Endpoint endpoint = key_locator()->Locate(
         bulk.payload_data(), bulk.payload_size(), ProtocolType::REDIS);
 
-    LOG_DEBUG << "ParseQuery key=" << bulk.to_string()
+    LOG_DEBUG << "RedisMgetCommand ctor key=" << bulk.to_string()
               << " ep=" << endpoint;
     std::shared_ptr<Subquery> subquery;
     auto it = subqueries_.find(endpoint);

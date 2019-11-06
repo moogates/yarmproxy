@@ -1,4 +1,4 @@
-#include "memc_get_command.h"
+#include "memc_get2_command.h"
 
 #include "logging.h"
 
@@ -12,24 +12,32 @@
 
 namespace yarmproxy {
 
-using KeySegments = std::list<std::pair<const char*, size_t>>;
-
-struct MemcGetCommand::Subquery {
-  Subquery(std::shared_ptr<BackendConn> backend, KeySegments&& segments)
+struct MemcGet2Command::Subquery {
+  Subquery(std::shared_ptr<BackendConn> backend, std::string&& query_data)
       : backend_(backend)
-      // , query_data_(query_data) {
-      , segments_(segments) {
+      , query_data_(query_data) {
   }
   std::shared_ptr<BackendConn> backend_;
-  // std::string query_data_;
-  std::list<std::pair<const char*, size_t>> segments_;
+  std::string query_data_;
 };
 
-MemcGetCommand::MemcGetCommand(std::shared_ptr<ClientConnection> client,
+MemcGet2Command::MemcGet2Command(std::shared_ptr<ClientConnection> client,
                      const char* cmd_data, size_t cmd_size)
     : Command(client, ProtocolType::MEMCACHED)
 {
-  std::map<Endpoint, KeySegments> ep_key_segments;
+  ParseQuery(cmd_data, cmd_size);
+}
+
+MemcGet2Command::~MemcGet2Command() {
+  for(auto& query : subqueries_) {
+    if (query->backend_) {
+      backend_pool()->Release(query->backend_);
+    }
+  }
+}
+
+void MemcGet2Command::ParseQuery(const char* cmd_data, size_t cmd_size) {
+  std::map<Endpoint, std::string> ep_keys;
   for(const char* p = cmd_data + (sizeof("get ") - 1);
       p < cmd_data + cmd_size - (sizeof("\r\n") - 1); ++p) {
     const char* q = p;
@@ -37,83 +45,34 @@ MemcGetCommand::MemcGetCommand(std::shared_ptr<ClientConnection> client,
       ++q;
     }
     auto ep = key_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
-    auto it = ep_key_segments.find(ep);
-    if (it == ep_key_segments.end()) {
-      client_conn_->buffer()->inc_recycle_lock();
-
-      static const char prefix[] = "get";
-      KeySegments segments;
-      segments.emplace_back(prefix, sizeof(prefix) - 1);
-      it = ep_key_segments.emplace(ep, std::move(segments)).first;
-      // it = ep_keys.emplace(ep, "get").first;
+    auto it = ep_keys.find(ep);
+    if (it == ep_keys.end()) {
+      it = ep_keys.emplace(ep, "get").first;
     }
 
-    // it->second.append(p - 1, 1 + q - p);
-    it->second.emplace_back(p - 1, 1 + q - p);
+    it->second.append(p - 1, 1 + q - p);
     p = q;
   }
-  for(auto& it : ep_key_segments) {
-    // it.second.append("\r\n");
-    static const char postfix[] = "\r\n";
-    it.second.emplace_back(postfix, sizeof(postfix) - 1);
-
+  for(auto& it : ep_keys) {
+    it.second.append("\r\n");
     auto backend = backend_pool()->Allocate(it.first);
-    // subqueries_.emplace_back(new Subquery(backend, std::move(it.second)));
-    // subqueries_.emplace(backend, std::unique_ptr<Subquery>(new Subquery(backend, std::move(it.second))));
-    subqueries_.emplace(it.first, new Subquery(backend, std::move(it.second)));
+    subqueries_.emplace_back(new Subquery(backend, std::move(it.second)));
   }
 }
 
-MemcGetCommand::~MemcGetCommand() {
-  for(auto& item: subqueries_) {
-    backend_pool()->Release(item.second->backend_);
-  }
-}
-
-bool MemcGetCommand::StartWriteQuery() {
-  for(auto& item : subqueries_) {
-    auto& query = item.second;
+bool MemcGet2Command::StartWriteQuery() {
+  for(auto& query : subqueries_) {
     auto backend = query->backend_;
     assert(backend);
     backend->SetReadWriteCallback(
         WeakBind(&Command::OnWriteQueryFinished, backend),
         WeakBind(&Command::OnBackendReplyReceived, backend));
-    // backend->WriteQuery(query->query_data_.data(), query->query_data_.size());
-    query->backend_->WriteQuery(query->segments_.front().first,
-                                query->segments_.front().second);
+    backend->WriteQuery(query->query_data_.data(), query->query_data_.size());
   }
   return false;
 }
 
-void MemcGetCommand::OnWriteQueryFinished(
-    std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  // LOG_WARN << "RedisMsetCommand OnWriteQueryFinished begin.";
-  if (ec != ErrorCode::E_SUCCESS) {
-    if (ec == ErrorCode::E_CONNECT) {
-      OnBackendRecoverableError(backend, ec);
-      // 等同于转发完成已收数据
-      client_conn_->buffer()->dec_recycle_lock();
-    } else {
-      client_conn_->Abort();
-      LOG_DEBUG << "MemcMgetCommand OnWriteQueryFinished error, ec=" << ErrorCodeString(ec);
-    }
-    return;
-  }
-
-  auto& query = subqueries_[backend->remote_endpoint()];
-  query->segments_.pop_front();
-  if (!query->segments_.empty()) {
-    LOG_DEBUG << "MemcMgetCommand WriteQuery left_segments=" << query->segments_.size();
-    query->backend_->WriteQuery(query->segments_.front().first,
-                                query->segments_.front().second);
-    return;
-  }
-
-  client_conn_->buffer()->dec_recycle_lock();
-  backend->ReadReply();
-}
-
-void MemcGetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
+void MemcGet2Command::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
   if (received_reply_backends_.insert(backend).second) {
     if (received_reply_backends_.size() == subqueries_.size()) {
       last_backend_ = backend;
@@ -121,7 +80,7 @@ void MemcGetCommand::TryMarkLastBackend(std::shared_ptr<BackendConn> backend) {
   }
 }
 
-bool MemcGetCommand::TryActivateReplyingBackend(
+bool MemcGet2Command::TryActivateReplyingBackend(
         std::shared_ptr<BackendConn> backend) {
   if (replying_backend_ == nullptr) {
     replying_backend_ = backend;
@@ -130,7 +89,7 @@ bool MemcGetCommand::TryActivateReplyingBackend(
   return backend == replying_backend_;
 }
 
-void MemcGetCommand::BackendReadyToReply(
+void MemcGet2Command::BackendReadyToReply(
     std::shared_ptr<BackendConn> backend) {
   if (client_conn_->IsFirstCommand(shared_from_this())
       && TryActivateReplyingBackend(backend)) {
@@ -148,7 +107,7 @@ void MemcGetCommand::BackendReadyToReply(
   }
 }
 
-void MemcGetCommand::OnBackendReplyReceived(
+void MemcGet2Command::OnBackendReplyReceived(
         std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   TryMarkLastBackend(backend);
   if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
@@ -168,14 +127,14 @@ void MemcGetCommand::OnBackendReplyReceived(
   backend->TryReadMoreReply();
 }
 
-bool MemcGetCommand::BackendErrorRecoverable(
-    std::shared_ptr<BackendConn> backend, ErrorCode) {
+bool MemcGet2Command::BackendErrorRecoverable(
+    std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   return !backend->has_read_some_reply();
 }
 
-void MemcGetCommand::OnBackendRecoverableError(
+void MemcGet2Command::OnBackendRecoverableError(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  LOG_DEBUG << "MemcGetCommand::OnBackendRecoverableError endpoint="
+  LOG_DEBUG << "MemcGet2Command::OnBackendRecoverableError endpoint="
             << backend->remote_endpoint() << " backend=" << backend;
   TryMarkLastBackend(backend);
 
@@ -197,11 +156,11 @@ void MemcGetCommand::OnBackendRecoverableError(
   BackendReadyToReply(backend);
 }
 
-void MemcGetCommand::StartWriteReply() {
+void MemcGet2Command::StartWriteReply() {
   NextBackendStartReply();
 }
 
-void MemcGetCommand::NextBackendStartReply() {
+void MemcGet2Command::NextBackendStartReply() {
   LOG_DEBUG << "NextBackendStartReply cmd=" << this
             << " last replying_backend_=" << replying_backend_;
   if (waiting_reply_queue_.size() > 0) {
@@ -223,11 +182,11 @@ void MemcGetCommand::NextBackendStartReply() {
   }
 }
 
-bool MemcGetCommand::HasUnfinishedBanckends() const {
+bool MemcGet2Command::HasUnfinishedBanckends() const {
   return completed_backends_ < subqueries_.size();
 }
 
-void MemcGetCommand::RotateReplyingBackend() {
+void MemcGet2Command::RotateReplyingBackend() {
   ++completed_backends_;
   if (HasUnfinishedBanckends()) {
     NextBackendStartReply();
@@ -236,7 +195,7 @@ void MemcGetCommand::RotateReplyingBackend() {
   }
 }
 
-size_t MemcGetCommand::ParseReplyBodySize(const char * data, const char * end) {
+size_t MemcGet2Command::ParseReplyBodySize(const char * data, const char * end) {
   // "VALUE <key> <flag> <bytes>\r\n"
   const char * p = data + sizeof("VALUE ");
   int count = 0;
@@ -251,7 +210,7 @@ size_t MemcGetCommand::ParseReplyBodySize(const char * data, const char * end) {
   return 0;
 }
 
-bool MemcGetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
+bool MemcGet2Command::ParseReply(std::shared_ptr<BackendConn> backend) {
   while(backend->buffer()->unparsed_bytes() > 0) {
     const char * entry = backend->buffer()->unparsed_data();
     size_t unparsed_bytes = backend->buffer()->unparsed_bytes();

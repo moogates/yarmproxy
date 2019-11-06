@@ -20,6 +20,7 @@
 
 #include "memc_basic_command.h"
 #include "memc_get_command.h"
+#include "memc_get2_command.h"
 #include "memc_set_command.h"
 
 #include "redis_protocol.h"
@@ -163,6 +164,7 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   if (strncmp(buf, "get ", sizeof("get ") - 1) == 0 ||
       strncmp(buf, "gets ", sizeof("gets ") - 1) == 0) {
     // TODO : strict protocol check
+    // command->reset(new MemcGet2Command(client, buf, cmd_line_bytes));
     command->reset(new MemcGetCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;
   } else if (strncmp(buf, "set ", sizeof("set ") - 1) == 0 ||
