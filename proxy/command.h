@@ -30,7 +30,7 @@ protected: // TODO : best practice ?
   Command(std::shared_ptr<ClientConnection> client, ProtocolType protocol);
 public:
   virtual ~Command();
-  virtual bool StartWriteQuery(); // TODO : split into StartWriteQuery & ContinueWriteQuery
+  virtual bool StartWriteQuery();
   virtual bool ContinueWriteQuery();
   virtual void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
                                       ErrorCode ec);
@@ -78,8 +78,6 @@ protected:
   virtual void RotateReplyingBackend();
   virtual bool ParseReply(std::shared_ptr<BackendConn> backend);
 private:
-  virtual bool query_data_zero_copy() = 0;
-
   static bool ParseRedisSimpleReply(std::shared_ptr<BackendConn> backend);
   static bool ParseMemcSimpleReply(std::shared_ptr<BackendConn> backend);
 protected:

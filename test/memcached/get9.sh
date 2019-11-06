@@ -13,8 +13,8 @@ fi
 expected_end_lines=$(printf "$query\r\nget" | tr " \r" "\n" | grep "get\|key[0-9]\{1,2\}$" | sed '1d' | grep -n get | awk -F: '{print $1}' | tr '\n' ' ')
 end_lines=$(cat get9.tmp | grep -n END | awk -F: '{print $1}' | tr '\r\n' ' ')
 if [ "$end_lines" != "$expected_end_lines" ]; then
-  echo -e "\033[33mFail END.\033[0m"
+  echo -e "\033[33mFail END:$end_lines/$expected_end_lines.\033[0m"
   exit 1
 else
-  echo -e "\033[32mPass END.\033[0m"
+  echo -e "\033[32mPass END:$end_lines/$expected_end_lines.\033[0m"
 fi

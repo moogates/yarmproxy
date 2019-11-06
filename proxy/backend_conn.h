@@ -30,7 +30,7 @@ public:
   void ReadReply();
   void TryReadMoreReply();
 
-  void SetReplyData(const char* data, size_t bytes);
+  void SetReplyData(const char* data, size_t bytes, bool parsed = true);
 
   void SetReadWriteCallback(
       const BackendQuerySentCallback& query_sent_callback,

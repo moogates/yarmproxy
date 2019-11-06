@@ -20,7 +20,6 @@
 
 #include "memc_basic_command.h"
 #include "memc_get_command.h"
-#include "memc_get2_command.h"
 #include "memc_set_command.h"
 
 #include "redis_protocol.h"
@@ -28,7 +27,6 @@
 #include "redis_del_command.h"
 #include "redis_mset_command.h"
 #include "redis_mget_command.h"
-#include "redis_mget2_command.h"
 #include "redis_set_command.h"
 
 namespace yarmproxy {
@@ -126,7 +124,6 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       if (!ba.completed()) { // TODO : allow incomplete mget bulk_array
         return 0;
       }
-      // command->reset(new RedisMget2Command(client, ba));
       command->reset(new RedisMgetCommand(client, ba));
       return ba.total_size();
     } else if (ba[0].equals("del", sizeof("del") - 1) ||
@@ -164,7 +161,6 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   if (strncmp(buf, "get ", sizeof("get ") - 1) == 0 ||
       strncmp(buf, "gets ", sizeof("gets ") - 1) == 0) {
     // TODO : strict protocol check
-    // command->reset(new MemcGet2Command(client, buf, cmd_line_bytes));
     command->reset(new MemcGetCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;
   } else if (strncmp(buf, "set ", sizeof("set ") - 1) == 0 ||
@@ -336,9 +332,7 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
       client_conn_->Abort();
     } else {
       // TODO : no duplicate code
-      if (query_data_zero_copy()) {
-        client_conn_->buffer()->dec_recycle_lock();
-      }
+      client_conn_->buffer()->dec_recycle_lock();
       OnBackendRecoverableError(backend, ec);
       if (false) {
         if (!client_conn_->buffer()->recycle_locked() &&
@@ -358,9 +352,7 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
              << " has_written_some_reply_=" << has_written_some_reply_
              << " ep=" << backend->remote_endpoint();
 
-  if (query_data_zero_copy()) {
-    client_conn_->buffer()->dec_recycle_lock();
-  }
+  client_conn_->buffer()->dec_recycle_lock();
 
   if (query_recv_complete()) {
     // begin to read reply

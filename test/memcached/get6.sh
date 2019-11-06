@@ -25,7 +25,7 @@ expected_end_lines="9 18 27 36 45 54 63 72 81 90 99 108 117 126 135 144 153 162 
 end_lines=$(cat get6.tmp | grep -n END | awk -F: '{print $1}' | tr '\r\n' ' ')
 echo "$end_lines"
 if [ "$end_lines" != "$expected_end_lines" ]; then
-  echo -e "\033[33mFail: Response END lines error.\033[0m"
+  echo -e "\033[33mFail: Response END lines error:$end_lines/$expected_end_lines\033[0m"
   exit 1
 else
   echo -e "\033[32mResponse END lines ok.\033[0m"

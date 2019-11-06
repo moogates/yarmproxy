@@ -44,10 +44,6 @@ private:
 private:
   void BackendReadyToReply(std::shared_ptr<BackendConn> backend);
   void NextBackendStartReply();
-
-  bool query_data_zero_copy() override {
-    return true; // zero copy
-  }
 private:
   struct Subquery;
   std::string reply_prefix_;

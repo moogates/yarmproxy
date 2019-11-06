@@ -18,8 +18,6 @@ struct RedisMgetCommand::Subquery {
   Subquery(std::shared_ptr<BackendConn> backend) : backend_(backend) {
   }
   std::shared_ptr<BackendConn> backend_;
-  // std::string query_data_;
-
   size_t key_count_ = 0;
   std::string query_prefix_;
   std::list<std::pair<const char*, size_t>> segments_;
@@ -52,8 +50,6 @@ RedisMgetCommand::RedisMgetCommand(std::shared_ptr<ClientConnection> client,
       subqueries_.emplace(endpoint, subquery);
     }
     ++subquery->key_count_;
-    // subquery->query_data_.append(bulk.raw_data(), bulk.total_size());
-    // TODO : merge adjcent block
     if (last_endpoint == endpoint) {
       subquery->segments_.back().second += bulk.total_size();
     } else {
@@ -93,15 +89,10 @@ bool RedisMgetCommand::StartWriteQuery() {
         WeakBind(&Command::OnWriteQueryFinished, backend),
         WeakBind(&Command::OnBackendReplyReceived, backend));
 
-    // TODO : too much memory copy
-  //std::string prefix(redis::BulkArray::SerializePrefix(query->key_count_ + 1));
-  //prefix.append("$4\r\nmget\r\n");
     query->query_prefix_ = redis::BulkArray::SerializePrefix(query->key_count_ + 1);
     query->query_prefix_.append("$4\r\nmget\r\n");
 
-    query->segments_.emplace_front(nullptr, 0); // placeholder
-
-    // query->query_data_ = prefix + query->query_data_;
+    query->segments_.emplace_front(nullptr, 0); // just a placeholder
 
     LOG_DEBUG << "RedisMgetCommand StartWrireQuery cmd=" << this
               << " subquery=" << query
@@ -113,6 +104,7 @@ bool RedisMgetCommand::StartWriteQuery() {
     query->backend_->WriteQuery(query->query_prefix_.data(),
                                 query->query_prefix_.size());
   }
+
   if (client_conn_->IsFirstCommand(shared_from_this())) {
     StartWriteReply();
   } else {
@@ -123,8 +115,8 @@ bool RedisMgetCommand::StartWriteQuery() {
 
 void RedisMgetCommand::OnWriteQueryFinished(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  // LOG_WARN << "RedisMsetCommand OnWriteQueryFinished begin.";
   if (ec != ErrorCode::E_SUCCESS) {
+    LOG_DEBUG << "RedisMsetCommand OnWriteQueryFinished error.";
     if (ec == ErrorCode::E_CONNECT) {
       OnBackendRecoverableError(backend, ec);
       // 等同于转发完成已收数据
@@ -167,8 +159,7 @@ void RedisMgetCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend
   }
 
   if (ec != ErrorCode::E_SUCCESS) {
-    LOG_WARN << "Command::OnWriteReplyFinished error, backend="
-             << backend;
+    LOG_WARN << "Command::OnWriteReplyFinished error, backend=" << backend;
     client_conn_->Abort();
     return;
   }
@@ -217,18 +208,18 @@ void RedisMgetCommand::BackendReadyToReply(
   replying_backend_ = backend;
   bool ret = ParseReply(backend);
   if (!ret) {
-    // LOG_WARN << "RedisMget parse error, backend=" << backend;
+    LOG_WARN << "BackendReadyToReply parse error, backend=" << backend;
     client_conn_->Abort();
     return;
   }
   if (backend->buffer()->unprocessed_bytes() == 0) {
-    LOG_DEBUG << "RedisMget waiting for data from backend=" << backend;
+    LOG_DEBUG << "BackendReadyToReply waiting for data from backend=" << backend;
     backend->TryReadMoreReply();
     return;
   }
 
   // assert(!backend->finished()); // TODO : checkou error condition
-  LOG_DEBUG << "RedisMget backend=" << backend
+  LOG_DEBUG << "BackendReadyToReply backend=" << backend
       << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes()
       << " parsed_unreceived_bytes=" << backend->buffer()->parsed_unreceived_bytes()
       << " unparsed_bytes=" << backend->buffer()->unparsed_bytes();
@@ -254,7 +245,7 @@ void RedisMgetCommand::OnBackendReplyReceived(
 
 static std::string ErrorReplyBody(size_t keys) {
   std::ostringstream oss;
-  // oss << "*" << keys << "\r\n";
+  oss << "*" << keys << "\r\n";
   for(size_t i = 0; i < keys; ++i) {
     oss << "$-1\r\n";
   }
@@ -265,13 +256,13 @@ void RedisMgetCommand::OnBackendRecoverableError(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
   auto err_reply = ErrorReplyBody(
                        subqueries_[backend->remote_endpoint()]->key_count_);
-  backend->SetReplyData(err_reply.data(), err_reply.size());
+  backend->SetReplyData(err_reply.data(), err_reply.size(), false);
   LOG_DEBUG << "RedisMgetCommand " << this
            << " OnBackendRecoverableError backend=" << backend
            << " ec=" << ErrorCodeString(ec)
            << " err_reply=[" << err_reply << "]";
 
-  backend->set_reply_recv_complete();
+  // backend->set_reply_recv_complete();
   backend->set_no_recycle();
   BackendReadyToReply(backend);
 }

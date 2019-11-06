@@ -29,12 +29,8 @@ private:
   bool StartWriteQuery() override;
   bool ContinueWriteQuery() override;
 
-  bool query_data_zero_copy() override {
-    return true;
-  }
   bool query_parsing_complete() override;
   bool query_recv_complete() override;
-
 private:
   struct Subquery;
 

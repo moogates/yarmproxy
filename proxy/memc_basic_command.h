@@ -16,9 +16,6 @@ private:
     assert(false);
     return false;
   }
-  bool query_data_zero_copy() override {
-    return true;
-  }
   bool query_recv_complete() override {
     return true;
   }

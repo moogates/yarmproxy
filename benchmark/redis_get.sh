@@ -7,8 +7,8 @@ YARMNC=../test/yarmnc
 round=0
 $MARSHAL_GET key1 > get_req.tmp
 
-for body_size in 50 200 500 2000 5000 10000 20000 50000 100000 200000 500000; do
-  body_size=$((100000+$round*20000+$RANDOM%2000))
+for body_size in 50 100 150 200 300 400 600 900 1300 2000 3000 5000 10000 20000 50000 100000 200000 500000; do
+  #body_size=$((100000+$round*20000+$RANDOM%2000))
   echo $body_size
 #for body_size in 50 200 500 2000; do
 #for body_size in 50; do

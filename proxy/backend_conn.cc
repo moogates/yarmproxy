@@ -60,10 +60,10 @@ void BackendConn::Abort(ErrorCode ec) {
   read_timer_canceled_ = true;
 }
 
-void BackendConn::SetReplyData(const char* data, size_t bytes) {
+void BackendConn::SetReplyData(const char* data, size_t bytes, bool parsed) {
   // assert(is_reading_reply_ == false);
   buffer()->Reset();
-  buffer()->push_reply_data(data, bytes);
+  buffer()->push_reply_data(data, bytes, parsed);
 }
 
 void BackendConn::Reset() {
@@ -210,7 +210,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
   if (connect_ec || option_ec) {
     socket_.close();
-    LOG_DEBUG << "HandleConnect error, err="
+    LOG_WARN << "HandleConnect error, err="
              << (connect_ec ? connect_ec.message() : option_ec.message())
              << " endpoint=" << remote_endpoint_
              << " backend=" << this;

@@ -21,10 +21,12 @@ void ReadBuffer::update_received_bytes(size_t received_bytes) {
   received_offset_ += received_bytes;
 }
 
-void ReadBuffer::push_reply_data(const char* data, size_t bytes) {
+void ReadBuffer::push_reply_data(const char* data, size_t bytes, bool parsed) {
   memcpy(data_, data, bytes);
   received_offset_ += bytes;
-  parsed_offset_ += bytes;
+  if (parsed) {
+    parsed_offset_ += bytes;
+  }
 }
 
 size_t ReadBuffer::unprocessed_bytes() const {

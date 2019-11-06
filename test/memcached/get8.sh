@@ -1,5 +1,3 @@
-driver=nc
-driver=../yarmnc
 port=11311
 body_size=$(echo "($RANDOM*23+2027)%302144" | bc)
 body_size=200000
@@ -12,12 +10,12 @@ for id in `seq 1 100`; do
 done
 echo "Done"
 
-gunzip -c get8.data.gz | $driver 127.0.0.1 $port | grep "ERROR\|VALUE\|END" > get8.tmp
+gunzip -c get8.data.gz | ../yarmnc 127.0.0.1 $port | grep "ERROR\|VALUE\|END" > get8.tmp
 
 expected_value_lines=1500
 value_lines=$(cat get8.tmp | grep -c $body_size)
 if [ $value_lines -ne $expected_value_lines ]; then
-  echo -e "\033[33mFail: Response VALUE lines error.$value_lines.\033[0m"
+  echo -e "\033[33mFail: Response VALUE lines error:$value_lines/$expected_value_lines.\033[0m"
   exit 1
 else
   echo -e "\033[32mResponse VALUE lines ok.\033[0m"
@@ -30,7 +28,7 @@ for id in `seq 1 100`; do
 done
 end_lines=$(cat get8.tmp | grep -n END | awk -F: '{print $1}' | tr '\r\n' ' ')
 if [ "$end_lines" != "$expected_end_lines" ]; then
-  echo -e "\033[33mFail: Response END lines error.\033[0m"
+  echo -e "\033[33mFail: Response END lines error:$end_lines/$expected_end_lines.\033[0m"
   #exit 1
 else
   echo -e "\033[32mResponse END lines ok.\033[0m"

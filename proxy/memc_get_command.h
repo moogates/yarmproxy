@@ -46,10 +46,6 @@ private:
   void NextBackendStartReply();
   bool TryActivateReplyingBackend(std::shared_ptr<BackendConn> backend);
 
-  bool query_data_zero_copy() override {
-    return true;
-  }
-
 private:
   static size_t ParseReplyBodySize(const char * data, const char * end);
 
