@@ -11,7 +11,7 @@
 
 namespace yarmproxy {
 
-// TODO: supprt incomplete MGET command
+// TODO: support incomplete MGET command
 std::atomic_int redis_mget_cmd_count;
 
 struct RedisMgetCommand::Subquery {
@@ -218,7 +218,6 @@ void RedisMgetCommand::BackendReadyToReply(
     return;
   }
 
-  // assert(!backend->finished()); // TODO : checkou error condition
   LOG_DEBUG << "BackendReadyToReply backend=" << backend
       << " unprocessed_bytes=" << backend->buffer()->unprocessed_bytes()
       << " parsed_unreceived_bytes=" << backend->buffer()->parsed_unreceived_bytes()

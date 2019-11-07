@@ -26,9 +26,6 @@ public:
   static size_t CreateCommand(std::shared_ptr<ClientConnection> client,
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* cmd);
-protected: // TODO : best practice ?
-  Command(std::shared_ptr<ClientConnection> client, ProtocolType protocol);
-public:
   virtual ~Command();
   virtual bool StartWriteQuery();
   virtual bool ContinueWriteQuery();
@@ -54,6 +51,8 @@ public:
   virtual bool ParseUnparsedPart() { return true; }
   virtual bool ProcessUnparsedPart() { return true; }
 protected:
+  Command(std::shared_ptr<ClientConnection> client, ProtocolType protocol);
+
   BackendConnPool* backend_pool();
   std::shared_ptr<KeyLocator> key_locator();
 
@@ -77,14 +76,15 @@ protected:
   }
   virtual void RotateReplyingBackend();
   virtual bool ParseReply(std::shared_ptr<BackendConn> backend);
+
 private:
   static bool ParseRedisSimpleReply(std::shared_ptr<BackendConn> backend);
   static bool ParseMemcSimpleReply(std::shared_ptr<BackendConn> backend);
+
 protected:
   std::shared_ptr<BackendConn> replying_backend_;
   std::shared_ptr<ClientConnection> client_conn_;
   bool has_written_some_reply_ = false;
-  bool first_write_query_ = true;
   bool is_writing_reply_ = false;
 private:
   ProtocolType protocol_;

@@ -118,7 +118,7 @@ int MaximizeFdLimit() {
       if (setrlimit(RLIMIT_NOFILE, &lim)) {
         max = lim.rlim_cur;
       } else {
-        LOG_DEBUG << "MaximizeFdLimit set ok, min=" << min << " max=" << max; // TODO : check on linux
+        LOG_DEBUG << "MaximizeFdLimit set ok, min=" << min << " max=" << max;
         min = lim.rlim_cur;
       }
     } while (min + 1 < max);

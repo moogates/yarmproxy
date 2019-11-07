@@ -66,7 +66,6 @@ Endpoint KeyLocator::Locate(const char * key, size_t len, ProtocolType protocol)
   std::shared_ptr<KeyDistributer> continuum;
   auto it = namespace_continum_.find(KeyNamespace(key, len, protocol));
   if (it == namespace_continum_.end()) {
-    // TODO : optional drop user request
     continuum = namespace_continum_[DefaultNamespace(protocol)];
   } else {
     continuum = it->second;

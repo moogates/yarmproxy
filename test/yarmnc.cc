@@ -276,10 +276,10 @@ int YarmClient::Run() {
     }
   }
   std::uint64_t all_complete_tp = sw.elapsed<stopwatch::mus>();
-  std::cerr << "Stopwatch connected=" << connected_tp
-      << " write_complete=" << write_complete_tp
-      << " all_complete=" << all_complete_tp
-      << std::endl << "[";
+  // std::cerr << "Stopwatch connected=" << connected_tp
+  //     << " write_complete=" << write_complete_tp
+  //     << " all_complete=" << all_complete_tp
+  //     << std::endl << "[";
   for(const auto& tp : writtalbe_tps) {
     std::cerr << " " << tp;
   }

@@ -121,7 +121,7 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
         return ba.parsed_size();
       }
     } else if (ba[0].equals("mget", sizeof("mget") - 1)) {
-      if (!ba.completed()) { // TODO : allow incomplete mget bulk_array
+      if (!ba.completed()) { // TODO : support incomplete mget bulk_array
         return 0;
       }
       command->reset(new RedisMgetCommand(client, ba));
@@ -153,11 +153,11 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   }
 
   {
-    // TODO : memcached binary
+    // TODO : support memcached binary
   }
 
-  // TODO : 支持 memcached noreply 字段, 顺带加上严格的语法检查
-  size_t cmd_line_bytes = p - buf + 1; // 请求 命令行 长度
+  // TODO : support memcached noreply mode
+  size_t cmd_line_bytes = p - buf + 1;
   if (strncmp(buf, "get ", sizeof("get ") - 1) == 0 ||
       strncmp(buf, "gets ", sizeof("gets ") - 1) == 0) {
     // TODO : strict protocol check
@@ -200,16 +200,6 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
   return size;
 }
 
-/*
-std::shared_ptr<BackendConn> Command::AllocateBackend(const Endpoint& ep) {
-  auto backend = backend_pool()->Allocate(ep);
-  backend->SetReadWriteCallback(
-      WeakBind(&Command::OnWriteQueryFinished, backend),
-      WeakBind(&Command::OnBackendReplyReceived, backend));
-  return backend;
-}
-*/
-// TODO : merge
 const std::string& Command::MemcErrorReply(ErrorCode ec) {
   static const std::string kErrorConnect("ERROR Backend Connect Error\r\n");
   static const std::string kErrorWriteQuery("ERROR Backend Write Error\r\n");
@@ -281,11 +271,9 @@ bool Command::StartWriteQuery() {
   assert(replying_backend_);
   check_query_recv_complete();
 
-  assert(first_write_query_);
   replying_backend_->SetReadWriteCallback(
       WeakBind(&Command::OnWriteQueryFinished, replying_backend_),
       WeakBind(&Command::OnBackendReplyReceived, replying_backend_));
-  first_write_query_ = false; // TODO : remove this var
 
   LOG_DEBUG << "Command " << this << " StartWriteQuery backend=" << replying_backend_
            << " ep=" << replying_backend_->remote_endpoint();
@@ -297,7 +285,6 @@ bool Command::StartWriteQuery() {
 
 bool Command::ContinueWriteQuery() {
   check_query_recv_complete();
-  assert(!first_write_query_);
 
   if (replying_backend_->error()) {
     if (!query_recv_complete()) {
@@ -330,17 +317,8 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
     if (!BackendErrorRecoverable(backend, ec)) {
       client_conn_->Abort();
     } else {
-      // TODO : no duplicate code
       client_conn_->buffer()->dec_recycle_lock();
       OnBackendRecoverableError(backend, ec);
-      if (false) {
-        if (!client_conn_->buffer()->recycle_locked() &&
-            !query_recv_complete()) {
-      //if (!query_recv_complete()) {
-          assert(!client_conn_->buffer()->recycle_locked());
-          client_conn_->TryReadMoreQuery("command_1");
-        }
-      }
     }
     return;
   }
@@ -365,8 +343,7 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
 }
 
 void Command::OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
-                                        ErrorCode ec) {
-  // assert(backend == replying_backend_);
+                                     ErrorCode ec) {
   if (ec == ErrorCode::E_SUCCESS && !ParseReply(backend)) {
     ec = ErrorCode::E_PROTOCOL;
   }
@@ -449,7 +426,6 @@ void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, Er
     // wait for more query data
     // assert(client_conn_->buffer()->recycle_locked());
     LOG_DEBUG << "TryReadMoreQuery command_3 ec=" << ErrorCodeString(ec)
-              << " is_reading_query=" << client_conn_->is_reading_query()
               << " unparsed=" << client_conn_->buffer()->unparsed_bytes()
               << " unprocessed=" << client_conn_->buffer()->unprocessed_bytes()
               << " free_space_size=" << client_conn_->buffer()->free_space_size()
@@ -460,7 +436,6 @@ void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, Er
   }
 }
 
-// TODO : put this into redis_protocol.h
 bool Command::ParseRedisSimpleReply(std::shared_ptr<BackendConn> backend) {
   size_t unparsed_bytes = backend->buffer()->unparsed_bytes();
   if (unparsed_bytes == 0) { // bottom-half of a bulk string

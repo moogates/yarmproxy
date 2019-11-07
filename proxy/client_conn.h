@@ -45,18 +45,16 @@ public:
   }
   void RotateReplyingCommand();
 
-  void TryReadMoreQuery(const char* caller = ""); // TODO : call param for debug only
+  // caller : track caller for debuging
+  void TryReadMoreQuery(const char* caller = "");
   ReadBuffer* buffer() {
     return buffer_;
   }
-  bool aborted() const { // TODO : for debug only
+  inline bool aborted() const {
     return aborted_;
   }
   bool is_writing_reply() const {
     return is_writing_reply_;
-  }
-  bool is_reading_query() const { // TODO : for debug only
-    return is_reading_query_;
   }
 
 private:

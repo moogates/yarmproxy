@@ -101,7 +101,7 @@ void ProxyServer::Run() {
   StartAccept();
 
   while(!stopped_) {
-    try { // TODO : don't try for test
+    try {
       io_context_.run(); // TODO : deprecated
       LOG_WARN << "ProxyServer io_context stopped.";
     } catch (std::exception& e) {

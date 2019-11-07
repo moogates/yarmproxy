@@ -99,19 +99,18 @@ private:
   std::string log_level_ = "WARN";
 
   int client_idle_timeout_ = 60000; // 60,000ms(one minute)
-  int socket_rw_timeout_ =   50; // 50 ms
+  int socket_rw_timeout_   = 500;   // 500 ms
 
   // per worker config
-  int worker_max_idle_backends_    = 32;
-  size_t buffer_size_       = 4096;
-  size_t reserved_buffer_space_    = 512 * 1024;
-  bool worker_cpu_affinity_ = false;
+  int worker_max_idle_backends_  = 64;
+  size_t buffer_size_            = 4096;
+  size_t reserved_buffer_space_  = 0;
+  bool worker_cpu_affinity_      = false;
 
   std::vector<Cluster> clusters_;
 private:
   Config() {}
 
-  // TODO : add them in parser class
   bool ApplyTokens(const std::vector<std::string>& tokens);
   bool ApplyGlobalTokens(const std::vector<std::string>& tokens);
   bool ApplyClusterTokens(const std::vector<std::string>& tokens);
@@ -119,6 +118,7 @@ private:
 
   void PushSubcontext(const std::string& subcontext);
   void PopSubcontext();
+
   std::string context_;
   std::string error_msg_;
 };

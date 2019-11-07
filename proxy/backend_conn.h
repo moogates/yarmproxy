@@ -85,11 +85,12 @@ private:
   boost::asio::ip::tcp::socket socket_;
 
   BackendReplyReceivedCallback reply_received_callback_;
-  BackendQuerySentCallback query_sent_callback_; // TODO :rename
+  BackendQuerySentCallback query_sent_callback_;
 
+  // TODO : merge them into a flags var?
   bool no_recycle_          = false; // is it redundant with aborted_?
   bool aborted_             = false;
-  bool is_reading_reply_    = false; // TODO : merge into a flag
+  bool is_reading_reply_    = false;
   bool has_read_some_reply_ = false;
   bool reply_recv_complete_ = false;
 

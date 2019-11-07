@@ -10,7 +10,6 @@
 #include "worker_pool.h"
 
 namespace yarmproxy {
-// TODO: 更好的容错，错误时更有好的返回信息
 
 BackendConn::BackendConn(WorkerContext& context,
       const Endpoint& endpoint)
@@ -227,7 +226,6 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 }
 
 
-// TODO : connection_base
 void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeout_code) {
   if (aborted_) {
     return;
@@ -273,7 +271,6 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeo
 }
 
 void BackendConn::UpdateTimer(boost::asio::steady_timer& timer, ErrorCode timeout_code) {
-  // TODO : 细致的超时处理, 包括connect/read/write/command
   int timeout = Config::Instance().socket_rw_timeout();
   size_t canceled = timer.expires_after(std::chrono::milliseconds(timeout));
   LOG_DEBUG << "BackendConn UpdateTimer timeout=" << timeout

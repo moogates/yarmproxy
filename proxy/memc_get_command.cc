@@ -12,16 +12,11 @@
 
 namespace yarmproxy {
 
-using KeySegments = std::list<std::pair<const char*, size_t>>;
-
 struct MemcGetCommand::Subquery {
-  Subquery(std::shared_ptr<BackendConn> backend, KeySegments&& segments)
-      : backend_(backend)
-      // , query_data_(query_data) {
-      , segments_(segments) {
+  Subquery(std::shared_ptr<BackendConn> backend)
+      : backend_(backend) {
   }
   std::shared_ptr<BackendConn> backend_;
-  // std::string query_data_;
   std::list<std::pair<const char*, size_t>> segments_;
 };
 
@@ -29,7 +24,6 @@ MemcGetCommand::MemcGetCommand(std::shared_ptr<ClientConnection> client,
                      const char* cmd_data, size_t cmd_size)
     : Command(client, ProtocolType::MEMCACHED)
 {
-  std::map<Endpoint, KeySegments> ep_key_segments;
   for(const char* p = cmd_data + (sizeof("get ") - 1);
       p < cmd_data + cmd_size - (sizeof("\r\n") - 1); ++p) {
     const char* q = p;
@@ -37,30 +31,23 @@ MemcGetCommand::MemcGetCommand(std::shared_ptr<ClientConnection> client,
       ++q;
     }
     auto ep = key_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
-    auto it = ep_key_segments.find(ep);
-    if (it == ep_key_segments.end()) {
+    auto it = subqueries_.find(ep);
+    if (it == subqueries_.end()) {
       client_conn_->buffer()->inc_recycle_lock();
 
+      auto query = new Subquery(backend_pool()->Allocate(ep));
+      it = subqueries_.emplace(ep, query).first;
+
       static const char prefix[] = "get";
-      KeySegments segments;
-      segments.emplace_back(prefix, sizeof(prefix) - 1);
-      it = ep_key_segments.emplace(ep, std::move(segments)).first;
-      // it = ep_keys.emplace(ep, "get").first;
+      it->second->segments_.emplace_back(prefix, sizeof(prefix) - 1);
     }
 
-    // it->second.append(p - 1, 1 + q - p);
-    it->second.emplace_back(p - 1, 1 + q - p);
+    it->second->segments_.emplace_back(p - 1, 1 + q - p);
     p = q;
   }
-  for(auto& it : ep_key_segments) {
-    // it.second.append("\r\n");
+  for(auto& it : subqueries_) {
     static const char postfix[] = "\r\n";
-    it.second.emplace_back(postfix, sizeof(postfix) - 1);
-
-    auto backend = backend_pool()->Allocate(it.first);
-    // subqueries_.emplace_back(new Subquery(backend, std::move(it.second)));
-    // subqueries_.emplace(backend, std::unique_ptr<Subquery>(new Subquery(backend, std::move(it.second))));
-    subqueries_.emplace(it.first, new Subquery(backend, std::move(it.second)));
+    it.second->segments_.emplace_back(postfix, sizeof(postfix) - 1);
   }
 }
 

@@ -39,7 +39,6 @@ private:
   std::string cmd_name_;
   struct Subquery;
   size_t unparsed_bulks_;
-  bool init_write_query_ = true; // TODO : remove it
   std::map<Endpoint, std::shared_ptr<Subquery>> waiting_subqueries_;
   std::map<std::shared_ptr<BackendConn>, std::shared_ptr<Subquery>> pending_subqueries_;
 

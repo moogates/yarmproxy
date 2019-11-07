@@ -121,7 +121,7 @@ void ClientConnection::RotateReplyingCommand() {
 
     if (!active_cmd_queue_.back()->query_recv_complete()) {
       if (!buffer_->recycle_locked()) {
-        // TODO : reading next query might be blocked by previous
+        // reading next query might be blocked by previous
         // command's lock, so try to restart the reading here
         TryReadMoreQuery("client_conn_1");
       }
@@ -158,9 +158,8 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
 }
 
 void ClientConnection::ProcessUnparsedQuery() {
-  // TODO : pipeline中多个请求的时序问题,即后面的command可能先
-  // 被执行. 参考 del_pipeline_1.sh
-  // static const size_t PIPELINE_ACTIVE_LIMIT = 32; // TODO : config
+  // TODO : pipeline中多个请求存在时序问题, 后面的command可能在另一个
+  //   连接中先被执行, test/redis/del_pipeline_1.sh 可重现该问题
   static const size_t PIPELINE_ACTIVE_LIMIT = 8; // TODO : config
   while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
         && buffer_->unparsed_received_bytes() > 0) {
@@ -179,7 +178,6 @@ void ClientConnection::ProcessUnparsedQuery() {
     bool no_callback = command->StartWriteQuery(); // rename to StartWriteQuery
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
-    // TODO : check the precondition very carefully
     if (buffer_->parsed_unreceived_bytes() > 0 ||
         !command->query_parsing_complete()) {
       if (no_callback) {
@@ -201,7 +199,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 
   if (error) {
     if (error == boost::asio::error::eof) {
-      // TODO : gracefully shutdown
+      // read-half shutdown
       LOG_DEBUG << "client HandleRead eof error, conn=" << this;
     } else {
       LOG_DEBUG << "client HandleRead error=" << error.message()
@@ -234,14 +232,13 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(back_cmd);
 
-    // TODO : split to StartWriteQuery()/WriteEarlierParsedQuery()
     bool no_callback = back_cmd->ContinueWriteQuery();
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
       // 这里不继续read, 而是在ContinueWriteQuery的回调函数里面才
       // 继续read (or read directly if ContinueWriteQuery has no
-      // callback). 理论上这并不是最佳方式.
+      // callback). 理论上这并并非最佳方式.
       if (no_callback) {
         TryReadMoreQuery("client_conn_4");
       }
