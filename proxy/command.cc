@@ -185,7 +185,7 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       strncmp(buf, "incr ", sizeof("incr ") - 1) == 0 ||
       strncmp(buf, "touch ", sizeof("touch ") - 1) == 0) {
     // TODO : strict protocol check
-    command->reset(new MemcBasicCommand(client, buf, cmd_line_bytes));
+    command->reset(new MemcBasicCommand(client, buf));
     return cmd_line_bytes;
   } else if (strncmp(buf, "yarmstats\r", sizeof("yarmstats\r") - 1) == 0) {
     command->reset(new StatsCommand(client, ProtocolType::MEMCACHED));
@@ -325,7 +325,6 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
     LOG_DEBUG << "OnWriteQueryFinished err " << ErrorCodeString(ec)
              << " backend=" << backend
              << " client_buffer=" << client_conn_->buffer()
-             << " client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
              << " has_written_some_reply_=" << has_written_some_reply_
              << " ep=" << backend->remote_endpoint();
     if (!BackendErrorRecoverable(backend, ec)) {
@@ -348,7 +347,6 @@ void Command::OnWriteQueryFinished(std::shared_ptr<BackendConn> backend,
 
   LOG_DEBUG << "OnWriteQueryFinished ok, backend=" << backend
              << " client_buffer=" << client_conn_->buffer()
-             << " client_buff_lock_count=" << client_conn_->buffer()->recycle_lock_count()
              << " has_written_some_reply_=" << has_written_some_reply_
              << " ep=" << backend->remote_endpoint();
 
@@ -452,7 +450,6 @@ void Command::OnBackendRecoverableError(std::shared_ptr<BackendConn> backend, Er
     // assert(client_conn_->buffer()->recycle_locked());
     LOG_DEBUG << "TryReadMoreQuery command_3 ec=" << ErrorCodeString(ec)
               << " is_reading_query=" << client_conn_->is_reading_query()
-              << " lock_count=" << client_conn_->buffer()->recycle_lock_count()
               << " unparsed=" << client_conn_->buffer()->unparsed_bytes()
               << " unprocessed=" << client_conn_->buffer()->unprocessed_bytes()
               << " free_space_size=" << client_conn_->buffer()->free_space_size()
@@ -542,7 +539,6 @@ void Command::TryWriteReply(std::shared_ptr<BackendConn> backend) {
               << " is_writing_reply_=" << is_writing_reply_
               << " reply_recv_complete=" << backend->reply_recv_complete()
               << " backend_buf=" << backend->buffer()
-              << " PRE-backend_buf_lock_count=" << backend->buffer()->recycle_lock_count()
               << " unprocessed=" << unprocessed;
   if (!is_writing_reply_ && unprocessed > 0) {
     is_writing_reply_ = true;

@@ -8,7 +8,7 @@
 namespace yarmproxy {
 
 MemcBasicCommand::MemcBasicCommand(
-    std::shared_ptr<ClientConnection> client, const char* buf, size_t cmd_len)
+    std::shared_ptr<ClientConnection> client, const char* buf)
     : Command(client, ProtocolType::MEMCACHED) {
   const char *p = buf;
   while(*(p++) != ' ');

@@ -13,7 +13,7 @@ for body_size in 50 100 150 200 300 400 600 900 1300 2000 3000 5000 10000 20000 
 #for body_size in 50 200 500 2000; do
 #for body_size in 50; do
 #for body_size in 20000 50000 100000 200000 500000; do
-  rm -fv redis_get.$body_size.*.output
+  rm -fv redis_get.$body_size.*.tmp
   color=$((31+round%2))
   echo "Benchmarking redis 'get' command, body_size $body_size"
   for server in "redis 6379" "yarmproxy 11311" "nutcracker 22121" ;do
@@ -24,7 +24,7 @@ for body_size in 50 100 150 200 300 400 600 900 1300 2000 3000 5000 10000 20000 
     $MARSHAL_MSET key $body_size 1 | $YARMNC 127.0.0.1 $port > /dev/null 2>&1
     printf "\033[${color}m - Running against $name(port=$port) ... \033[0m"
     time for id in `seq 1 600`; do cat get_req.tmp | $YARMNC 127.0.0.1 $port > /dev/null 2>&1; done
-    # time for id in `seq 1 200`; do cat get_req.tmp | $YARMNC 127.0.0.1 $port >> redis_get.$body_size.$name.output 2>&1 ; done
+    # time for id in `seq 1 200`; do cat get_req.tmp | $YARMNC 127.0.0.1 $port >> redis_get.$body_size.$name.tmp 2>&1 ; done
   done
   round=$((round+1))
   echo

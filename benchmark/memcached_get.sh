@@ -14,7 +14,7 @@ for body_size in 50 200 500 2000 5000 10000 20000 50000 100000 200000 500000; do
   $MARSHAL_SET key1 $body_size > memcached_set_req.tmp
   $MARSHAL_GET key 1 > memcached_get_req.tmp
   color=$((31+(color-31)%5))
-  echo "Benchmarking 'memcached get' command, body_size $body_size"
+  echo "Benchmarking 'memcached get(single-key)' command, body_size $body_size"
   for server in "memcached 11211" "yarmproxy 11311" "nutcracker 22124" ; do
     name=`echo $server | awk '{print $1}'`
     port=`echo $server | awk '{print $2}'`

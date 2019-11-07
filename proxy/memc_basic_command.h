@@ -8,7 +8,7 @@ namespace yarmproxy {
 class MemcBasicCommand: public Command {
 public:
   MemcBasicCommand(std::shared_ptr<ClientConnection> client,
-                   const char* buf, size_t cmd_len);
+                   const char* buf);
   virtual ~MemcBasicCommand();
 
 private:

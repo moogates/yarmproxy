@@ -15,11 +15,11 @@ public:
 private:
   bool StartWriteQuery() override;
   void StartWriteReply() override;
-  void OnBackendReplyReceived(std::shared_ptr<BackendConn> backend,
-                              ErrorCode ec) override {
+  void OnBackendReplyReceived(std::shared_ptr<BackendConn>,
+                              ErrorCode) override {
     assert(false);
   }
-  bool ParseReply(std::shared_ptr<BackendConn> backend) override {
+  bool ParseReply(std::shared_ptr<BackendConn>) override {
     assert(false);
     return true;
   }

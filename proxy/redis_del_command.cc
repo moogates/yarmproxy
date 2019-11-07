@@ -63,8 +63,6 @@ static const std::string& RedisDelPrefix(const std::string& cmd_name,
 }
 
 
-std::atomic_int redis_del_cmd_count;
-// TODO : 系统调用 vs. redis_key内存拷贝，哪个代价更大呢？
 void RedisDelCommand::PushSubquery(const Endpoint& ep, const char* data,
        size_t bytes) {
   const auto& it = waiting_subqueries_.find(ep);
@@ -97,7 +95,7 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client,
     , unparsed_bulks_(ba.absent_bulks())
 {
   for(const char* p = ba[0].payload_data();
-      p - ba[0].payload_data() < ba[0].payload_size();
+      p - ba[0].payload_data() < int(ba[0].payload_size());
       ++p) {
     cmd_name_.push_back(std::tolower(*p));
   }
@@ -110,13 +108,9 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client,
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size());
   }
-  LOG_DEBUG << "RedisDelCommand ctor " << ++redis_del_cmd_count;
 }
 
 RedisDelCommand::~RedisDelCommand() {
-  LOG_DEBUG << "RedisDelCommand dtor " << --redis_del_cmd_count
-           << " pending_subqueries_.size=" << pending_subqueries_.size();
-
   if (pending_subqueries_.size() != 1) {
     assert(client_conn_->aborted());
   }
@@ -145,7 +139,8 @@ static void SetBackendReplyCount(std::shared_ptr<BackendConn> backend,
 
 void RedisDelCommand::OnBackendRecoverableError(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  // auto& subquery = pending_subqueries_[backend];
+  LOG_DEBUG << "RedisDelCommand::OnBackendRecoverableError ec="
+           << ErrorCodeString(ec) << "backend=" << backend;
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
@@ -258,7 +253,7 @@ bool RedisDelCommand::query_parsing_complete() {
 }
 
 void RedisDelCommand::ActivateWaitingSubquery() {
-  for(auto& it : waiting_subqueries_) {  // TODO : 能否直接遍历values?
+  for(auto& it : waiting_subqueries_) {
     auto query = it.second;
     auto backend = query->backend_;
     assert(backend);
@@ -330,7 +325,7 @@ bool RedisDelCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
     return true;
   }
 
-  int del_count; // TODO : add into redis_protocol.h
+  int del_count;
   try {
     del_count = std::stoi(entry + 1);
   } catch (...) {

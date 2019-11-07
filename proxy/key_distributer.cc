@@ -29,7 +29,7 @@ bool KeyDistributer::BuildCachePoints() {
   for(const auto& it : weighted_nodes_) {
     char ss[64];
     for(size_t k = 0; k < it.second; ++k) {
-      snprintf(ss, 63, "%u-%lu-%u", k, it.first.address().to_v4().to_ulong(),
+      snprintf(ss, 63, "%lu-%lu-%u", k, it.first.address().to_v4().to_ulong(),
                                     it.first.port());
       uint32_t hash_point = doobs_hash(ss, strlen(ss));  // TODO : use murmur hash
       new_cache_points.push_back(CachePoint(hash_point, it.first));

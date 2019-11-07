@@ -85,7 +85,6 @@ void ClientConnection::StartRead() {
 
 void ClientConnection::TryReadMoreQuery(const char* caller) {
   LOG_DEBUG << "client TryReadMoreQuery caller=" << caller
-       << " buffer_lock=" << buffer_->recycle_lock_count()
        << " is_reading_query=" << is_reading_query_
        << " has_much_free_space=" << buffer_->has_much_free_space()
        << " free_space=" << buffer_->free_space_size();
@@ -100,8 +99,7 @@ void ClientConnection::AsyncRead() {
   buffer_->inc_recycle_lock();
 
   LOG_DEBUG << "client AsyncRead, buffer=" << buffer_
-            << " free_space=" << buffer_->free_space_size()
-            << " lock=" << buffer_->recycle_lock_count();
+            << " free_space=" << buffer_->free_space_size();
 
   UpdateTimer(READ_TIMER);
   socket_.async_read_some(boost::asio::buffer(

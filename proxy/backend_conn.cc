@@ -48,7 +48,7 @@ void BackendConn::Abort(ErrorCode ec) {
   if (aborted_) {
     return;
   }
-  LOG_ERROR << "BackendConn Abort, ec=" << ErrorCodeString(ec);
+  LOG_WARN << "BackendConn Abort, ec=" << ErrorCodeString(ec);
   aborted_ = true;
   no_recycle_  = true;
   is_reading_reply_ = false;

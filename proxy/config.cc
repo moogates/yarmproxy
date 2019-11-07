@@ -207,7 +207,7 @@ bool Config::ApplyClusterTokens(const std::vector<std::string>& tokens) {
     if (tokens.size() >= 2) {
       for(size_t i = 1; i < tokens.size(); ++i) {
         auto& ns = tokens[i];
-        if (ns.size() > max_namespace_length_) {
+        if (ns.size() > size_t(max_namespace_length_)) {
           error_msg_ = "too long namespace length";
           return false;
         }
