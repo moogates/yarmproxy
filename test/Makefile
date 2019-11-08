@@ -3,6 +3,8 @@ CXX = g++
 CXXFLAGS = -I/usr/local/include -Wall -Wextra -std=c++11
 
 all: yarmnc slow_server sink_server
+	cd redis && make
+	cd memcached && make
 
 yarmnc : yarmnc.cc
 	$(CXX) $< -o $@ $(CXXFLAGS) $(LDFLAGS)

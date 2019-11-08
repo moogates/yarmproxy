@@ -50,7 +50,7 @@ private:
   static size_t ParseReplyBodySize(const char * data, const char * end);
 
   struct Subquery;
-  std::map<Endpoint, std::unique_ptr<Subquery>> subqueries_;
+  std::map<Endpoint, std::shared_ptr<Subquery>> subqueries_;
   std::list<std::shared_ptr<BackendConn>> waiting_reply_queue_;
 
   std::shared_ptr<BackendConn> last_backend_;
