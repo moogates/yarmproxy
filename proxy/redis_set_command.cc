@@ -1,7 +1,7 @@
 #include "redis_set_command.h"
 
 #include "logging.h"
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "read_buffer.h"
@@ -13,7 +13,7 @@ RedisSetCommand::RedisSetCommand(std::shared_ptr<ClientConnection> client,
                                  const redis::BulkArray& ba)
     : Command(client, ProtocolType::REDIS)
     , unparsed_bulks_(ba.absent_bulks()) {
-  auto ep = backend_locator()->Locate(ba[1].payload_data(),
+  auto ep = key_locator()->Locate(ba[1].payload_data(),
                  ba[1].payload_size(), ProtocolType::REDIS);
   LOG_DEBUG << "RedisSetCommand key=" << ba[1].to_string()
             << " ep=" << ep;
@@ -56,42 +56,6 @@ bool RedisSetCommand::ParseUnparsedPart() {
   }
   return true;
 }
-
-/*
-bool RedisSetCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
-  assert(replying_backend_ == backend);
-  size_t unparsed = replying_backend_->buffer()->unparsed_bytes();
-  assert(unparsed > 0);
-  const char * entry = replying_backend_->buffer()->unparsed_data();
-
-  LOG_DEBUG << "RedisSetCommand ParseReply begin, unparsed=" << unparsed
-            << " data=[" << std::string(entry, unparsed)
-            << "] backend=" << backend;
-  if (entry[0] != ':' && entry[0] != '+' && entry[0] != '-' &&
-      entry[0] != '$') { // TODO : fix the $ reply (aka. bulk)
-    LOG_DEBUG << "RedisSetCommand ParseReply unknown format["
-              << std::string(entry, unparsed) << "]";
-    return false;
-  }
-
-  const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed));
-  if (p == nullptr) {
-    return true;
-  }
-  if (entry[0] == '$' && entry[1] != '-') {
-    p = static_cast<const char *>(memchr(p + 1, '\n', entry + unparsed - p));
-    if (p == nullptr) {
-      return true;
-    }
-  }
-
-  replying_backend_->buffer()->update_parsed_bytes(p - entry + 1);
-  LOG_DEBUG << "RedisSetCommand ParseReply complete, resp.size="
-            << p - entry + 1 << " backend=" << backend;
-  backend->set_reply_recv_complete();
-  return true;
-}
-*/
 
 }
 

@@ -17,11 +17,9 @@ public:
 private:
   size_t ParseQuery(const char* cmd_line, size_t cmd_len);
   void check_query_recv_complete() override;
-  // bool ParseReply(std::shared_ptr<BackendConn> backend) override;
-  bool query_data_zero_copy() override {
-    return true;
+  bool query_recv_complete() override {
+    return query_recv_complete_;
   }
-  bool query_recv_complete() override;
 private:
   bool query_recv_complete_ = false;
 };

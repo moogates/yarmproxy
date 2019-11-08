@@ -15,7 +15,7 @@ namespace redis {
 const int SIZE_PARSE_ERROR = -10001;
 const int SIZE_NIL_BULK    = -1;
 
-// very light-weighted redis RESP data wrapper and parser
+// light-weighted redis RESP data wrapper and parser
 
 // Bulk:
 // "result" -> "$6\r\nresult\r\n"
@@ -27,7 +27,6 @@ public:
   // == 0 -> no ready
   // < 0  -> error
 
-  // TODO : 先检查格式正确性
   Bulk(const char* data, size_t bytes)
       : raw_data_(data) {
     if (bytes < 4) {
@@ -104,7 +103,8 @@ public:
       int sz = std::stoi(raw_data_ + 1);
       return sz > 0 ? sz : 0;
     } catch (...) {
-      LOG_WARN << "stoi payload_size error, prefix=[" << std::string(raw_data_, 5) << "]";
+      LOG_WARN << "stoi payload_size error, prefix=["
+               << std::string(raw_data_, 5) << "]";
       return 0;
     }
   }
@@ -141,7 +141,7 @@ public:
   }
 
   bool completed() const {
-    return absent_size() == 0;
+    return present_size_ > 0 && absent_size() == 0;
   }
 
   size_t absent_size() const {
@@ -153,7 +153,8 @@ public:
     if (raw_data_[1] == '-') {
       return "nil";
     }
-    return std::string(payload_data(), total_size() - (payload_data() - raw_data_) - absent_size() - 2);
+    return std::string(payload_data(),
+        total_size() - (payload_data() - raw_data_) - absent_size() - 2);
   }
 private:
   const char* raw_data_;
@@ -172,6 +173,26 @@ public:
     std::ostringstream oss;
     oss << '*' << i << "\r\n";
     return oss.str();
+  }
+  static int ParseBulkItems(const char* data, size_t bytes, size_t max_bulks,
+                            std::vector<Bulk>* items) {
+    const char* p = data;
+    int parsed_bytes = 0;
+    while(p < data + bytes && items->size() < max_bulks) {
+      items->emplace_back(p, data + bytes - p);
+      Bulk& back = items->back();
+      if (back.present_size() < 0) {
+        return -1;
+      }
+      if (back.present_size() == 0) {
+        items->pop_back();
+        break;
+      }
+      parsed_bytes += back.total_size();
+      p += back.total_size();
+    }
+
+    return parsed_bytes;
   }
 
   BulkArray(const char* data, size_t bytes)
@@ -193,25 +214,20 @@ public:
       parsed_size_ = 0;
       return;
     }
-    if (p == data + 1 || p[0] != '\r' || p[1] != '\n') { // TODO : is strict check required here?
+
+    // TODO : does strict check required here?
+    if (p == data + 1 || p[0] != '\r' || p[1] != '\n') {
       parsed_size_ = SIZE_PARSE_ERROR;
       return;
     }
     p += 2;
     parsed_size_ = p - data;
-    while(p < data + bytes && items_.size() < bulks) {
-      items_.emplace_back(p, data + bytes - p);
-      Bulk& back = items_.back();
-      if (back.present_size() < 0) {
-        parsed_size_ = SIZE_PARSE_ERROR;
-        return;
-      }
-      if (back.present_size() == 0) {
-        items_.pop_back();
-        return;
-      }
-      parsed_size_ += back.total_size();
-      p += back.total_size();
+
+    int ret = ParseBulkItems(p, data + bytes - p, bulks, &items_);
+    if (ret < 0) {
+      parsed_size_ = SIZE_PARSE_ERROR;
+    } else {
+      parsed_size_ += ret;
     }
   }
 
@@ -276,7 +292,7 @@ public:
 private:
   const char* raw_data_;
   size_t parsed_size_;
-  std::vector<Bulk> items_; // TODO :  use std::array
+  std::vector<Bulk> items_;
 };
 
 class Integer {
@@ -287,22 +303,6 @@ public:
     return oss.str();
   }
 };
-
-//int ParseInteger(const char* data, size_t bytes) {
-//  // 1000 -> ":1000\r\n"
-//  return 0;
-//}
-
-//int ParseErrorString(const char* data, size_t bytes) {
-//  // "SERVER_ERROR" -> "-SERVER_ERROR\r\n"
-//  return 0;
-//}
-
-//int ParseSimpleString(const char* data, size_t bytes) {
-//  // "HELLO" -> "+HELLO\r\n"
-//  return 0;
-//}
-
 
 }
 }

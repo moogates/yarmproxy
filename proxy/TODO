@@ -1,39 +1,41 @@
 TODO : argv / config file
 TODO : idle client-conn timeout & heartbeat?
 TODO : max backend conn resource limit
+TODO : uniform public / proctected / private
+TODO : support memcached binary
+
+inspecting and compare hash funcions
+
+test support of 'redis-cli'
 
 TODO : limit max data size
-TODO : memcached key_len_limit=250, body_size_limit=1M
-TODO : size limit : Redis strings are limited to 512 megabytes.
+ - memcached key_len_limit=250, body_size_limit=1M
+ - size limit : Redis strings are limited to 512 megabytes.
 
 TODO : anti bad request
 TODO : cpu affinity
 TODO : IPv6 support
 TODO : memcached binary protocol support
+TODO : test locator key namespace
 
 benchmarking
 TODO : benchmarking client
-TODO : benchmarking, vs. twemproxy
+TODO : benchmarking, vs. nutcracker
 
 potential bug:
-TODO : get8.sh, 为啥memcached在mac上比ubuntu上慢这么多？
-TODO : 9.27 跑了一晚上，redis返回错误提示：-ERR max number of clients reached
+1. for get8.sh, why memcached reply much slower on mac than on ubuntu?
+2. crash on MAC if buffer size is 128k?
 
 compiling
-TODO : ./configure
+TODO : add ./configure
 TODO : cross-platform support
 TODO : supporting Windows
 
 test:
 TODO : more detailed test for all supported commands
-TODO : command composer testing
-
 
 optional
-TODO : refining hash & katama
-TODO : replace doobs_hash
+TODO : refining hash & katama.
+       - hash speed & distribution test, replace doobs_hash if necessary
 TODO : better detail hiding
 
-Done:
-更好的超时处理
-pid_file

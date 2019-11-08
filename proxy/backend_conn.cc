@@ -10,16 +10,16 @@
 #include "worker_pool.h"
 
 namespace yarmproxy {
-// TODO: 更好的容错，错误时更有好的返回信息
 
 BackendConn::BackendConn(WorkerContext& context,
-    const Endpoint& endpoint)
-  : context_(context)
-  , buffer_(new ReadBuffer(context.allocator_->Alloc(), context.allocator_->slab_size()))
-  , remote_endpoint_(endpoint)
-  , socket_(context.io_service_)
-  , write_timer_(context.io_service_)
-  , read_timer_(context.io_service_) {
+      const Endpoint& endpoint)
+    : context_(context)
+    , buffer_(new ReadBuffer(context.allocator_->Alloc(),
+          context.allocator_->buffer_size()))
+    , remote_endpoint_(endpoint)
+    , socket_(context.io_context_)
+    , write_timer_(context.io_context_)
+    , read_timer_(context.io_context_) {
   ++g_stats_.backend_conns_;
   LOG_DEBUG << "BackendConn ctor, count=" << g_stats_.backend_conns_;
 }
@@ -35,11 +35,19 @@ BackendConn::~BackendConn() {
   delete buffer_;
 }
 
+void BackendConn::Close() {
+  if (aborted_) {
+    return;
+  }
+  socket_.close();
+  aborted_ = true;
+}
+
 void BackendConn::Abort(ErrorCode ec) {
   if (aborted_) {
     return;
   }
-  LOG_ERROR << "BackendConn Abort, ec=" << ErrorCodeString(ec);
+  LOG_WARN << "BackendConn Abort, ec=" << ErrorCodeString(ec);
   aborted_ = true;
   no_recycle_  = true;
   is_reading_reply_ = false;
@@ -51,10 +59,10 @@ void BackendConn::Abort(ErrorCode ec) {
   read_timer_canceled_ = true;
 }
 
-void BackendConn::SetReplyData(const char* data, size_t bytes) {
+void BackendConn::SetReplyData(const char* data, size_t bytes, bool parsed) {
   // assert(is_reading_reply_ == false);
   buffer()->Reset();
-  buffer()->push_reply_data(data, bytes);
+  buffer()->push_reply_data(data, bytes, parsed);
 }
 
 void BackendConn::Reset() {
@@ -82,8 +90,8 @@ void BackendConn::ReadReply() {
 }
 
 void BackendConn::TryReadMoreReply() {
-  if (reply_recv_complete_ || is_reading_reply_
-      || !buffer_->has_much_free_space()) {
+  if (reply_recv_complete_ || is_reading_reply_ ||
+      !buffer_->has_much_free_space()) {
     return;
   }
   ReadReply();
@@ -92,7 +100,7 @@ void BackendConn::TryReadMoreReply() {
 void BackendConn::WriteQuery(const char* data, size_t bytes) {
   if (aborted_) {
     std::weak_ptr<BackendConn> wptr(shared_from_this());
-    context_.io_service_.post([wptr]() {
+    context_.io_context_.post([wptr]() {
       if (auto ptr = wptr.lock()) {
         ptr->query_sent_callback_(ErrorCode::E_WRITE_QUERY);
       }
@@ -110,6 +118,7 @@ void BackendConn::WriteQuery(const char* data, size_t bytes) {
 
   UpdateTimer(write_timer_, ErrorCode::E_BACKEND_WRITE_TIMEOUT);
   write_timer_canceled_ = false;
+
   boost::asio::async_write(socket_, boost::asio::buffer(data, bytes),
           std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
               std::placeholders::_1, std::placeholders::_2));
@@ -134,7 +143,7 @@ void BackendConn::HandleWrite(const char * data, const size_t bytes,
 
   g_stats_.bytes_to_backends_ += bytes_transferred;
   if (bytes_transferred < bytes) {
-    LOG_DEBUG << "HandleWrite 向 backend 没写完, 继续写. backend=" << this;
+    LOG_ERROR << "HandleWrite 向 backend 没写完, 继续写. backend=" << this;
     UpdateTimer(write_timer_, ErrorCode::E_BACKEND_WRITE_TIMEOUT);
     write_timer_canceled_ = false;
     boost::asio::async_write(socket_,
@@ -200,7 +209,7 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
   if (connect_ec || option_ec) {
     socket_.close();
-    LOG_DEBUG << "HandleConnect error, err="
+    LOG_WARN << "HandleConnect error, err="
              << (connect_ec ? connect_ec.message() : option_ec.message())
              << " endpoint=" << remote_endpoint_
              << " backend=" << this;
@@ -211,13 +220,12 @@ void BackendConn::HandleConnect(const char * data, size_t bytes,
 
   UpdateTimer(write_timer_, ErrorCode::E_BACKEND_WRITE_TIMEOUT);
   write_timer_canceled_ = false;
-  async_write(socket_, boost::asio::buffer(data, bytes),
+  boost::asio::async_write(socket_, boost::asio::buffer(data, bytes),
       std::bind(&BackendConn::HandleWrite, shared_from_this(), data, bytes,
           std::placeholders::_1, std::placeholders::_2));
 }
 
 
-// TODO : connection_base
 void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeout_code) {
   if (aborted_) {
     return;
@@ -263,7 +271,6 @@ void BackendConn::OnTimeout(const boost::system::error_code& ec, ErrorCode timeo
 }
 
 void BackendConn::UpdateTimer(boost::asio::steady_timer& timer, ErrorCode timeout_code) {
-  // TODO : 细致的超时处理, 包括connect/read/write/command
   int timeout = Config::Instance().socket_rw_timeout();
   size_t canceled = timer.expires_after(std::chrono::milliseconds(timeout));
   LOG_DEBUG << "BackendConn UpdateTimer timeout=" << timeout

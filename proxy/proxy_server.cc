@@ -2,7 +2,7 @@
 
 #include "logging.h"
 
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "client_conn.h"
 #include "config.h"
 #include "signal_watcher.h"
@@ -24,12 +24,12 @@ static size_t DefaultConcurrency() {
 }
 
 ProxyServer::ProxyServer(const std::string & addr, size_t worker_threads)
-    : work_(io_service_)
-    , acceptor_(io_service_)
+    : work_(io_context_)
+    , acceptor_(io_context_)
     , listen_addr_(addr)
     , stopped_(false)
-    , worker_pool_(new WorkerPool(worker_threads > 0 ? worker_threads
-                                      : DefaultConcurrency())) {
+    , worker_pool_(new WorkerPool(
+        worker_threads > 0 ? worker_threads : DefaultConcurrency())) {
 }
 
 ProxyServer::~ProxyServer() {
@@ -39,28 +39,33 @@ ProxyServer::~ProxyServer() {
 }
 
 SignalHandler ProxyServer::WrapThreadSafeHandler(std::function<void()> handler) {
-  boost::asio::io_service& ios(io_service_);
+  boost::asio::io_service& ios(io_context_);
   return [&ios, handler](int) {
     ios.post(handler);
   };
 }
 
 void ProxyServer::Run() {
-  std::shared_ptr<BackendLocator> locator(new BackendLocator());
+  std::shared_ptr<KeyLocator> locator(new KeyLocator());
   if (!locator->Initialize()) {
-    LOG_ERROR << "ProxyServer BackendLocator Initialize error ...";
+    LOG_ERROR << "ProxyServer KeyLocator Initialize error ...";
     return;
   }
   worker_pool_->OnLocatorUpdated(locator);
 
   auto endpoint = ParseEndpoint(listen_addr_);
   acceptor_.open(endpoint.protocol());
+
+  boost::system::error_code ec;
+
+  boost::asio::ip::tcp::no_delay nodelay(true);
+  acceptor_.set_option(nodelay, ec);
+
   acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
   acceptor_.bind(endpoint);
 
-  boost::system::error_code ec;
-  static const int BACKLOG = 1024; // TODO : config
-  acceptor_.listen(BACKLOG, ec);
+  // boost::system::error_code ec;
+  acceptor_.listen(Config::Instance().backlog(), ec);
   if (ec) {
     LOG_ERROR << "ProxyServer listen error " << ec.message();
     return;
@@ -69,15 +74,15 @@ void ProxyServer::Run() {
   SignalWatcher::Instance().RegisterHandler(SIGHUP, WrapThreadSafeHandler([this]() {
       // FIXME : prevent signal handler reentrance
       if (!Config::Instance().ReloadCulsters()) {
-        LOG_ERROR << "SIGHUP BackendLocator reload config error.";
+        LOG_ERROR << "SIGHUP KeyLocator reload config error.";
         return;
       }
-      std::shared_ptr<BackendLocator> locator(new BackendLocator());
+      std::shared_ptr<KeyLocator> locator(new KeyLocator());
       if (!locator->Initialize()) {
-        LOG_ERROR << "SIGHUP BackendLocator reload Initialize error.";
+        LOG_ERROR << "SIGHUP KeyLocator reload Initialize error.";
         return;
       }
-      LOG_WARN << "SIGHUP BackendLocator::Reload OK.";
+      LOG_WARN << "SIGHUP KeyLocator::Reload OK.";
       worker_pool_->OnLocatorUpdated(locator);
     }));
   SignalWatcher::Instance().RegisterHandler(SIGINT,
@@ -95,19 +100,19 @@ void ProxyServer::Run() {
   StartAccept();
 
   while(!stopped_) {
-  // try { // TODO : don't try for test
-      io_service_.run();
-      LOG_WARN << "ProxyServer io_service stopped.";
-  //} catch (std::exception& e) {
-  //  LOG_ERROR << "ProxyServer io_service.run error:" << e.what();
-  //}
+    try {
+      io_context_.run();
+      LOG_WARN << "ProxyServer io_context stopped.";
+    } catch (std::exception& e) {
+      LOG_ERROR << "ProxyServer io_context.run error:" << e.what();
+    }
   }
 }
 
 void ProxyServer::Stop() {
   LOG_WARN << "ProxyServer Stop";
   stopped_ = true;
-  io_service_.stop();
+  io_context_.stop();
   worker_pool_->StopDispatching();
 }
 

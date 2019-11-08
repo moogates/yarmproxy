@@ -24,7 +24,6 @@ bool ErrorCommand::StartWriteQuery() {
 }
 
 void ErrorCommand::StartWriteReply() {
-  // TODO : report error & rotate if connection refused
   client_conn_->WriteReply(reply_message_.data(), reply_message_.size(),
           WeakBind(&Command::OnWriteReplyFinished, nullptr));
 }

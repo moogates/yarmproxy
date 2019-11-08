@@ -2,13 +2,13 @@
 
 #include "logging.h"
 
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 
 namespace yarmproxy {
 
 MemcBasicCommand::MemcBasicCommand(
-    std::shared_ptr<ClientConnection> client, const char* buf, size_t cmd_len)
+    std::shared_ptr<ClientConnection> client, const char* buf)
     : Command(client, ProtocolType::MEMCACHED) {
   const char *p = buf;
   while(*(p++) != ' ');
@@ -16,7 +16,7 @@ MemcBasicCommand::MemcBasicCommand(
   const char *q = p;
   while(*(++q) != ' ' && *q != '\r');
 
-  auto ep = backend_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
+  auto ep = key_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
   replying_backend_ = backend_pool()->Allocate(ep);
 }
 

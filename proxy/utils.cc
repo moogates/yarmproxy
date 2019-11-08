@@ -11,6 +11,7 @@
 
 #ifdef _GNU_SOURCE
 #include <sched.h>
+#include <sys/syscall.h>
 #endif
 
 namespace yarmproxy {
@@ -47,13 +48,17 @@ void Welcome() {
       << std::endl;
 }
 
-int SetCpuAffinity(int cpu) {
+int SetThreadCpuAffinity(int cpu) {
 #ifdef _GNU_SOURCE
+  LOG_WARN << "SetThreadCpuAffinity enabled";
   cpu_set_t  mask;
   CPU_ZERO(&mask);
   CPU_SET(cpu, &mask);
-  return sched_setaffinity(0, sizeof(mask), &mask);
+
+  pid_t tid = syscall(__NR_gettid); // or syscall(SYS_gettid);
+  return sched_setaffinity(tid, sizeof(mask), &mask);
 #else
+  LOG_WARN << "SetThreadCpuAffinity disabled";
   return 1;
 #endif
 }
@@ -113,7 +118,7 @@ int MaximizeFdLimit() {
       if (setrlimit(RLIMIT_NOFILE, &lim)) {
         max = lim.rlim_cur;
       } else {
-        LOG_DEBUG << "MaximizeFdLimit set ok, min=" << min << " max=" << max; // TODO : check on linux
+        LOG_DEBUG << "MaximizeFdLimit set ok, min=" << min << " max=" << max;
         min = lim.rlim_cur;
       }
     } while (min + 1 < max);

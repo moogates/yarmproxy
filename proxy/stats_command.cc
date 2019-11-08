@@ -57,9 +57,8 @@ bool StatsCommand::StartWriteQuery() {
 }
 
 void StatsCommand::StartWriteReply() {
-  // TODO : report error & rotate if connection refused
   client_conn_->WriteReply(reply_message_.data(), reply_message_.size(),
-          WeakBind(&Command::OnWriteReplyFinished, nullptr));
+       WeakBind(&Command::OnWriteReplyFinished, nullptr));
 }
 
 void StatsCommand::OnWriteReplyFinished(std::shared_ptr<BackendConn> backend,

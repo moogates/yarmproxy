@@ -7,18 +7,19 @@ namespace yarmproxy {
 
 class Allocator {
 public:
-  Allocator(int slab_size, int slab_count);
+  Allocator(int buffer_size, int reserved_size);
   char* Alloc();
   void Release(char*);
-  int slab_size() const {
-    return slab_size_;
+  int buffer_size() const {
+    return buffer_size_;
   }
 private:
-  int slab_size_;
-  int slab_count_;
+  int buffer_size_;
+
+  char* reserved_space_;
+  int reserved_space_size_;
 
   std::set<char*> free_slabs_;
-  char* chunk_;
 };
 
 }

@@ -5,7 +5,8 @@
 
 #include <arpa/inet.h>
 
-#include "backend_locator.h"
+#include <boost/asio/ip/tcp.hpp>
+
 #include "logging.h"
 #include "protocol_type.h"
 
@@ -50,6 +51,16 @@ bool Config::ApplyGlobalTokens(const std::vector<std::string>& tokens) {
   if (tokens.size() == 2 && tokens[0] == "pid_file") {
     pid_file_ = tokens[1];
     return true;
+  }
+
+  if (tokens.size() == 2 && tokens[0] == "backlog") {
+    try {
+      backlog_ = std::stoi(tokens[1]);
+      return true;
+    } catch (...) {
+      error_msg_ = "positive integer required";
+      return false;
+    }
   }
 
   if (tokens.size() == 2 && tokens[0] == "worker_threads") {
@@ -156,21 +167,20 @@ bool Config::ApplyWorkerTokens(const std::vector<std::string>& tokens) {
         error_msg_ = "bad buffer size";
         return false;
       }
-      worker_buffer_size_ = sz * 1024;
+      buffer_size_ = sz * 1024;
     } catch (...) {
       error_msg_ = "bad number";
       return false;
     }
     return true;
-  } else if (tokens[0] == "buffer_trunk_size") {
+  } else if (tokens[0] == "reserved_buffer_space") {
     try {
       int sz = std::stoi(tokens[1]);
-      if (sz < 32 || sz > 8192 ||
-          ((sz & (sz - 1)) != 0)) {
+      if ((sz & (sz - 1)) != 0) {
         error_msg_ = "bad buffer trunk size";
         return false;
       }
-      worker_buffer_trunk_size_ = sz * 1024;
+      reserved_buffer_space_ = sz * 1024;
     } catch (...) {
       error_msg_ = "bad number";
       return false;
@@ -207,7 +217,7 @@ bool Config::ApplyClusterTokens(const std::vector<std::string>& tokens) {
     if (tokens.size() >= 2) {
       for(size_t i = 1; i < tokens.size(); ++i) {
         auto& ns = tokens[i];
-        if (ns.size() > max_namespace_length_) {
+        if (ns.size() > size_t(max_namespace_length_)) {
           error_msg_ = "too long namespace length";
           return false;
         }
@@ -317,7 +327,7 @@ bool Config::TraverseConfFile(TokensHandler handler) {
     LOG_ERROR << "Open conf file '" << config_file_ << "' error.";
     return false;
   }
-  LOG_INFO << "Start loading config file '" << config_file_ << "'";
+  LOG_INFO << "Loading config file '" << config_file_ << "'.";
 
   std::string line;
   size_t line_count = 0;

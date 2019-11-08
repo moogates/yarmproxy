@@ -14,14 +14,9 @@ public:
   virtual ~RedisBasicCommand();
 
 private:
-#ifdef DEBUG
   bool ContinueWriteQuery() override {
     assert(false);
     return false;
-  }
-#endif
-  bool query_data_zero_copy() override {
-    return true;
   }
 };
 

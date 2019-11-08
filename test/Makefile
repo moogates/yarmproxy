@@ -1,19 +1,24 @@
-SOURCES = $(wildcard *.cc)
-EXES = $(patsubst %.cc, %, $(SOURCES))
+CXX = g++
+#CXX = clang++
+CXXFLAGS = -I/usr/local/include -Wall -Wextra -std=c++11
 
-# CXX = g++
-CXX = clang++
+all: yarmnc slow_server sink_server
 
-LDFLAGS = -L/usr/local/lib -lpthread -ldl
-CXXFLAGS = -I/usr/local/include -I.. -Wall -std=c++11 -DLOGURU_WITH_STREAMS=1
+yarmnc : yarmnc.cc
+	$(CXX) $< -o $@ $(CXXFLAGS) $(LDFLAGS)
 
-targets : redis_protocol_test config_test
+slow_server : slow_server.cc
+	$(CXX) $< -o $@ $(CXXFLAGS) $(LDFLAGS) -lboost_system -lpthread
 
-%: %.cc
-	$(CXX) $<  ../base/loguru.cc ../base/logging.cc $(CXXFLAGS) $(LDFLAGS) -o $@
+sink_server : sink_server.cc
+	$(CXX) $< -o $@ $(CXXFLAGS) $(LDFLAGS) -lboost_system -lpthread
 
-config_test : config_test.cc ../proxy/config.cc
-	$(CXX) $<  ../proxy/config.cc -I../proxy $(CXXFLAGS) $(LDFLAGS) -lboost_system -o $@
+test : yarmnc
+	cd memcached && ./memcached_all.sh
+	cd redis && ./redis_all.sh
 
 clean:
-	rm -fv $(EXES)
+	rm -fv yarmnc slow_server sink_server
+
+.PHONY : all test clean 
+

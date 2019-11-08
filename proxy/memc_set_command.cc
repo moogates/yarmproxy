@@ -2,7 +2,7 @@
 
 #include "logging.h"
 
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "error_code.h"
@@ -17,7 +17,6 @@ MemcSetCommand::MemcSetCommand(std::shared_ptr<ClientConnection> client,
 }
 
 size_t MemcSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
-  // TODO : strict check
   // <command name> <key> <flags> <exptime> <bytes>\r\n
   const char *p = cmd_data;
   while(*(p++) != ' ');
@@ -25,7 +24,7 @@ size_t MemcSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
   const char *q = p;
   while(*(++q) != ' ');
 
-  auto ep = backend_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
+  auto ep = key_locator()->Locate(p, q - p, ProtocolType::MEMCACHED);
   replying_backend_ = backend_pool()->Allocate(ep);
 
   p = cmd_data + cmd_len - 2;
@@ -49,10 +48,6 @@ void MemcSetCommand::check_query_recv_complete() {
   if (client_conn_->buffer()->parsed_unreceived_bytes() == 0) {
     query_recv_complete_ = true;
   }
-}
-
-bool MemcSetCommand::query_recv_complete() {
-  return query_recv_complete_;
 }
 
 }

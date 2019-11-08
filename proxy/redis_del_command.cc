@@ -3,7 +3,7 @@
 #include "logging.h"
 
 #include "backend_conn.h"
-#include "backend_locator.h"
+#include "key_locator.h"
 #include "backend_pool.h"
 #include "client_conn.h"
 #include "error_code.h"
@@ -63,8 +63,6 @@ static const std::string& RedisDelPrefix(const std::string& cmd_name,
 }
 
 
-std::atomic_int redis_del_cmd_count;
-// TODO : 系统调用 vs. redis_key内存拷贝，哪个代价更大呢？
 void RedisDelCommand::PushSubquery(const Endpoint& ep, const char* data,
        size_t bytes) {
   const auto& it = waiting_subqueries_.find(ep);
@@ -97,26 +95,22 @@ RedisDelCommand::RedisDelCommand(std::shared_ptr<ClientConnection> client,
     , unparsed_bulks_(ba.absent_bulks())
 {
   for(const char* p = ba[0].payload_data();
-      p - ba[0].payload_data() < ba[0].payload_size();
+      p - ba[0].payload_data() < int(ba[0].payload_size());
       ++p) {
     cmd_name_.push_back(std::tolower(*p));
   }
   for(size_t i = 1; i < ba.present_bulks(); ++i) {
     if (i == ba.present_bulks() - 1 && !ba[i].completed()) {
-      ++unparsed_bulks_;// don't parse the last key if it's not complete
+      ++unparsed_bulks_; // don't parse the last key if it's not complete
       break;
     }
-    Endpoint ep = backend_locator()->Locate(
+    Endpoint ep = key_locator()->Locate(
         ba[i].payload_data(), ba[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, ba[i].raw_data(), ba[i].present_size());
   }
-  LOG_DEBUG << "RedisDelCommand ctor " << ++redis_del_cmd_count;
 }
 
 RedisDelCommand::~RedisDelCommand() {
-  LOG_DEBUG << "RedisDelCommand dtor " << --redis_del_cmd_count
-           << " pending_subqueries_.size=" << pending_subqueries_.size();
-
   if (pending_subqueries_.size() != 1) {
     assert(client_conn_->aborted());
   }
@@ -129,14 +123,7 @@ bool RedisDelCommand::query_recv_complete() {
   return unparsed_bulks_ == 0; // 只解析completed bulk, 因而解析完就是接收完
 }
 
-bool RedisDelCommand::ContinueWriteQuery() {
-  assert(false);
-  return false;
-}
-
 bool RedisDelCommand::StartWriteQuery() {
-  assert(init_write_query_);
-  init_write_query_ = false;
   ActivateWaitingSubquery();
   return false;
 }
@@ -150,7 +137,8 @@ static void SetBackendReplyCount(std::shared_ptr<BackendConn> backend,
 
 void RedisDelCommand::OnBackendRecoverableError(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  // auto& subquery = pending_subqueries_[backend];
+  LOG_DEBUG << "RedisDelCommand::OnBackendRecoverableError ec="
+           << ErrorCodeString(ec) << "backend=" << backend;
   backend->set_reply_recv_complete();
   backend->set_no_recycle();
 
@@ -254,10 +242,6 @@ void RedisDelCommand::OnWriteQueryFinished(
                                   query->segments_.front().second);
     }
   } else {
-    // TODO
-    LOG_WARN << "OnWriteQueryFinished bad phase "
-             << query->phase_ << " , backend=" << backend;
-    client_conn_->Abort();
     assert(false);
   }
 }
@@ -267,7 +251,7 @@ bool RedisDelCommand::query_parsing_complete() {
 }
 
 void RedisDelCommand::ActivateWaitingSubquery() {
-  for(auto& it : waiting_subqueries_) {  // TODO : 能否直接遍历values?
+  for(auto& it : waiting_subqueries_) {
     auto query = it.second;
     auto backend = query->backend_;
     assert(backend);
@@ -289,33 +273,19 @@ void RedisDelCommand::ActivateWaitingSubquery() {
 bool RedisDelCommand::ProcessUnparsedPart() {
   ReadBuffer* buffer = client_conn_->buffer();
   std::vector<redis::Bulk> new_bulks;
-  size_t total_parsed = 0;
 
-  // TODO : duplicate code cleaning up
-  while(new_bulks.size() < unparsed_bulks_ &&
-        total_parsed < buffer->unparsed_received_bytes()) {
-    const char * entry = buffer->unparsed_data() + total_parsed;
-    size_t unparsed_bytes = buffer->unparsed_received_bytes() - total_parsed;
-    new_bulks.emplace_back(entry, unparsed_bytes);
-    redis::Bulk& bulk = new_bulks.back();
-
-    if (bulk.present_size() < 0) {
-      return false;
-    }
-
-    if (bulk.present_size() == 0 || !bulk.completed()) {
-      new_bulks.pop_back();
-      break;
-    }
-    total_parsed += bulk.total_size();
-    LOG_DEBUG << "ProcessUnparsedPart current bulk parsed_bytes="
-              << bulk.total_size();
+  int parsed_bytes = redis::BulkArray::ParseBulkItems(buffer->unparsed_data(),
+       buffer->unparsed_received_bytes(), unparsed_bulks_, &new_bulks);
+  if (parsed_bytes < 0) {
+    LOG_INFO << "redisdel ProcessUnparsedPart parse error. cmd=" << this;
+    return false;
+  }
+  if (new_bulks.size() > 0 && !new_bulks.back().completed()) {
+    parsed_bytes -= new_bulks.back().total_size();
+    new_bulks.pop_back();
   }
 
-  LOG_DEBUG << "ProcessUnparsedPart new_bulks.size=" << new_bulks.size()
-            << " total_parsed=" << total_parsed;
-
-  if (new_bulks.size() == 0) {
+  if (new_bulks.empty()) {
     if (!client_conn_->buffer()->recycle_locked()) {
       client_conn_->TryReadMoreQuery("redis_del_3");
     }
@@ -327,20 +297,13 @@ bool RedisDelCommand::ProcessUnparsedPart() {
   unparsed_bulks_ -= new_bulks.size();
 
   for(size_t i = 0; i < new_bulks.size(); ++i) {
-    assert(new_bulks[i].completed());
-  //if (i == new_bulks.size() - 1 && !new_bulks[i].completed()) {
-  //  ++unparsed_bulks_;// don't parse the last key if it's not complete
-  //  break;
-  //}
-    Endpoint ep = backend_locator()->Locate(
-                                new_bulks[i].payload_data(),
-                                new_bulks[i].payload_size(),
-                                ProtocolType::REDIS);
+    Endpoint ep = key_locator()->Locate(new_bulks[i].payload_data(),
+        new_bulks[i].payload_size(), ProtocolType::REDIS);
     PushSubquery(ep, new_bulks[i].raw_data(), new_bulks[i].present_size());
   }
 
-  buffer->update_processed_bytes(total_parsed);
-  buffer->update_parsed_bytes(total_parsed);
+  buffer->update_processed_bytes(parsed_bytes);
+  buffer->update_parsed_bytes(parsed_bytes);
   ActivateWaitingSubquery();
   return true;
 }
@@ -355,12 +318,12 @@ bool RedisDelCommand::ParseReply(std::shared_ptr<BackendConn> backend) {
     return false;
   }
 
-  const char * p = static_cast<const char *>(memchr(entry, '\n', unparsed));
+  auto p = static_cast<const char *>(memchr(entry, '\n', unparsed));
   if (p == nullptr) {
     return true;
   }
 
-  int del_count; // TODO : add into redis_protocol.h
+  int del_count;
   try {
     del_count = std::stoi(entry + 1);
   } catch (...) {

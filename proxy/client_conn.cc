@@ -17,12 +17,12 @@
 namespace yarmproxy {
 
 ClientConnection::ClientConnection(WorkerContext& context)
-    : socket_(context.io_service_)
+    : socket_(context.io_context_)
     , buffer_(new ReadBuffer(context.allocator_->Alloc(),
-                      context.allocator_->slab_size()))
+                      context.allocator_->buffer_size()))
     , context_(context)
-    , read_timer_(context.io_service_)
-    , write_timer_(context.io_service_) {
+    , read_timer_(context.io_context_)
+    , write_timer_(context.io_context_) {
   ++g_stats_.client_conns_;
   LOG_DEBUG << "client ctor. count=" << g_stats_.client_conns_;
 }
@@ -42,7 +42,8 @@ void ClientConnection::OnTimeout(const boost::system::error_code& ec,
                                  TimerType timer_type) {
   if (ec != boost::asio::error::operation_aborted) {
     // timer was not cancelled, take necessary action.
-    LOG_WARN << "client OnTimeout, timer=" << timer_type;
+    LOG_WARN << "client OnTimeout, timer="
+             << (timer_type == READ_TIMER ? "READ" : "WRITE");
     if (timer_type == READ_TIMER) {
       ++g_stats_.client_read_timeouts_;
     } else {
@@ -65,7 +66,9 @@ void ClientConnection::UpdateTimer(TimerType timer_type) {
       Config::Instance().socket_rw_timeout();
 
   timer.expires_after(std::chrono::milliseconds(timeout));
-  LOG_DEBUG << "client UpdateTimer " << timer_type << " timeout=" << timeout;
+  LOG_DEBUG << "client UpdateTimer "
+            << (timer_type == READ_TIMER ? "READ" : "WRITE")
+            << " timeout=" << timeout;
 
   std::weak_ptr<ClientConnection> wptr(shared_from_this());
   timer.async_wait([wptr, timer_type](const boost::system::error_code& ec) {
@@ -76,22 +79,12 @@ void ClientConnection::UpdateTimer(TimerType timer_type) {
 }
 
 void ClientConnection::StartRead() {
-  boost::system::error_code ec;
-  boost::asio::ip::tcp::no_delay nodelay(true);
-  socket_.set_option(nodelay, ec);
-
-  if (ec) {
-    LOG_WARN << "client StartRead set socket option error";
-    socket_.close();
-  } else {
-    LOG_INFO << "client " << this << " StartRead";
-    AsyncRead();
-  }
+  LOG_INFO << "client " << this << " StartRead";
+  AsyncRead();
 }
 
 void ClientConnection::TryReadMoreQuery(const char* caller) {
   LOG_DEBUG << "client TryReadMoreQuery caller=" << caller
-       << " buffer_lock=" << buffer_->recycle_lock_count()
        << " is_reading_query=" << is_reading_query_
        << " has_much_free_space=" << buffer_->has_much_free_space()
        << " free_space=" << buffer_->free_space_size();
@@ -106,8 +99,7 @@ void ClientConnection::AsyncRead() {
   buffer_->inc_recycle_lock();
 
   LOG_DEBUG << "client AsyncRead, buffer=" << buffer_
-            << " free_space=" << buffer_->free_space_size()
-            << " lock=" << buffer_->recycle_lock_count();
+            << " free_space=" << buffer_->free_space_size();
 
   UpdateTimer(READ_TIMER);
   socket_.async_read_some(boost::asio::buffer(
@@ -129,7 +121,7 @@ void ClientConnection::RotateReplyingCommand() {
 
     if (!active_cmd_queue_.back()->query_recv_complete()) {
       if (!buffer_->recycle_locked()) {
-        // TODO : reading next query might be blocked by previous
+        // reading next query might be blocked by previous
         // command's lock, so try to restart the reading here
         TryReadMoreQuery("client_conn_1");
       }
@@ -152,8 +144,7 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
       g_stats_.bytes_to_clients_ += bytes_transferred;
     }
     if (!error && bytes_transferred < bytes) {
-      client_conn->WriteReply(data + bytes_transferred,
-                              bytes - bytes_transferred, callback);
+      client_conn->WriteReply(data + bytes_transferred, bytes - bytes_transferred, callback);
     } else {
       client_conn->is_writing_reply_ = false;
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
@@ -166,10 +157,10 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
 }
 
 void ClientConnection::ProcessUnparsedQuery() {
-  // TODO : pipeline中多个请求的时序问题,即后面的command可能先
-  // 被执行. 参考 del_pipeline_1.sh
-  static const size_t PIPELINE_ACTIVE_LIMIT = 4; // TODO : config
-  while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
+  // TODO : pipeline中多个请求存在时序问题, 后面的command可能在另一个
+  //   连接中先被执行, test/redis/del_pipeline_1.sh 可重现该问题
+  static const size_t kPipelineActiveLimit = 16; // TODO : config it?
+  while(active_cmd_queue_.size() < kPipelineActiveLimit
         && buffer_->unparsed_received_bytes() > 0) {
     std::shared_ptr<Command> command;
     size_t parsed_bytes = Command::CreateCommand(shared_from_this(),
@@ -186,7 +177,6 @@ void ClientConnection::ProcessUnparsedQuery() {
     bool no_callback = command->StartWriteQuery(); // rename to StartWriteQuery
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
-    // TODO : check the precondition very carefully
     if (buffer_->parsed_unreceived_bytes() > 0 ||
         !command->query_parsing_complete()) {
       if (no_callback) {
@@ -208,7 +198,7 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
 
   if (error) {
     if (error == boost::asio::error::eof) {
-      // TODO : gracefully shutdown
+      // read-half shutdown
       LOG_DEBUG << "client HandleRead eof error, conn=" << this;
     } else {
       LOG_DEBUG << "client HandleRead error=" << error.message()
@@ -241,14 +231,13 @@ void ClientConnection::HandleRead(const boost::system::error_code& error,
   if (buffer_->parsed_unprocessed_bytes() > 0) {
     assert(back_cmd);
 
-    // TODO : split to StartWriteQuery()/WriteEarlierParsedQuery()
     bool no_callback = back_cmd->ContinueWriteQuery();
     buffer_->update_processed_bytes(buffer_->unprocessed_bytes());
 
     if (buffer_->parsed_unreceived_bytes() > 0) {
       // 这里不继续read, 而是在ContinueWriteQuery的回调函数里面才
       // 继续read (or read directly if ContinueWriteQuery has no
-      // callback). 理论上这并不是最佳方式.
+      // callback). 理论上这并并非最佳方式.
       if (no_callback) {
         TryReadMoreQuery("client_conn_4");
       }

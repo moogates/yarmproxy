@@ -12,22 +12,75 @@ yarmproxy(Yet Another Redis and Memcached PROXY) is a high performance redis/mem
 
 # Protocol Support
 ## Redis
+  (more to be supported...)
   set
-  mset(*non-atomic)
   get
   mget
 
+  get
+  getset
+  getrange
+  ttl
+  incr
+  incrby
+  incrbyfloat
+  decr
+  decrby
+  strlen
+
+  set
+  append
+  setrange
+  setnx
+  psetex
+  setex
+
+  mset(*non-atomic)
+  mget
+
+  del
+  exists
+  touch
+
+  yarmstats  // show the yarmproxy statistics
+
 ## Memcached
+  (more to be supported...)
+  get
+  gets
+
   set
   add
   replace
-  get
+  append
+  prepend
+  cas
 
+  delete
+  incr
+  decr
+  touch
 
+  yarmstats  // show the yarmproxy statistics
+
+# File Structure
+  - `proxy` the yarmproxy source code
+  - `unit` unit test
+  - `test` testing redis/memcached commands 
+  - `stress` a client for stress testing
+  - `benchmark` benchmarking origin_server(redis or memcached)/yarmproxy/nutcracker
 
 # Build
 ## Dependencies
-## boost-asio 1.56 or higher
+boost.asio (boost 1.56 or higher recommended)
 
+## Linux
+
+## MAX OSX
+
+## Windows
+
+# Contact
+  Send mail to moogates@163.com if you have any questions or found any bugs.
 
 

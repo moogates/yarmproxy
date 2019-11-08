@@ -28,7 +28,7 @@ private:
   void HandleAccept(std::shared_ptr<ClientConnection> conn, const boost::system::error_code& error);
 
 private:
-  boost::asio::io_service io_service_;
+  boost::asio::io_service io_context_;
   boost::asio::io_service::work work_;
   boost::asio::ip::tcp::acceptor acceptor_;
   std::string listen_addr_;

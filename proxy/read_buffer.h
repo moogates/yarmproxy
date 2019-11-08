@@ -11,18 +11,14 @@ private:
   char* data_;
   size_t buffer_size_;
 
-  size_t processed_offset_;
-  size_t received_offset_;
-  size_t parsed_offset_;
-  size_t recycle_lock_count_;
+  size_t processed_offset_   = 0;
+  size_t received_offset_    = 0;
+  size_t parsed_offset_      = 0;
+  size_t recycle_lock_count_ = 0;
 public:
   ReadBuffer(char* buffer, size_t buffer_size)
-               : data_(buffer)
-               , buffer_size_(buffer_size)
-               , processed_offset_(0)
-               , received_offset_(0)
-               , parsed_offset_(0)
-               , recycle_lock_count_(0) {
+      : data_(buffer)
+      , buffer_size_(buffer_size) {
   }
   ~ReadBuffer();
   char* data() {
@@ -30,12 +26,15 @@ public:
   }
 
   void Reset() {
-    received_offset_ = processed_offset_ = parsed_offset_ = 0;
+    processed_offset_   = 0;
+    received_offset_    = 0;
+    parsed_offset_      = 0;
     recycle_lock_count_ = 0;
   }
 
   bool has_much_free_space() {
-    return received_offset_ * 3 < buffer_size_ * 2; // there is still more than 1/3 buffer space free
+    // there is more than 1/3 free space
+    return received_offset_ * 3 < buffer_size_ * 2;
   }
 
   char* free_space_begin() {
@@ -57,9 +56,6 @@ public:
     parsed_offset_ += bytes;
   }
 
-  size_t recycle_lock_count() const { // TODO : for debug only
-    return recycle_lock_count_;
-  }
   bool recycle_locked() const;
   void inc_recycle_lock();
   void dec_recycle_lock();
@@ -67,12 +63,12 @@ public:
   const char* unprocessed_data() const {
     return data_ + processed_offset_;
   }
-  size_t unprocessed_bytes() const;  // 已经接收，且已经解析，但尚未处理的数据
+  size_t unprocessed_bytes() const;  // received, parsed, and unprocessed
 
   void update_processed_offset(size_t processed);
   void update_processed_bytes(size_t processes_bytes);
   void update_received_bytes(size_t received_bytes);
-  void push_reply_data(const char* data, size_t bytes);
+  void push_reply_data(const char* data, size_t bytes, bool parsed);
 
   void update_parsed_bytes(size_t parsed_bytes) {
     parsed_offset_ += parsed_bytes;
@@ -80,7 +76,7 @@ public:
   const char * unparsed_data() const {
     return data_ + parsed_offset_;
   }
-  size_t unparsed_bytes() const;  // 尚未解析的数据
+  size_t unparsed_bytes() const;  // unparsed bytes
 
   size_t parsed_unprocessed_bytes() const {
     assert(parsed_offset_ >= processed_offset_);

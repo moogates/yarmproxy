@@ -30,20 +30,24 @@ public:
   void ReadReply();
   void TryReadMoreReply();
 
-  void SetReplyData(const char* data, size_t bytes);
+  void SetReplyData(const char* data, size_t bytes, bool parsed = true);
 
-  void SetReadWriteCallback(const BackendQuerySentCallback& query_sent_callback,
-                            const BackendReplyReceivedCallback& reply_received_callback) {
+  void SetReadWriteCallback(
+      const BackendQuerySentCallback& query_sent_callback,
+      const BackendReplyReceivedCallback& reply_received_callback) {
     query_sent_callback_ = query_sent_callback;
     reply_received_callback_ = reply_received_callback;
   }
 private:
   void HandleWrite(const char * buf, const size_t bytes,
       const boost::system::error_code& error, size_t bytes_transferred);
-  void HandleRead(const boost::system::error_code& error, size_t bytes_transferred);
-  void HandleConnect(const char * buf, size_t bytes, const boost::system::error_code& error);
+  void HandleRead(const boost::system::error_code& error,
+      size_t bytes_transferred);
+  void HandleConnect(const char * buf, size_t bytes,
+      const boost::system::error_code& error);
 public:
   void Abort(ErrorCode ec);
+  void Close();
   void Reset();
   ReadBuffer* buffer() {
     return buffer_;
@@ -81,13 +85,14 @@ private:
   boost::asio::ip::tcp::socket socket_;
 
   BackendReplyReceivedCallback reply_received_callback_;
-  BackendQuerySentCallback query_sent_callback_; // TODO :rename
+  BackendQuerySentCallback query_sent_callback_;
 
-  bool is_reading_reply_    = false; // TODO : merge into a flag
-  bool has_read_some_reply_ = false;
-  bool reply_recv_complete_ = false;
+  // TODO : merge them into a flags var?
   bool no_recycle_          = false; // is it redundant with aborted_?
   bool aborted_             = false;
+  bool is_reading_reply_    = false;
+  bool has_read_some_reply_ = false;
+  bool reply_recv_complete_ = false;
 
   boost::asio::steady_timer write_timer_;
   bool write_timer_canceled_ = false;
