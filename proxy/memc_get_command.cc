@@ -35,8 +35,9 @@ MemcGetCommand::MemcGetCommand(std::shared_ptr<ClientConnection> client,
     if (it == subqueries_.end()) {
       client_conn_->buffer()->inc_recycle_lock();
 
-      auto query = new Subquery(backend_pool()->Allocate(ep));
-      it = subqueries_.emplace(ep, query).first;
+      std::shared_ptr<Subquery> subquery(
+          new Subquery(backend_pool()->Allocate(ep)));
+      it = subqueries_.emplace(ep, subquery).first;
 
       static const char prefix[] = "get";
       it->second->segments_.emplace_back(prefix, sizeof(prefix) - 1);
@@ -65,7 +66,6 @@ bool MemcGetCommand::StartWriteQuery() {
     backend->SetReadWriteCallback(
         WeakBind(&Command::OnWriteQueryFinished, backend),
         WeakBind(&Command::OnBackendReplyReceived, backend));
-    // backend->WriteQuery(query->query_data_.data(), query->query_data_.size());
     query->backend_->WriteQuery(query->segments_.front().first,
                                 query->segments_.front().second);
   }
@@ -74,7 +74,6 @@ bool MemcGetCommand::StartWriteQuery() {
 
 void MemcGetCommand::OnWriteQueryFinished(
     std::shared_ptr<BackendConn> backend, ErrorCode ec) {
-  // LOG_WARN << "RedisMsetCommand OnWriteQueryFinished begin.";
   if (ec != ErrorCode::E_SUCCESS) {
     if (ec == ErrorCode::E_CONNECT) {
       OnBackendRecoverableError(backend, ec);
@@ -82,7 +81,8 @@ void MemcGetCommand::OnWriteQueryFinished(
       client_conn_->buffer()->dec_recycle_lock();
     } else {
       client_conn_->Abort();
-      LOG_DEBUG << "MemcMgetCommand OnWriteQueryFinished error, ec=" << ErrorCodeString(ec);
+      LOG_DEBUG << "MemcMgetCommand OnWriteQueryFinished error, ec="
+                << ErrorCodeString(ec);
     }
     return;
   }
@@ -90,7 +90,7 @@ void MemcGetCommand::OnWriteQueryFinished(
   auto& query = subqueries_[backend->remote_endpoint()];
   query->segments_.pop_front();
   if (!query->segments_.empty()) {
-    LOG_DEBUG << "MemcMgetCommand WriteQuery left_segments=" << query->segments_.size();
+    LOG_DEBUG << "WriteQuery left_segments=" << query->segments_.size();
     query->backend_->WriteQuery(query->segments_.front().first,
                                 query->segments_.front().second);
     return;

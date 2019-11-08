@@ -40,7 +40,7 @@ void WorkerPool::StartDispatching() {
     WorkerContext& woker = workers_[i];
     std::atomic_bool& stopped(stopped_);
     std::thread th([&woker, &stopped, i]() {
-        SetThreadCpuAffinity(i % 4);
+        // SetThreadCpuAffinity(i % 4);
         while(!stopped) {
           try {
             woker.io_context_.run();

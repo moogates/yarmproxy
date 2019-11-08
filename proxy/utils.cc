@@ -50,7 +50,6 @@ void Welcome() {
 
 int SetThreadCpuAffinity(int cpu) {
 #ifdef _GNU_SOURCE
-  LOG_WARN << "SetThreadCpuAffinity enabled";
   cpu_set_t  mask;
   CPU_ZERO(&mask);
   CPU_SET(cpu, &mask);
@@ -58,7 +57,6 @@ int SetThreadCpuAffinity(int cpu) {
   pid_t tid = syscall(__NR_gettid); // or syscall(SYS_gettid);
   return sched_setaffinity(tid, sizeof(mask), &mask);
 #else
-  LOG_WARN << "SetThreadCpuAffinity disabled";
   return 1;
 #endif
 }

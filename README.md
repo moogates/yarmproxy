@@ -13,55 +13,44 @@ yarmproxy(Yet Another Redis and Memcached PROXY) is a high performance redis/mem
 # Protocol Support
 ## Redis
   (more to be supported...)
-  set
+  append
+  decr
+  decrby
+  del
+  exists
   get
-  mget
-
-  get
-  getset
   getrange
-  ttl
+  getset
   incr
   incrby
   incrbyfloat
-  decr
-  decrby
-  strlen
-
-  set
-  append
-  setrange
-  setnx
-  psetex
-  setex
-
-  mset(*non-atomic)
   mget
-
-  del
-  exists
+  mset(non-atomic)
+  psetex
+  set
+  setex
+  setnx
+  setrange
+  strlen
   touch
-
-  yarmstats  // show the yarmproxy statistics
+  ttl
+  yarmstats(show the yarmproxy statistics)
 
 ## Memcached
   (more to be supported...)
+  add
+  append
+  cas
+  decr
+  delete
   get
   gets
-
-  set
-  add
-  replace
-  append
-  prepend
-  cas
-
-  delete
   incr
-  decr
+  prepend
+  replace
+  set
   touch
-
-  yarmstats  // show the yarmproxy statistics
+  yarmstats(show the yarmproxy statistics)
 
 # File Structure
   - `proxy` the yarmproxy source code
@@ -74,13 +63,23 @@ yarmproxy(Yet Another Redis and Memcached PROXY) is a high performance redis/mem
 ## Dependencies
 boost.asio (boost 1.56 or higher recommended)
 
-## Linux
+Tested Enviroment
+## CentOS
+  CentOS Linux release 7.6.1810 (Core)
+  g++ 4.8.5 / clang++ 3.4.2
 
-## MAX OSX
+## Ubuntu
+
+## Mac OS X
+  Mac OS X 10.15
+  Apple clang version 11.0.0 (clang-1100.0.33.12)
 
 ## Windows
+  TODO
+  Microsoft Visual C++ 2017
 
 # Contact
   Send mail to moogates@163.com if you have any questions or found any bugs.
+  Thanks a lot for your time in advance.
 
 
