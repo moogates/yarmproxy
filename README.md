@@ -57,7 +57,7 @@ yarmproxy(Yet Another Redis/Memcached PROXY) is a high performance redis/memcach
 # File Structure
   - `proxy` the yarmproxy source code
   - `unit` unit test
-  - `test` testing redis/memcached commands 
+  - `test` testing redis/memcached commands
   - `stress` a client for stress testing
   - `benchmark` benchmarking origin_server(redis or memcached)/yarmproxy/nutcracker
 
@@ -65,28 +65,30 @@ yarmproxy(Yet Another Redis/Memcached PROXY) is a high performance redis/memcach
 ## Dependencies
 boost.asio (boost 1.56 or higher recommended)
 
-##Linux & Mac:
+##Linux & Mac
 ```
 $ cd proxy
 $ mkir build
-$ cd build 
+$ cd build
 $ cmake ..
 $ make
 ```
 
-##Windows:
+##Windows
 Supported soon...
 
 
 #Testing
  please cd into the `test` dir
 
-##Currently Tested Enviroment
+##Current Tested Enviroment
 ### CentOS
   CentOS Linux release 7.6.1810 (Core)
   g++ 4.8.5 / clang++ 3.4.2
 
 ### Ubuntu
+ Ubuntu 16.04.6 LTS
+ g++ 5.4.0
 
 ### Mac OS X
   Mac OS X 10.15
