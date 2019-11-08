@@ -11,6 +11,7 @@
 #include "backend_conn.h"
 #include "backend_pool.h"
 #include "client_conn.h"
+#include "config.h"
 #include "key_locator.h"
 #include "read_buffer.h"
 #include "worker_pool.h"
@@ -48,13 +49,101 @@ std::shared_ptr<KeyLocator> Command::key_locator() {
   return client_conn_->context().key_locator_;
 }
 
-// return : bytes parsed, 0 if no adequate data to parse
+enum class RedisCommandType {
+  RCT_BASIC,
+  RCT_SET,
+  RCT_MSET,
+  RCT_MGET,
+  RCT_DEL,
+  RCT_YARMSTATS,
+  RCT_UNSUPPORTED,
+};
+
+static RedisCommandType GetRedisCommandType(const redis::Bulk& bulk) {
+  static const std::map<std::string, RedisCommandType> kCommandNameType = {
+      {"get",         RedisCommandType::RCT_BASIC},
+      {"getset",      RedisCommandType::RCT_BASIC},
+      {"getrange",    RedisCommandType::RCT_BASIC},
+      {"ttl",         RedisCommandType::RCT_BASIC},
+      {"incr",        RedisCommandType::RCT_BASIC},
+      {"incrby",      RedisCommandType::RCT_BASIC},
+      {"incrbyfloat", RedisCommandType::RCT_BASIC},
+      {"decr",        RedisCommandType::RCT_BASIC},
+      {"decrby",      RedisCommandType::RCT_BASIC},
+      {"strlen",      RedisCommandType::RCT_BASIC},
+
+      {"set",      RedisCommandType::RCT_SET},
+      {"append",   RedisCommandType::RCT_SET},
+      {"setrange", RedisCommandType::RCT_SET},
+      {"setnx",    RedisCommandType::RCT_SET},
+      {"psetex",   RedisCommandType::RCT_SET},
+      {"setex",    RedisCommandType::RCT_SET},
+
+      {"mset",   RedisCommandType::RCT_MSET},
+
+      {"mget",   RedisCommandType::RCT_MGET},
+
+      {"del",      RedisCommandType::RCT_DEL},
+      {"exists",   RedisCommandType::RCT_DEL},
+      {"touch",    RedisCommandType::RCT_DEL},
+
+      {"yarmstats", RedisCommandType::RCT_YARMSTATS},
+    };
+
+  std::string cmd_name(bulk.payload_data(), bulk.payload_size());
+  auto it = kCommandNameType.find(cmd_name);
+  if (it != kCommandNameType.cend()) {
+    return it->second;
+  }
+  return RedisCommandType::RCT_UNSUPPORTED;
+}
+
+enum class MemcCommandType {
+  MCT_GET,
+  MCT_SET,
+  MCT_BASIC,
+  MCT_YARMSTATS,
+  MCT_UNSUPPORTED,
+};
+
+static MemcCommandType GetMemcCommandType(const char* cmd_line, size_t size) {
+  static const std::map<std::string, MemcCommandType> kCommandNameType = {
+      {"get",     MemcCommandType::MCT_GET},
+      {"gets",    MemcCommandType::MCT_GET},
+
+      {"set",     MemcCommandType::MCT_SET},
+      {"add",     MemcCommandType::MCT_SET},
+      {"replace", MemcCommandType::MCT_SET},
+      {"append",  MemcCommandType::MCT_SET},
+      {"prepend", MemcCommandType::MCT_SET},
+      {"cas",     MemcCommandType::MCT_SET},
+
+      {"delete",  MemcCommandType::MCT_BASIC},
+      {"incr",    MemcCommandType::MCT_BASIC},
+      {"decr",    MemcCommandType::MCT_BASIC},
+      {"touch",   MemcCommandType::MCT_BASIC},
+
+      {"yarmstats", MemcCommandType::MCT_YARMSTATS},
+    };
+
+  const char * p = static_cast<const char *>(memchr(cmd_line, ' ', size));
+  if (p == nullptr) {
+    p = cmd_line + size;
+  }
+  auto it = kCommandNameType.find(std::string(cmd_line, p - cmd_line));
+  if (it != kCommandNameType.cend()) {
+    return it->second;
+  }
+  return MemcCommandType::MCT_UNSUPPORTED;
+}
+
+// return : bytes parsed, 0 if no adquate data to parse
 size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
                            const char* buf, size_t size,
                            std::shared_ptr<Command>* command) {
   const char * p = static_cast<const char *>(memchr(buf, '\n', size));
   if (p == nullptr) {
-    if (size > 2048) {
+    if (size > Config::Instance().buffer_size() / 2) {
       std::string err_desc(*buf == '*' ? "-" : "");
       err_desc.append("ERR Too long unparsable data:[")
               .append(std::string(buf, size))
@@ -82,35 +171,20 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       return 0;
     }
 
-    // TODO : speed up hot command
-    if (ba[0].equals("get", sizeof("get") - 1) ||
-        ba[0].equals("getset", sizeof("getset") - 1) ||
-        ba[0].equals("getrange", sizeof("getrange") - 1) ||
-        ba[0].equals("ttl", sizeof("ttl") - 1) ||
-        ba[0].equals("incr", sizeof("incr") - 1) ||
-        ba[0].equals("incrby", sizeof("incrby") - 1) ||
-        ba[0].equals("incrbyfloat", sizeof("incrbyfloat") - 1) ||
-        ba[0].equals("decr", sizeof("decr") - 1) ||
-        ba[0].equals("decrby", sizeof("decrby") - 1) ||
-        ba[0].equals("strlen", sizeof("strlen") - 1)) {
+    switch(GetRedisCommandType(ba[0])) {
+    case RedisCommandType::RCT_BASIC:
       if (!ba.completed()) {
         return 0;
       }
       command->reset(new RedisBasicCommand(client, ba));
       return ba.total_size();
-    } else if (ba[0].equals("set", sizeof("set") - 1) ||
-        ba[0].equals("append", sizeof("append") - 1) ||
-        ba[0].equals("setrange", sizeof("setrange") - 1) ||
-        ba[0].equals("setnx", sizeof("setnx") - 1) ||
-        ba[0].equals("psetex", sizeof("psetex") - 1) ||
-        ba[0].equals("setex", sizeof("setex") - 1)) {
+    case RedisCommandType::RCT_SET:
       if (ba.present_bulks() < 2 || !ba[1].completed()) {
         return 0;
       }
       command->reset(new RedisSetCommand(client, ba));
       return ba.parsed_size();
-    } else if (ba[0].equals("mset", sizeof("mset") - 1)) {
-      // if (ba.present_bulks() < 2 || !ba[1].completed()) {
+    case RedisCommandType::RCT_MSET:
       if (ba.present_bulks() < 3) {
         return 0;
       }
@@ -120,15 +194,13 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       } else {
         return ba.parsed_size();
       }
-    } else if (ba[0].equals("mget", sizeof("mget") - 1)) {
+    case RedisCommandType::RCT_MGET:
       if (!ba.completed()) { // TODO : support incomplete mget bulk_array
         return 0;
       }
       command->reset(new RedisMgetCommand(client, ba));
       return ba.total_size();
-    } else if (ba[0].equals("del", sizeof("del") - 1) ||
-               ba[0].iequals("exists", sizeof("exists") - 1) ||
-               ba[0].iequals("touch", sizeof("touch") - 1)) {
+    case RedisCommandType::RCT_DEL:
       if (ba.present_bulks() < 2 || !ba[1].completed()) {
         return 0;
       }
@@ -138,18 +210,18 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       } else {
         return ba.parsed_size() - ba.back().total_size();
       }
-    } else if (ba[0].equals("yarmstats", sizeof("yarmstats") - 1)) {
+    case RedisCommandType::RCT_YARMSTATS:
       if (!ba.completed()) {
         return 0;
       }
       command->reset(new StatsCommand(client, ProtocolType::REDIS));
       return ba.total_size();
+    default:
+      command->reset(new ErrorCommand(client,
+            std::string("-ERR YarmProxy unsupported redis command:[") +
+                ba[0].to_string() + "]\r\n"));
+      return size;
     }
-
-    command->reset(new ErrorCommand(client,
-          std::string("-ERR YarmProxy unsupported redis directive:[") +
-              ba[0].to_string() + "]\r\n"));
-    return size;
   }
 
   {
@@ -158,20 +230,14 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
 
   // TODO : support memcached noreply mode
   size_t cmd_line_bytes = p - buf + 1;
-  if (strncmp(buf, "get ", sizeof("get ") - 1) == 0 ||
-      strncmp(buf, "gets ", sizeof("gets ") - 1) == 0) {
-    // TODO : strict protocol check
+  size_t body_bytes = 0;
+  switch(GetMemcCommandType(buf, cmd_line_bytes)) {
+  case MemcCommandType::MCT_GET:
     command->reset(new MemcGetCommand(client, buf, cmd_line_bytes));
     return cmd_line_bytes;
-  } else if (strncmp(buf, "set ", sizeof("set ") - 1) == 0 ||
-             strncmp(buf, "add ", sizeof("add ") - 1) == 0 ||
-             strncmp(buf, "replace ", sizeof("replace ") - 1) == 0 ||
-             strncmp(buf, "append ", sizeof("append ") - 1) == 0 ||
-             strncmp(buf, "prepend ", sizeof("prepend ") - 1) == 0 ||
-             strncmp(buf, "cas", sizeof("cas ") - 1) == 0) {
-    size_t body_bytes = 0;
+  case MemcCommandType::MCT_SET:
     command->reset(new MemcSetCommand(client, buf, cmd_line_bytes,
-                                           &body_bytes));
+                   &body_bytes));
     if (body_bytes <= 2) {
       command->reset(new ErrorCommand(client,
           std::string("ERR Protocol Error:[") +
@@ -179,25 +245,20 @@ size_t Command::CreateCommand(std::shared_ptr<ClientConnection> client,
       return cmd_line_bytes;
     }
     return cmd_line_bytes + body_bytes;
-  } else if (strncmp(buf, "delete ", sizeof("delete ") - 1) == 0 ||
-      strncmp(buf, "incr ", sizeof("incr ") - 1) == 0 ||
-      strncmp(buf, "decr ", sizeof("decr ") - 1) == 0 ||
-      strncmp(buf, "incr ", sizeof("incr ") - 1) == 0 ||
-      strncmp(buf, "touch ", sizeof("touch ") - 1) == 0) {
-    // TODO : strict protocol check
+  case MemcCommandType::MCT_BASIC:
     command->reset(new MemcBasicCommand(client, buf));
     return cmd_line_bytes;
-  } else if (strncmp(buf, "yarmstats\r", sizeof("yarmstats\r") - 1) == 0) {
+  case MemcCommandType::MCT_YARMSTATS:
     command->reset(new StatsCommand(client, ProtocolType::MEMCACHED));
     return cmd_line_bytes;
+  default:
+    command->reset(new ErrorCommand(client,
+          std::string("YarmProxy Unsupported Request [") +
+            std::string(buf,cmd_line_bytes) + "]\r\n"));
+    LOG_WARN << "ErrorCommand(" << std::string(buf, cmd_line_bytes) << ") len="
+             << cmd_line_bytes << " client_conn=" << client;
+    return size;
   }
-
-  command->reset(new ErrorCommand(client,
-        std::string("YarmProxy Unsupported Request [") +
-          std::string(buf,cmd_line_bytes) + "]\r\n"));
-  LOG_WARN << "ErrorCommand(" << std::string(buf, cmd_line_bytes) << ") len="
-           << cmd_line_bytes << " client_conn=" << client;
-  return size;
 }
 
 const std::string& Command::MemcErrorReply(ErrorCode ec) {
