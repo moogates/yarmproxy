@@ -63,7 +63,18 @@ yarmproxy(Yet Another Redis and Memcached PROXY) is a high performance redis/mem
 ## Dependencies
 boost.asio (boost 1.56 or higher recommended)
 
-Tested Enviroment
+##Linux & Mac:
+`
+$ cd proxy
+$ mkir build
+$ cd build 
+$ cmake ..
+$ make
+`
+##Windows:
+Supported soon...
+
+#Tested Enviroment
 ## CentOS
   CentOS Linux release 7.6.1810 (Core)
   g++ 4.8.5 / clang++ 3.4.2
@@ -75,7 +86,7 @@ Tested Enviroment
   Apple clang version 11.0.0 (clang-1100.0.33.12)
 
 ## Windows
-  TODO
+  Supported soon...
   Microsoft Visual C++ 2017
 
 # Contact
