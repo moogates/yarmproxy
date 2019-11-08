@@ -1,14 +1,16 @@
 # yarmproxy
-yarmproxy(Yet Another Redis and Memcached PROXY) is a high performance redis/memcached proxy.
+yarmproxy(Yet Another Redis/Memcached PROXY) is a high performance redis/memcached proxy.
 
 
 # Features
-0. zero copy
-1. multi-thread workers & lock-free
-2. pipelined request processing
-3. parallel multi-read/multi-write
-4. automatic failover
-5. portable to windows MSVC++
+- very light-weighted and fast
+- user space zero copy
+- multi-thread workers & lock-free
+- pipelined request processing
+- parallel multi-read/multi-write
+- automatic failover and best-effort return
+- supported protocols: redis, memcached-text, and memcahced-binary
+- portable to windows Linux/Mac/Windows
 
 # Protocol Support
 ## Redis
@@ -64,33 +66,41 @@ yarmproxy(Yet Another Redis and Memcached PROXY) is a high performance redis/mem
 boost.asio (boost 1.56 or higher recommended)
 
 ##Linux & Mac:
-`
+```
 $ cd proxy
 $ mkir build
 $ cd build 
 $ cmake ..
 $ make
-`
+```
+
 ##Windows:
 Supported soon...
 
-#Tested Enviroment
-## CentOS
+
+#Testing
+ please cd into the `test` dir
+
+##Currently Tested Enviroment
+### CentOS
   CentOS Linux release 7.6.1810 (Core)
   g++ 4.8.5 / clang++ 3.4.2
 
-## Ubuntu
+### Ubuntu
 
-## Mac OS X
+### Mac OS X
   Mac OS X 10.15
   Apple clang version 11.0.0 (clang-1100.0.33.12)
 
-## Windows
+### Windows
   Supported soon...
   Microsoft Visual C++ 2017
 
+#Benchmarking
+ plz cd into the `benchmark` dir
+
 # Contact
-  Send mail to moogates@163.com if you have any questions or found any bugs.
+  Send mail to `moogates@163.com` if you have any questions or found any bugs.
   Thanks a lot for your time in advance.
 
 
