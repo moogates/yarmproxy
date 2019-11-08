@@ -17,7 +17,6 @@ MemcSetCommand::MemcSetCommand(std::shared_ptr<ClientConnection> client,
 }
 
 size_t MemcSetCommand::ParseQuery(const char* cmd_data, size_t cmd_len) {
-  // TODO : strict check
   // <command name> <key> <flags> <exptime> <bytes>\r\n
   const char *p = cmd_data;
   while(*(p++) != ' ');

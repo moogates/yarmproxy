@@ -40,7 +40,6 @@ public:
 public:
   void WriteReply(const char* data, size_t bytes, const WriteReplyCallback& cb);
   bool IsFirstCommand(std::shared_ptr<Command> cmd) {
-    // TODO : 能否作为一个标记，放在command里面？
     return cmd == active_cmd_queue_.front();
   }
   void RotateReplyingCommand();

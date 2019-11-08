@@ -29,7 +29,7 @@ BackendConnPool* WorkerContext::backend_conn_pool() {
 void WorkerPool::OnLocatorUpdated(std::shared_ptr<KeyLocator> locator) {
   for(size_t i = 0; i < concurrency_; ++i) {
     WorkerContext& worker = workers_[i];
-    worker.io_context_.post([&worker, locator]() { // TODO: post() deprecated, use boost::asio::post()
+    worker.io_context_.post([&worker, locator]() {
           worker.key_locator_ = locator;
         });
   }
@@ -43,7 +43,7 @@ void WorkerPool::StartDispatching() {
         SetThreadCpuAffinity(i % 4);
         while(!stopped) {
           try {
-            woker.io_context_.run(); // TODO : deprecated
+            woker.io_context_.run();
           } catch (std::exception& e) {
             LOG_ERROR << "WorkerThread " << i
                       << " io_context.run error " << e.what();

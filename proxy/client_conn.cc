@@ -144,8 +144,7 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
       g_stats_.bytes_to_clients_ += bytes_transferred;
     }
     if (!error && bytes_transferred < bytes) {
-      client_conn->WriteReply(data + bytes_transferred,
-                              bytes - bytes_transferred, callback);
+      client_conn->WriteReply(data + bytes_transferred, bytes - bytes_transferred, callback);
     } else {
       client_conn->is_writing_reply_ = false;
       callback(error ? ErrorCode::E_WRITE_REPLY : ErrorCode::E_SUCCESS);
@@ -160,8 +159,8 @@ void ClientConnection::WriteReply(const char* data, size_t bytes,
 void ClientConnection::ProcessUnparsedQuery() {
   // TODO : pipeline中多个请求存在时序问题, 后面的command可能在另一个
   //   连接中先被执行, test/redis/del_pipeline_1.sh 可重现该问题
-  static const size_t PIPELINE_ACTIVE_LIMIT = 8; // TODO : config
-  while(active_cmd_queue_.size() < PIPELINE_ACTIVE_LIMIT
+  static const size_t kPipelineActiveLimit = 16; // TODO : config it?
+  while(active_cmd_queue_.size() < kPipelineActiveLimit
         && buffer_->unparsed_received_bytes() > 0) {
     std::shared_ptr<Command> command;
     size_t parsed_bytes = Command::CreateCommand(shared_from_this(),

@@ -189,7 +189,7 @@ int YarmClient::NonblockingWrite() {
     }
     write_buf_begin_ += size_t(ret);
     total_bytes_sent_ += ret;
-    std::cerr << "Write ok, bytes=" << ret << " total=" << total_bytes_sent_ << std::endl;
+    // std::cerr << "Write ok, bytes=" << ret << " total=" << total_bytes_sent_ << std::endl;
   }
   return 0;
 }

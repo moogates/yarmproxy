@@ -15,8 +15,8 @@ class WorkerContext {
 public:
   WorkerContext();
   std::thread thread_;
-  boost::asio::io_context io_context_;
-  boost::asio::io_context::work work_;
+  boost::asio::io_service io_context_; // still use io_service for better compatibility
+  boost::asio::io_service::work work_;
   std::shared_ptr<KeyLocator> key_locator_;
   BackendConnPool* backend_conn_pool();
 private:
@@ -32,6 +32,9 @@ public:
       , workers_(new WorkerContext[concurrency])
       , stopped_(false) {
   }
+  ~WorkerPool() {
+    delete []workers_;
+  }
 
   void StartDispatching();
   void StopDispatching();
@@ -42,7 +45,7 @@ public:
   }
 private:
   size_t concurrency_;
-  WorkerContext* workers_; // TODO : use std::unique_ptr
+  WorkerContext* workers_;
 
   std::atomic_bool stopped_;
   size_t next_worker_ = 0;

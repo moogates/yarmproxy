@@ -13,7 +13,7 @@ for body_size in 50; do
     body_size=$((10000+$round*40000+$RANDOM%20000))
     $MARSHAL_SET key101 $body_size >> memcached_set_pipeline_req.tmp
   done
-  echo round=$round, cmd_count=$cmd_count
+  # round=$round, cmd_count=$cmd_count
 
   color=$((31+round%2))
   echo "Benchmarking 'memcached set' command, body_size $body_size"
@@ -23,7 +23,7 @@ for body_size in 50; do
     port=`echo $server | awk '{print $2}'`
 
     printf "\033[${color}m - Running against $name(port=$port) ... \033[0m"
-    time for id in `seq 1 100`; do echo $id; cat memcached_set_pipeline_req.tmp | $YARMNC 127.0.0.1 $port > /dev/null 2>&1; done
+    time for id in `seq 1 100`; do cat memcached_set_pipeline_req.tmp | $YARMNC 127.0.0.1 $port > /dev/null 2>&1; done
   done
   round=$((round+1))
   echo

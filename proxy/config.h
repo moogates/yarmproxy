@@ -23,6 +23,9 @@ public:
   bool daemonize() const {
     return daemonize_;
   }
+  int backlog() const {
+    return backlog_;
+  }
   int worker_threads() const {
     return worker_threads_;
   }
@@ -66,6 +69,9 @@ public:
   bool worker_cpu_affinity() const {
     return worker_cpu_affinity_;
   }
+  size_t worker_max_idle_backends() const {
+    return worker_max_idle_backends_;
+  }
 
   int client_idle_timeout() const {
     return client_idle_timeout_;
@@ -92,6 +98,7 @@ private:
 
   std::string listen_ = "127.0.0.1:11311";
   bool daemonize_ = false;
+  int backlog_ = 1024;
   int worker_threads_ = 0;
   int max_namespace_length_ = 4;
 
@@ -102,7 +109,7 @@ private:
   int socket_rw_timeout_   = 500;   // 500 ms
 
   // per worker config
-  int worker_max_idle_backends_  = 64;
+  size_t worker_max_idle_backends_  = 64;
   size_t buffer_size_            = 4096;
   size_t reserved_buffer_space_  = 0;
   bool worker_cpu_affinity_      = false;

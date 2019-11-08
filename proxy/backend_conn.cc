@@ -100,7 +100,7 @@ void BackendConn::TryReadMoreReply() {
 void BackendConn::WriteQuery(const char* data, size_t bytes) {
   if (aborted_) {
     std::weak_ptr<BackendConn> wptr(shared_from_this());
-    context_.io_context_.post([wptr]() { // TODO : deprecated
+    context_.io_context_.post([wptr]() {
       if (auto ptr = wptr.lock()) {
         ptr->query_sent_callback_(ErrorCode::E_WRITE_QUERY);
       }

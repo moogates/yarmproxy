@@ -1,6 +1,7 @@
 #include "backend_pool.h"
 
 #include "backend_conn.h"
+#include "config.h"
 #include "logging.h"
 
 namespace yarmproxy {
@@ -57,10 +58,8 @@ void BackendConnPool::Release(std::shared_ptr<BackendConn> backend) {
     conn_map_[ep].push(backend);
     LOG_DEBUG << "BackendConnPool::Release ok, backend=" << backend << " ep=" << ep << " pool_size=1";
   } else {
-    const static size_t kMaxConnPerEndpoint = 64;
-    if (it->second.size() >= kMaxConnPerEndpoint){
-      // TODO : should warn
-      LOG_DEBUG << "BackendConnPool::Release overflow, backend=" << backend
+    if (it->second.size() >= Config::Instance().worker_max_idle_backends()){
+      LOG_WARN << "BackendConnPool::Release overflow, backend=" << backend
                << " ep=" << ep << " destroyed, pool_size=" << it->second.size();
       backend->Close();
     } else {

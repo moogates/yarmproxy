@@ -12,7 +12,7 @@ Allocator::Allocator(int buffer_size, int reserved_space_size)
   if (reserved_space_size == 0) {
     reserved_space_ = nullptr;
   } else {
-    reserved_space_ = new char[reserved_space_size]; // TODO : 内存位置对齐
+    reserved_space_ = new char[reserved_space_size]; // TODO : page allignment
     for(auto p = reserved_space_; p < reserved_space_ + reserved_space_size;
         p += buffer_size) {
       free_slabs_.insert(p);
@@ -21,14 +21,12 @@ Allocator::Allocator(int buffer_size, int reserved_space_size)
 }
 
 char* Allocator::Alloc() {
-  // return new char[buffer_size_];  // TODO : Why pre-allocated chunk slower than malloc()? locality?
   if (free_slabs_.empty()) {
-    LOG_INFO << "Allocator::Alloc no free slab";
     return new char[buffer_size_];
   } else {
     char* slab = *(free_slabs_.begin());
     free_slabs_.erase(free_slabs_.begin());
-    LOG_INFO << "Allocator::Alloc free_count=" << free_slabs_.size()
+    LOG_DEBUG << "Allocator::Alloc free_count=" << free_slabs_.size()
              << " allocated=" << (void*)slab;
     return slab;
   }

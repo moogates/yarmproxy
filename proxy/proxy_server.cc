@@ -39,7 +39,7 @@ ProxyServer::~ProxyServer() {
 }
 
 SignalHandler ProxyServer::WrapThreadSafeHandler(std::function<void()> handler) {
-  boost::asio::io_context& ios(io_context_);
+  boost::asio::io_service& ios(io_context_);
   return [&ios, handler](int) {
     ios.post(handler);
   };
@@ -65,8 +65,7 @@ void ProxyServer::Run() {
   acceptor_.bind(endpoint);
 
   // boost::system::error_code ec;
-  static const int BACKLOG = 1024; // TODO : config
-  acceptor_.listen(BACKLOG, ec);
+  acceptor_.listen(Config::Instance().backlog(), ec);
   if (ec) {
     LOG_ERROR << "ProxyServer listen error " << ec.message();
     return;
@@ -102,7 +101,7 @@ void ProxyServer::Run() {
 
   while(!stopped_) {
     try {
-      io_context_.run(); // TODO : deprecated
+      io_context_.run();
       LOG_WARN << "ProxyServer io_context stopped.";
     } catch (std::exception& e) {
       LOG_ERROR << "ProxyServer io_context.run error:" << e.what();

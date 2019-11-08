@@ -2,8 +2,7 @@ TODO : argv / config file
 TODO : idle client-conn timeout & heartbeat?
 TODO : max backend conn resource limit
 TODO : uniform public / proctected / private
-
-bug : crash on MAC if buffer size 128k 
+TODO : support memcached binary
 
 inspecting and compare hash funcions
 
@@ -24,11 +23,11 @@ TODO : benchmarking client
 TODO : benchmarking, vs. nutcracker
 
 potential bug:
-TODO : for get8.sh, why memcached reply much slower on mac than on ubuntu?
-TODO : 9.27 跑了一晚上，redis返回错误提示：-ERR max number of clients reached
+1. for get8.sh, why memcached reply much slower on mac than on ubuntu?
+2. crash on MAC if buffer size is 128k?
 
 compiling
-TODO : ./configure
+TODO : add ./configure
 TODO : cross-platform support
 TODO : supporting Windows
 

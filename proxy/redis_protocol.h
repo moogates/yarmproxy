@@ -27,7 +27,6 @@ public:
   // == 0 -> no ready
   // < 0  -> error
 
-  // TODO : 先检查格式正确性
   Bulk(const char* data, size_t bytes)
       : raw_data_(data) {
     if (bytes < 4) {
@@ -215,7 +214,9 @@ public:
       parsed_size_ = 0;
       return;
     }
-    if (p == data + 1 || p[0] != '\r' || p[1] != '\n') { // TODO : is strict check required here?
+
+    // TODO : does strict check required here?
+    if (p == data + 1 || p[0] != '\r' || p[1] != '\n') {
       parsed_size_ = SIZE_PARSE_ERROR;
       return;
     }
