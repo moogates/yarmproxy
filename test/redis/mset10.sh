@@ -5,16 +5,13 @@ if [ $# -gt 0 ]; then
   YARMPROXY_PORT=$1
 fi
 
-gunzip -c ./mset10.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | tee mset10.tmp
-
 expected="+OK"
-res=$(cat mset10.tmp | tr -d '\r\n')
+res=$(gunzip -c ./mset10.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT | tr -d '\r\n')
 
-if [ $res == $expected ]; then
-  echo -e "\033[32mSuccess \033[0m"
-  exit 0
-else
-  echo -e "\033[33mFail \033[0m"
+if [ $res != $expected ]; then
+  echo -e "\033[33mFail $res.\033[0m"
   exit 1
+else
+  echo -e "\033[32mPass $res.\033[0m"
 fi
 

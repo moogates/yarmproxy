@@ -1,5 +1,6 @@
 #include "command.h"
 
+#include <algorithm>
 #include <vector>
 #include <functional>
 
@@ -91,6 +92,7 @@ static RedisCommandType GetRedisCommandType(const redis::Bulk& bulk) {
     };
 
   std::string cmd_name(bulk.payload_data(), bulk.payload_size());
+  std::transform(cmd_name.begin(), cmd_name.end(), cmd_name.begin(), tolower);
   auto it = kCommandNameType.find(cmd_name);
   if (it != kCommandNameType.cend()) {
     return it->second;

@@ -1,19 +1,13 @@
-./marshal_set key1 1000 | nc 127.0.0.1 11311 > /dev/null
+./marshal_set key1 1000 | ../yarmnc 127.0.0.1 11311 > /dev/null
 
 query="*2\r\n\$3\r\ndel\r\n\$4\r\nkey1\r\n"
-#printf "$query" | nc 127.0.0.1 6379
-printf "$query" | nc 127.0.0.1 11311 > del1.tmp
-
-cat del1.tmp
-
+res=$(printf "$query" | ../yarmnc 127.0.0.1 11311 | tr -d '\r\n')
 expected=":1"
-res=$(cat del1.tmp | tr -d '\r\n')
 
-if [ $res == $expected ]; then
-  echo -e "\033[32mPass.\033[0m"
-  exit 0
-else
-  echo -e "\033[33mFail.\033[0m"
+if [ $res != $expected ]; then
+  echo -e "\033[33mFail $res.\033[0m"
   exit 1
+else
+  echo -e "\033[32mPass $res.\033[0m"
 fi
 

@@ -1,8 +1,8 @@
 # yarmproxy
-yarmproxy(Yet Another Redis/Memcached PROXY) is a light-weighted high performance redis/memcached proxy.
+yarmproxy(Yet Another Redis/Memcached PROXY) is a light-weight high performance redis/memcached proxy.
 
 # Features
-- very light-weighted and fast
+- very light-weight and fast
 - user space zero copy
 - multi-thread workers & lock-free
 - pipelined request processing
@@ -26,7 +26,7 @@ yarmproxy(Yet Another Redis/Memcached PROXY) is a light-weighted high performanc
   - incrby  
   - incrbyfloat  
   - mget  
-  - mset(non-atomic)  
+  - mset (non-atomic)  
   - psetex  
   - set  
   - setex  
@@ -81,6 +81,10 @@ $ make
 To be supported soon...  
     
 # Testing  
+
+```
+$ cd test && make && make test
+```
 Please cd into the `test` dir for more details
   
 ### Current Tested Enviroment  

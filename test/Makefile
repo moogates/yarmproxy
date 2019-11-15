@@ -3,8 +3,6 @@ CXX = g++
 CXXFLAGS = -I/usr/local/include -Wall -Wextra -std=c++11
 
 all: yarmnc slow_server sink_server
-	cd redis && make
-	cd memcached && make
 
 yarmnc : yarmnc.cc
 	$(CXX) $< -o $@ $(CXXFLAGS) $(LDFLAGS)
@@ -16,8 +14,8 @@ sink_server : sink_server.cc
 	$(CXX) $< -o $@ $(CXXFLAGS) $(LDFLAGS) -lboost_system -lpthread
 
 test : yarmnc
-	cd memcached && ./memcached_all.sh
-	cd redis && ./redis_all.sh
+	cd redis && make && make test
+	cd memcached && make && make test
 
 clean:
 	rm -fv yarmnc slow_server sink_server

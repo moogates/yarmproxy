@@ -6,8 +6,7 @@ if [ $# -gt 0 ]; then
 fi
 
 gunzip -c ./set_pipeline_1.data.gz | ../yarmnc 127.0.0.1 $YARMPROXY_PORT > set_pipeline_1.tmp
-
-cat set_pipeline_1.tmp
+#cat set_pipeline_1.tmp
 
 expected=6
 res=$(cat set_pipeline_1.tmp | wc -l | awk '{print $1}')

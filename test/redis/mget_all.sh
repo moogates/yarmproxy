@@ -5,12 +5,12 @@ if [ $# -gt 0 ]; then
   YARMPROXY_PORT=$1
 fi
 
-for id in `seq 1 4`; do
-  echo -e "\r\n./mget${id}.sh"
-  ./mget${id}.sh $YARMPROXY_PORT
-done
-
-for id in `seq 1 3`; do
-  echo "./mget_pipeline_${id}.sh"
-  ./mget_pipeline_${id}.sh $YARMPROXY_PORT
+for script in mget1.sh mget2.sh mget3.sh mget4.sh mget_pipeline_1.sh mget_pipeline_2.sh mget_pipeline_3.sh ; do
+  echo -e "./$script $YARMPROXY_PORT"
+  ./$script $YARMPROXY_PORT
+  if [ $? -ne 0 ]; then
+    echo "test fail on ./$script"
+    exit 1
+  fi
+  echo
 done

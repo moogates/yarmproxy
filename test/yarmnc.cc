@@ -94,9 +94,9 @@ YarmClient::~YarmClient() {
 #endif
   }
 
-  std::cerr << "total_bytes_input = " << total_bytes_input_ << std::endl;
-  std::cerr << "total_bytes_sent  = " << total_bytes_sent_ << std::endl;
-  std::cerr << "total_bytes_recv  = " << total_bytes_recv_ << std::endl;
+//std::cerr << "total_bytes_input = " << total_bytes_input_ << std::endl;
+//std::cerr << "total_bytes_sent  = " << total_bytes_sent_ << std::endl;
+//std::cerr << "total_bytes_recv  = " << total_bytes_recv_ << std::endl;
 }
 
 /** Returns true on success, or false if there was an error */
@@ -162,7 +162,7 @@ int YarmClient::Connect() {
   if (connect(sock_, (sockaddr *)&server , sizeof(server)) < 0) {
     if (errno == EINPROGRESS  || errno == EAGAIN || // TODO : recheck it
         errno == EWOULDBLOCK) {
-      std::cerr << "Connecting " << host_ << ":" << port_ << std::endl;
+      // std::cerr << "Connecting " << host_ << ":" << port_ << std::endl;
       return 1;
     }
     std::cerr << "Connect " << host_ << ":" << port_ << " failed" << std::endl;
@@ -270,7 +270,7 @@ int YarmClient::Run() {
 
     if (write_finished() && !shutdown_write_) {
       write_complete_tp = sw.elapsed<stopwatch::mus>();
-      std::cerr << "Send data finished." << std::endl;
+      // std::cerr << "Send data finished." << std::endl;
       shutdown(sock_, SHUT_WR);
       shutdown_write_ = true;
     }
@@ -280,10 +280,10 @@ int YarmClient::Run() {
   //     << " write_complete=" << write_complete_tp
   //     << " all_complete=" << all_complete_tp
   //     << std::endl << "[";
-  for(const auto& tp : writtalbe_tps) {
-    std::cerr << " " << tp;
-  }
-  std::cerr << "]" << std::endl;
+  // for(const auto& tp : writtalbe_tps) {
+  //   std::cerr << " " << tp;
+  // }
+  // std::cerr << "]" << std::endl;
   return 0;
 }
 
@@ -294,7 +294,7 @@ int YarmClient::NonblockingRead() {
       total_bytes_recv_ += ret;
       data_handler_(read_buf_, ret);
     } else if (ret == 0) {
-      std::cerr << "Recv data finished." << std::endl;
+      // std::cerr << "Recv data finished." << std::endl;
       return -1;
     } else {
       if (errno == EAGAIN || errno == EINPROGRESS ||

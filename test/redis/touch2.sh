@@ -1,11 +1,11 @@
 for id in `seq 1 9`; do
   key=key$id
-  ./marshal_set $key 1000 | nc 127.0.0.1 11311 > /dev/null
+  ./marshal_set $key 1000 | ../yarmnc 127.0.0.1 11311 > /dev/null
 done
 
 query="*10\r\n\$5\r\ntouch\r\n\$4\r\nkey9\r\n\$4\r\nkey8\r\n\$4\r\nkey7\r\n\$4\r\nkey6\r\n\$4\r\nkey5\r\n\$4\r\nkey4\r\n\$4\r\nkey3\r\n\$4\r\nkey2\r\n\$4\r\nkey1\r\n"
-#printf "$query" | nc 127.0.0.1 6379
-printf "$query" | nc 127.0.0.1 11311 > exists2.tmp
+#printf "$query" | ../yarmnc 127.0.0.1 6379
+printf "$query" | ../yarmnc 127.0.0.1 11311 > exists2.tmp
 
 cat exists2.tmp
 
