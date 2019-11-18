@@ -9,8 +9,8 @@ expected=":90"
 res=$(gunzip -c  del10.data.gz | ../yarmnc 127.0.0.1 11311 | tr -d '\r\n')
 
 if [ $res != $expected ]; then
-  echo -e "\033[33mFail $res.\033[0m"
+  printf "\033[33mFail $res.\033[0m\r\n"
   exit 1
 else
-  echo -e "\033[32mPass $res.\033[0m"
+  printf "\033[32mPass $res.\033[0m\r\n"
 fi

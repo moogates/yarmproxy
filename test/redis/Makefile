@@ -10,4 +10,4 @@ test : all
 	gcc $< -o $@ -std=c99
 
 clean:
-	rm -fv $(EXES)
+	rm -f $(EXES) *.tmp

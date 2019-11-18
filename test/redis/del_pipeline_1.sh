@@ -13,10 +13,10 @@ expected=$(cat del_pipeline_1.data.tmp | grep "^*" | wc -l | awk '{print $1}')
 res=$(cat del_pipeline_1.tmp | wc -l | awk '{print $1}')
 
 if [ $res -eq $expected ]; then
-  echo -e "\033[32mPass $res/$expected.\033[0m"
+  printf "\033[32mPass $res/$expected.\033[0m\r\n"
   exit 0
 else
-  echo -e "\033[33mFail $res/$expected.\033[0m"
+  printf "\033[33mFail $res/$expected.\033[0m\r\n"
   exit 1
 fi
 

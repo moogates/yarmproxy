@@ -1,12 +1,12 @@
 query="*3\r\n\$6\r\nxxxset\r\n\$4\r\nkey1\r\n\$6\r\nvalue1\r\n"
-printf "$query" | nc 127.0.0.1 11311
-exit
 
-query="*4\r\n\$3\r\nset\r\n\$4\r\nkey1\r\n\$6\r\nvalue1\r\n\$2\r\nNX\r\n"
-printf "$query" | nc 127.0.0.1 11311
+expected="-ERR YarmProxy unsupported redis command:[xxxset]"
+res=$(printf "$query" | ../yarmnc 127.0.0.1 11311 | tr -d '\r\n')
 
-query="*5\r\n\$3\r\nset\r\n\$4\r\nkey1\r\n\$6\r\nvalue1\r\n\$2\r\nEX\r\n\$5\r\n86400\r\n"
-printf "$query" | nc 127.0.0.1 11311
+if [ "$res" == "$expected" ]; then
+  printf "\033[32mPass \"$res\".\033[0m\r\n"
+else
+  printf "\033[33mFail \"$res\".\033[0m\r\n"
+  exit 1
+fi
 
-query="*6\r\n\$3\r\nset\r\n\$4\r\nkey1\r\n\$6\r\nvalue1\r\n\$2\r\nNX\r\n\$2\r\nEX\r\n\$5\r\n86400\r\n"
-printf "$query" | nc 127.0.0.1 11311

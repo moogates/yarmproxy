@@ -1,17 +1,23 @@
-./marshal_set key1 1000 | ../yarmnc 127.0.0.1 11311 > /dev/null
-
+./marshal_del key 1 | ../yarmnc 127.0.0.1 11311 > /dev/null
 query="*2\r\n\$5\r\ntouch\r\n\$4\r\nkey1\r\n"
-#printf "$query" | ../yarmnc 127.0.0.1 6379
-printf "$query" | ../yarmnc 127.0.0.1 11311 | tee exists1.tmp
+expected=":0"
+res=$(printf "$query" | ../yarmnc 127.0.0.1 11311 | tr -d '\r\n')
 
-expected=":1"
-res=$(cat exists1.tmp | tr -d '\r\n')
-
-if [ $res == $expected ]; then
-  echo -e "\033[32mPass.\033[0m"
-  exit 0
-else
+if [ $res != $expected ]; then
   echo -e "\033[33mFail.\033[0m"
   exit 1
 fi
 
+
+./marshal_set key1 1000 | ../yarmnc 127.0.0.1 11311 > /dev/null
+
+query="*2\r\n\$5\r\ntouch\r\n\$4\r\nkey1\r\n"
+expected=":1"
+res=$(printf "$query" | ../yarmnc 127.0.0.1 11311 | tr -d '\r\n')
+
+if [ $res != $expected ]; then
+  echo -e "\033[33mFail.\033[0m"
+  exit 1
+fi
+
+echo -e "\033[32mPass.\033[0m"

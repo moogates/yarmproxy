@@ -6,12 +6,12 @@ done
 echo "Done."
 
 expected=":90"
-res=$(gunzip -c del8.data.gz | ../yarmnc 127.0.0.1 11311 | cat del8.tmp | tr -d '\r\n')
+res=$(gunzip -c del8.data.gz | ../yarmnc 127.0.0.1 11311 | tr -d '\r\n')
 
-if [ $res != $expected ]; then
-  echo -e "\033[33mFail $res.\033[0m"
-  exit 1
+if [ $res == $expected ]; then
+  printf "\033[32mPass $res.\033[0m\r\n"
 else
-  echo -e "\033[32mPass $res.\033[0m"
+  printf "\033[33mFail $res.\033[0m\r\n"
+  exit 1
 fi
 

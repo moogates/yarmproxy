@@ -6,7 +6,7 @@ if [ $# -gt 0 ]; then
 fi
 
 for script in get1.sh get2.sh get3.sh get4.sh ; do
-  echo -e "./$script $YARMPROXY_PORT"
+  echo "./$script $YARMPROXY_PORT"
   ./$script $YARMPROXY_PORT
   if [ $? -ne 0 ]; then
     echo "test fail on ./$script"
