@@ -130,7 +130,7 @@ static MemcCommandType GetMemcCommandType(const char* cmd_line, size_t size) {
 
   const char * p = static_cast<const char *>(memchr(cmd_line, ' ', size));
   if (p == nullptr) {
-    p = cmd_line + size;
+    p = cmd_line + size - 2;
   }
   auto it = kCommandNameType.find(std::string(cmd_line, p - cmd_line));
   if (it != kCommandNameType.cend()) {
