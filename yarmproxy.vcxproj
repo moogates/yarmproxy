@@ -107,13 +107,10 @@
   <ItemGroup>
     <ClInclude Include="proxy\allocator.h" />
     <ClInclude Include="proxy\backend_conn.h" />
-    <ClInclude Include="proxy\backend_continuum.h" />
-    <ClInclude Include="proxy\backend_locator.h" />
     <ClInclude Include="proxy\backend_pool.h" />
     <ClInclude Include="proxy\client_conn.h" />
     <ClInclude Include="proxy\command.h" />
     <ClInclude Include="proxy\config.h" />
-    <ClInclude Include="proxy\consist_hash.h" />
     <ClInclude Include="proxy\doobs_hash.h" />
     <ClInclude Include="proxy\error_code.h" />
     <ClInclude Include="proxy\error_command.h" />
@@ -137,11 +134,9 @@
     <ClInclude Include="proxy\stats.h" />
     <ClInclude Include="proxy\stats_command.h" />
     <ClInclude Include="proxy\worker_pool.h" />
-    <ClInclude Include="proxy\write_command.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="proxy\CMakeLists.txt" />
-    <Text Include="proxy\todo.txt" />
   </ItemGroup>
   <ItemGroup>
     <None Include="proxy\TODO" />
