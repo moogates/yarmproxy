@@ -70,7 +70,7 @@ void ProxyServer::Run() {
     LOG_ERROR << "ProxyServer listen error " << ec.message();
     return;
   }
-
+#ifndef _WIN32
   SignalWatcher::Instance().RegisterHandler(SIGHUP, WrapThreadSafeHandler([this]() {
       // FIXME : prevent signal handler reentrance
       if (!Config::Instance().ReloadCulsters()) {
@@ -95,7 +95,7 @@ void ProxyServer::Run() {
         LOG_ERROR << "SIGTERM Received.";
         Stop();
       }));
-
+#endif // !_WIN32
   worker_pool_->StartDispatching();
   StartAccept();
 

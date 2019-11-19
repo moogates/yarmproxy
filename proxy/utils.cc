@@ -1,10 +1,10 @@
 #include <iostream>
 
-#ifndef _WINDOWS
+#ifndef _WIN32
 #include <sys/resource.h>
 #include <fcntl.h>
 #include <unistd.h>
-#endif // _WINDOWS
+#endif // _WIN32
 
 #include "config.h"
 #include "logging.h"
@@ -17,6 +17,7 @@
 namespace yarmproxy {
 
 int CreatePidFile() {
+#ifndef _WIN32  // TODO : 更标准的做法是怎样的?
   const auto& fname = Config::Instance().pid_file();
   auto file = fopen(fname.c_str(), "w"); //w = truncate, a = append
   if (!file) {
@@ -26,15 +27,18 @@ int CreatePidFile() {
   fprintf(file, "%d", getpid());
   fflush(file);
   fclose(file);
+#endif
   return 0;
 }
 
 int CleanupPidFile() {
+#ifndef _WIN32  // TODO : 更标准的做法是怎样的?
   const auto& fname = Config::Instance().pid_file();
   int r = remove(fname.c_str());
   if (r != 0) {
     LOG_WARN << "CleanupPidFile err, file_name=" << fname;
   }
+#endif
   return 0;
 }
 
@@ -62,7 +66,7 @@ int SetThreadCpuAffinity(int cpu) {
 }
 
 int Daemonize() {
-#ifndef _WINDOWS  // TODO : 更标准的做法是怎样的?
+#ifndef _WIN32  // TODO : 更标准的做法是怎样的?
     switch (fork()) {
     case -1:
         return -1;
@@ -94,12 +98,12 @@ int Daemonize() {
             }
         }
     }
-#endif // _WINDOWS
+#endif // _WIN32
     return 0;
 }
 
 int MaximizeFdLimit() {
-#ifndef _WINDOWS
+#ifndef _WIN32
   struct rlimit lim;
   if (getrlimit(RLIMIT_NOFILE, &lim) == 0 && lim.rlim_cur != lim.rlim_max) {
     rlim_t min = lim.rlim_cur;
@@ -123,7 +127,7 @@ int MaximizeFdLimit() {
   } else {
     LOG_DEBUG << "MaximizeFdLimit no set, rlim_cur =" << lim.rlim_cur << " rlim_max=" << lim.rlim_max;
   }
-#endif // _WINDOWS
+#endif // _WIN32
   return 0;
 }
 

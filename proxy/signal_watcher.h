@@ -18,8 +18,10 @@ private:
 
   SignalWatcher();
   void OnSignal(int signal);
+#ifndef _WIN32
   struct sigaction sigaction_;
   std::map<int, std::vector<std::function<void(int)>>> signal_handlers_;
+#endif  // !_WIN32
 };
 
 }

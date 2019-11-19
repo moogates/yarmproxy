@@ -3,8 +3,6 @@
 #include <fstream>
 #include <vector>
 
-#include <arpa/inet.h>
-
 #include <boost/asio/ip/tcp.hpp>
 
 #include "logging.h"

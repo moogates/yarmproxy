@@ -2,7 +2,10 @@
 #define _YARMPROXY_REDIS_PROTOCOL_H_
 
 #include <cstdint>
+#include <cctype>
 #include <cstring>
+
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <cassert>
