@@ -12,7 +12,7 @@ yarmproxy(Yet Another Redis/Memcached PROXY) is a light-weight high performance 
 - portable to windows Linux/Mac/Windows
 
 # Protocol Support
-### Redis
+### Redis Commands
   - (more to be supported...)  
   - append  
   - decr  
@@ -37,7 +37,7 @@ yarmproxy(Yet Another Redis/Memcached PROXY) is a light-weight high performance 
   - ttl  
   - yarmstats (show the yarmproxy statistics)  
 
-### Memcached Text
+### Memcached Text Commands
   - (more to be supported...)  
   - add  
   - append  
@@ -78,7 +78,7 @@ $ make
 ```
 
  - Windows  
-To be supported soon...  
+  Build 'yarmproxy.sln' with Visual Studio 2017.
     
 # Testing  
 
@@ -101,11 +101,14 @@ Please cd into the `test` dir for more details
   Apple clang version 11.0.0 (clang-1100.0.33.12)
   
 - Windows  
-  Supported soon...   
-  Microsoft Visual C++ 2017  
+  Windows 10
+  Microsoft Visual Studio Community 2017, Version 15.9.15
   
-# Benchmarking  
- Please cd into the `benchmark` dir for more details
+# Benchmarking
+  Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz + Mac OS X 10.15   
+  <img src="benchmark/macpro/memcached-set-graph.png"> [detailed data](benchmark/macpro/memcached-set-table.png)
+
+ You could cd into the `benchmark` dir to run benchmakring by yourself.
   
 # Contacts  
   Send mail to `moogates@163.com` if you have any questions or found any bugs.  
