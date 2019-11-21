@@ -107,8 +107,8 @@ Please cd into the `test` dir for more details
 # Benchmarking
   Intel(R) Core(TM) i7-7700HQ CPU @ 2.80GHz + Mac OS X 10.15   
   - For 'memcached set', yarmproxy is <span style="color:red">3.6% slower</span> than memcached origin server. This test was run in a localhost environment to minimize networking dely impact,  if you run the test in a LAN network, taking into your networking delay between the proxy and origin servers, this number might vary significantly.  [seee detailed data ...](benchmark/macpro/memcached-set-detail.png)    
-  <img src="benchmark/macpro/memcached-set-graph.png"> 
-  - For 'memcached get(single key)', yarmproxy is <span style="color:red">4.4% slower</span> than memcached origin server. [see detailed data ...](benchmark/macpro/memcached-set-detail.png)   
+  <img src="benchmark/macpro/memcached-set-graph.png">    
+  - For 'memcached get(single key)', yarmproxy is <span style="color:red">4.4% slower</span> than memcached origin server. [see detailed data ...](benchmark/macpro/memcached-get-detail.png)   
 
 
  You could cd into the `benchmark` dir to run benchmakring by yourself.  
